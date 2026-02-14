@@ -11,9 +11,10 @@
 ```
 codescan-core/
 ├── apted/       # APTED tree edit distance algorithm
+├── cfg/         # Control Flow Graph data structures + reachability, complexity, dead code
+├── clone/       # AST feature extraction + clone grouping strategies (5 algorithms)
+├── graph/       # Directed graph abstraction, Tarjan SCC, Robert Martin coupling metrics
 ├── lsh/         # Locality-Sensitive Hashing + MinHash
-├── cfg/         # Control Flow Graph data structures
-├── clone/       # AST feature extraction for clone detection
 ├── util/        # Browser opener, common utilities
 └── docs/        # Documentation
 ```
@@ -39,18 +40,27 @@ Pure algorithms with no language-specific dependencies.
 - APTED `ComputeSimilarity` normalization made configurable via `NormalizationMode` (pyscn uses `max(size1,size2)`, jscan uses `size1+size2`)
 - `IsBoilerplateLabel` helper not included (Python-specific); referenced in pyscn's PythonCostModel only
 
-### Tier 2: Interface Abstraction (Future)
+### Tier 2: Interface Abstraction (Done)
 
-Requires defining generic interfaces for language-specific types.
+Generic interfaces abstract over language-specific types.
+
+| Package | Source Files | Description | Status |
+|---------|-------------|-------------|--------|
+| `graph/` | `graph.go`, `cycles.go`, `coupling.go` | `DirectedGraph` interface + `MapGraph`, Tarjan SCC cycle detection, Robert Martin coupling metrics (Ca/Ce/Instability/Abstractness/Distance) | Done |
+| `clone/` | `grouping.go` | 5 generic grouping strategies using Go 1.24 generics: Connected (Union-Find), KCore, StarMedoid, CompleteLinkage (Bron-Kerbosch), Centroid (BFS expansion). `GroupableItem`/`ItemPair[T]`/`ItemGroup[T]`/`GroupingStrategy[T]` interfaces. | Done |
+| `cfg/` | `reachability.go`, `complexity.go`, `deadcode.go` | Reachability analysis via DFS with `StatementClassifier`, McCabe cyclomatic complexity with `ComplexityContributor`, dead code detection with severity levels. | Done |
+
+**Key design decisions for Tier 2:**
+- `DirectedGraph` interface allows pyscn (`map[string]*ModuleNode`) and jscan (`domain.DependencyGraph`) to implement without modification
+- `CouplingConfig.AbstractnessFunc` callback injects language-specific abstractness calculation
+- `StatementClassifier` interface abstracts return/break/continue/throw detection across languages
+- `ComplexityContributor` interface lets jscan add logical operator complexity while pyscn passes nil
+- Clone grouping uses Go 1.24 generics (`GroupingStrategy[T GroupableItem]`) for type-safe usage without interface method call overhead
+
+**Remaining Tier 2 items (future):**
 
 | Module | Similarity | Required Abstraction |
 |--------|------------|---------------------|
-| Clone grouping strategies (5 types) | 80% | Generic `GroupableItem` / `ItemPair` / `ItemGroup` interfaces. pyscn uses `*CodeFragment`/`*ClonePair`; jscan uses `*domain.Clone`/`*domain.ClonePair`. |
-| `circular_detector.go` (Tarjan SCC) | 55% | Generic graph interface |
-| `coupling_metrics.go` | 50% | Generic module metrics interface |
-| `reachability.go` | 85% | Abstract statement type checking |
-| `complexity.go` (McCabe core) | 70% | CFG walker shared, language-specific contributors separate |
-| `dead_code.go` | 65% | Severity framework shared, reason codes language-specific |
 | Domain models (`system_analysis.go`, `errors.go`, `cbo.go`, `complexity.go`) | 80-99% | Rename language-specific references (e.g., `CollectPythonFiles` -> `CollectSourceFiles`) |
 | Service orchestration (`*_service.go`) | 65-80% | Generic analysis orchestrator with pluggable parser |
 | MCP infrastructure | N/A (jscan has none) | Shared `mcpkit` with argument parsing, output modes |
