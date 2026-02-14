@@ -17,7 +17,15 @@ type TreeNode struct {
 	LeftMostLeaf int
 	KeyRoot      bool
 
-	// Optional metadata from the original AST (language-specific, e.g. *parser.Node)
+	// OriginalNode holds the original language-specific AST node.
+	// This field is opaque to codescan-core; language adapters store their
+	// own node type here and recover it via type assertion:
+	//
+	//   // pyscn
+	//   pyNode := treeNode.OriginalNode.(*parser.Node)
+	//
+	//   // jscan
+	//   jsNode := treeNode.OriginalNode.(*parser.Node)
 	OriginalNode any
 }
 

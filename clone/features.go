@@ -12,8 +12,8 @@ import (
 // FeatureExtractor converts AST trees into feature sets for Jaccard similarity.
 type FeatureExtractor interface {
 	ExtractFeatures(ast *apted.TreeNode) ([]string, error)
-	ExtractSubtreeHashes(ast *apted.TreeNode, maxHeight int) []string
-	ExtractNodeSequences(ast *apted.TreeNode, k int) []string
+	ExtractSubtreeHashes(ast *apted.TreeNode, maxHeight int) ([]string, error)
+	ExtractNodeSequences(ast *apted.TreeNode, k int) ([]string, error)
 }
 
 // ASTFeatureExtractor implements FeatureExtractor for TreeNode.
@@ -66,11 +66,19 @@ func (a *ASTFeatureExtractor) ExtractFeatures(ast *apted.TreeNode) ([]string, er
 
 	features := make(map[string]struct{})
 
-	for _, f := range a.ExtractSubtreeHashes(ast, a.maxSubtreeHeight) {
+	subtreeHashes, err := a.ExtractSubtreeHashes(ast, a.maxSubtreeHeight)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range subtreeHashes {
 		features[f] = struct{}{}
 	}
 
-	for _, f := range a.ExtractNodeSequences(ast, a.kGramSize) {
+	nodeSeqs, err := a.ExtractNodeSequences(ast, a.kGramSize)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range nodeSeqs {
 		features["kgram:"+f] = struct{}{}
 	}
 
@@ -101,9 +109,9 @@ func (a *ASTFeatureExtractor) ExtractFeatures(ast *apted.TreeNode) ([]string, er
 }
 
 // ExtractSubtreeHashes computes bottom-up hashes of subtrees up to maxHeight.
-func (a *ASTFeatureExtractor) ExtractSubtreeHashes(ast *apted.TreeNode, maxHeight int) []string {
+func (a *ASTFeatureExtractor) ExtractSubtreeHashes(ast *apted.TreeNode, maxHeight int) ([]string, error) {
 	if ast == nil {
-		return []string{}
+		return []string{}, nil
 	}
 	var feats []string
 	var dfs func(n *apted.TreeNode) (uint64, int)
@@ -137,23 +145,23 @@ func (a *ASTFeatureExtractor) ExtractSubtreeHashes(ast *apted.TreeNode, maxHeigh
 		return hv, height
 	}
 	_, _ = dfs(ast)
-	return feats
+	return feats, nil
 }
 
 // ExtractNodeSequences returns k-grams from pre-order traversal labels.
-func (a *ASTFeatureExtractor) ExtractNodeSequences(ast *apted.TreeNode, k int) []string {
+func (a *ASTFeatureExtractor) ExtractNodeSequences(ast *apted.TreeNode, k int) ([]string, error) {
 	if ast == nil || k <= 1 {
-		return []string{}
+		return []string{}, nil
 	}
 	labels := a.preorderLabels(ast)
 	if len(labels) < k {
-		return []string{}
+		return []string{}, nil
 	}
 	grams := make([]string, 0, len(labels)-k+1)
 	for i := 0; i <= len(labels)-k; i++ {
 		grams = append(grams, strings.Join(labels[i:i+k], ":"))
 	}
-	return grams
+	return grams, nil
 }
 
 func (a *ASTFeatureExtractor) canonicalLabel(lbl string) string {

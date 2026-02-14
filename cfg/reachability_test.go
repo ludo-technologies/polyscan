@@ -18,7 +18,7 @@ func TestReachabilityLinearCFG(t *testing.T) {
 	c.ConnectBlocks(b1, b2, EdgeNormal)
 	c.ConnectBlocks(b2, c.Exit, EdgeNormal)
 
-	result := AnalyzeReachability(c, nil)
+	result := AnalyzeReachability(c, ReachabilityConfig{})
 
 	// entry + exit + b1 + b2 = 4 reachable
 	if result.ReachableCount != 4 {
@@ -40,7 +40,7 @@ func TestReachabilityBranching(t *testing.T) {
 	c.ConnectBlocks(bFalse, bJoin, EdgeNormal)
 	c.ConnectBlocks(bJoin, c.Exit, EdgeNormal)
 
-	result := AnalyzeReachability(c, nil)
+	result := AnalyzeReachability(c, ReachabilityConfig{})
 
 	if result.ReachableCount != 5 {
 		t.Fatalf("expected 5 reachable, got %d", result.ReachableCount)
@@ -58,7 +58,7 @@ func TestReachabilityUnreachableBlock(t *testing.T) {
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 	c.ConnectBlocks(b1, c.Exit, EdgeNormal)
 
-	result := AnalyzeReachability(c, nil)
+	result := AnalyzeReachability(c, ReachabilityConfig{})
 
 	if result.UnreachableCount != 1 {
 		t.Fatalf("expected 1 unreachable, got %d", result.UnreachableCount)
@@ -78,7 +78,7 @@ func TestReachabilityNilClassifier(t *testing.T) {
 	c.ConnectBlocks(b2, c.Exit, EdgeNormal)
 
 	// Without classifier, all connected blocks are reachable.
-	result := AnalyzeReachability(c, nil)
+	result := AnalyzeReachability(c, ReachabilityConfig{})
 	if result.ReachableCount != 4 {
 		t.Fatalf("expected 4 reachable with nil classifier, got %d", result.ReachableCount)
 	}
@@ -94,7 +94,7 @@ func TestReachabilityWithClassifier(t *testing.T) {
 	c.ConnectBlocks(b2, c.Exit, EdgeNormal)
 
 	// With classifier, b2 should be unreachable (b1 has return).
-	result := AnalyzeReachability(c, &testClassifier{})
+	result := AnalyzeReachability(c, ReachabilityConfig{Classifier: &testClassifier{}})
 
 	if result.Reachable[b2.ID] {
 		t.Fatal("b2 should be unreachable after return block")
@@ -118,7 +118,7 @@ func TestReachabilityMultiplePathsAroundReturn(t *testing.T) {
 	c.ConnectBlocks(bNorm, bJoin, EdgeNormal)
 	c.ConnectBlocks(bJoin, c.Exit, EdgeNormal)
 
-	result := AnalyzeReachability(c, &testClassifier{})
+	result := AnalyzeReachability(c, ReachabilityConfig{Classifier: &testClassifier{}})
 
 	// bJoin is reachable via bNorm path (normal block doesn't terminate)
 	if !result.Reachable[bJoin.ID] {
@@ -127,7 +127,7 @@ func TestReachabilityMultiplePathsAroundReturn(t *testing.T) {
 }
 
 func TestReachabilityNilCFG(t *testing.T) {
-	result := AnalyzeReachability(nil, nil)
+	result := AnalyzeReachability(nil, ReachabilityConfig{})
 	if result.ReachableCount != 0 {
 		t.Fatalf("expected 0 reachable for nil CFG, got %d", result.ReachableCount)
 	}
@@ -138,7 +138,7 @@ func TestReachabilityEmptyCFG(t *testing.T) {
 	// Just entry and exit, connected
 	c.ConnectBlocks(c.Entry, c.Exit, EdgeNormal)
 
-	result := AnalyzeReachability(c, &testClassifier{})
+	result := AnalyzeReachability(c, ReachabilityConfig{Classifier: &testClassifier{}})
 	if result.ReachableCount != 2 {
 		t.Fatalf("expected 2 reachable (entry+exit), got %d", result.ReachableCount)
 	}

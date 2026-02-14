@@ -10,6 +10,13 @@ type StatementClassifier interface {
 	IsThrow(stmt any) bool
 }
 
+// ReachabilityConfig configures reachability analysis.
+type ReachabilityConfig struct {
+	// Classifier provides language-specific statement classification.
+	// If nil, only structural reachability (DFS from entry) is computed.
+	Classifier StatementClassifier
+}
+
 // ReachabilityResult holds the result of reachability analysis.
 type ReachabilityResult struct {
 	Reachable        map[string]bool // blockID -> reachable from entry
@@ -18,12 +25,12 @@ type ReachabilityResult struct {
 }
 
 // AnalyzeReachability performs reachability analysis on a CFG.
-// If classifier is nil, only structural reachability (DFS from entry) is computed,
-// following all edges. If classifier is non-nil, blocks whose last statement is a
-// terminator (return/break/continue/throw) will not have their successors visited
-// via normal DFS traversal. Successors are still reachable if another non-terminating
-// path leads to them.
-func AnalyzeReachability(c *CFG, classifier StatementClassifier) *ReachabilityResult {
+// If config.Classifier is nil, only structural reachability (DFS from entry) is
+// computed, following all edges. If config.Classifier is non-nil, blocks whose
+// last statement is a terminator (return/break/continue/throw) will not have
+// their successors visited via normal DFS traversal. Successors are still
+// reachable if another non-terminating path leads to them.
+func AnalyzeReachability(c *CFG, config ReachabilityConfig) *ReachabilityResult {
 	result := &ReachabilityResult{
 		Reachable: make(map[string]bool),
 	}
@@ -43,8 +50,8 @@ func AnalyzeReachability(c *CFG, classifier StatementClassifier) *ReachabilityRe
 
 		// Check if this block ends with a terminator statement.
 		terminates := false
-		if classifier != nil && len(block.Statements) > 0 {
-			terminates = blockHasTerminator(block, classifier)
+		if config.Classifier != nil && len(block.Statements) > 0 {
+			terminates = blockHasTerminator(block, config.Classifier)
 		}
 
 		if terminates {

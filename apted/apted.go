@@ -21,7 +21,6 @@ const (
 // Based on Pawlik & Augsten's optimal O(n^2 log n) algorithm.
 type APTEDAnalyzer struct {
 	costModel         CostModel
-	cache             map[string]float64
 	normalizationMode NormalizationMode
 }
 
@@ -30,7 +29,6 @@ type APTEDAnalyzer struct {
 func NewAPTEDAnalyzer(costModel CostModel) *APTEDAnalyzer {
 	return &APTEDAnalyzer{
 		costModel:         costModel,
-		cache:             make(map[string]float64),
 		normalizationMode: NormalizeByMax,
 	}
 }
@@ -39,7 +37,6 @@ func NewAPTEDAnalyzer(costModel CostModel) *APTEDAnalyzer {
 func NewAPTEDAnalyzerWithNormalization(costModel CostModel, mode NormalizationMode) *APTEDAnalyzer {
 	return &APTEDAnalyzer{
 		costModel:         costModel,
-		cache:             make(map[string]float64),
 		normalizationMode: mode,
 	}
 }
@@ -71,8 +68,6 @@ func (a *APTEDAnalyzer) ComputeDistance(tree1, tree2 *TreeNode) float64 {
 		return a.computeDistanceOptimized(tree1, tree2)
 	}
 
-	a.cache = make(map[string]float64)
-
 	keyRoots1 := PrepareTreeForAPTED(tree1)
 	keyRoots2 := PrepareTreeForAPTED(tree2)
 
@@ -94,8 +89,6 @@ func (a *APTEDAnalyzer) computeDistanceOptimized(tree1, tree2 *TreeNode) float64
 	if size1 > veryLargeTreeThreshold || size2 > veryLargeTreeThreshold {
 		return a.computeApproximateDistance(tree1, tree2)
 	}
-
-	a.cache = make(map[string]float64)
 
 	keyRoots1 := PrepareTreeForAPTED(tree1)
 	keyRoots2 := PrepareTreeForAPTED(tree2)

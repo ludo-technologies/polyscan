@@ -1,14 +1,21 @@
 package cfg
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 // testContributor adds extra complexity for testing.
 type testContributor struct {
 	extras map[string]int // blockID -> extra complexity
 }
 
-func (tc *testContributor) ExtraComplexity(block *BasicBlock) int {
-	return tc.extras[block.ID]
+func (tc *testContributor) ContributeComplexity(block *BasicBlock) ([]ComplexityContribution, error) {
+	n := tc.extras[block.ID]
+	if n == 0 {
+		return nil, nil
+	}
+	return []ComplexityContribution{{Count: n, Description: "test"}}, nil
 }
 
 func TestComplexityLinear(t *testing.T) {
@@ -18,7 +25,10 @@ func TestComplexityLinear(t *testing.T) {
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 	c.ConnectBlocks(b1, c.Exit, EdgeNormal)
 
-	result := ComputeComplexity(c, nil)
+	result, err := ComputeComplexity(c, ComplexityConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.McCabe != 1 {
 		t.Fatalf("expected McCabe=1, got %d", result.McCabe)
@@ -44,7 +54,10 @@ func TestComplexityIfElse(t *testing.T) {
 	c.ConnectBlocks(bFalse, join, EdgeNormal)
 	c.ConnectBlocks(join, c.Exit, EdgeNormal)
 
-	result := ComputeComplexity(c, nil)
+	result, err := ComputeComplexity(c, ComplexityConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.DecisionPoints != 1 {
 		t.Fatalf("expected 1 decision point, got %d", result.DecisionPoints)
@@ -80,7 +93,10 @@ func TestComplexityNestedIf(t *testing.T) {
 	c.ConnectBlocks(b3, join, EdgeNormal)
 	c.ConnectBlocks(join, c.Exit, EdgeNormal)
 
-	result := ComputeComplexity(c, nil)
+	result, err := ComputeComplexity(c, ComplexityConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.DecisionPoints != 2 {
 		t.Fatalf("expected 2 decision points, got %d", result.DecisionPoints)
@@ -100,7 +116,10 @@ func TestComplexityLoop(t *testing.T) {
 	c.ConnectBlocks(body, loopBlock, EdgeNormal)
 	c.ConnectBlocks(loopBlock, c.Exit, EdgeNormal)
 
-	result := ComputeComplexity(c, nil)
+	result, err := ComputeComplexity(c, ComplexityConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.DecisionPoints != 1 {
 		t.Fatalf("expected 1 decision point (loop), got %d", result.DecisionPoints)
@@ -122,7 +141,10 @@ func TestComplexityException(t *testing.T) {
 	c.ConnectBlocks(handler, after, EdgeNormal)
 	c.ConnectBlocks(after, c.Exit, EdgeNormal)
 
-	result := ComputeComplexity(c, nil)
+	result, err := ComputeComplexity(c, ComplexityConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.DecisionPoints != 1 {
 		t.Fatalf("expected 1 decision point (exception), got %d", result.DecisionPoints)
@@ -142,7 +164,10 @@ func TestComplexityWithContributor(t *testing.T) {
 		extras: map[string]int{b1.ID: 3},
 	}
 
-	result := ComputeComplexity(c, contrib)
+	result, err := ComputeComplexity(c, ComplexityConfig{Contributor: contrib})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.ExtraContributions != 3 {
 		t.Fatalf("expected 3 extra contributions, got %d", result.ExtraContributions)
@@ -151,11 +176,39 @@ func TestComplexityWithContributor(t *testing.T) {
 	if result.McCabe != 4 {
 		t.Fatalf("expected McCabe=4, got %d", result.McCabe)
 	}
+	if len(result.Contributions) != 1 {
+		t.Fatalf("expected 1 contribution entry, got %d", len(result.Contributions))
+	}
+	if result.Contributions[0].Count != 3 {
+		t.Fatalf("expected contribution count=3, got %d", result.Contributions[0].Count)
+	}
 }
 
 func TestComplexityNilCFG(t *testing.T) {
-	result := ComputeComplexity(nil, nil)
+	result, err := ComputeComplexity(nil, ComplexityConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if result.McCabe != 1 {
 		t.Fatalf("expected McCabe=1 for nil CFG, got %d", result.McCabe)
+	}
+}
+
+// errorContributor returns an error for testing.
+type errorContributor struct{}
+
+func (ec *errorContributor) ContributeComplexity(block *BasicBlock) ([]ComplexityContribution, error) {
+	return nil, errors.New("contributor failed")
+}
+
+func TestComplexityContributorError(t *testing.T) {
+	c := NewCFG("error")
+	b1 := c.CreateBlock("b1")
+	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
+	c.ConnectBlocks(b1, c.Exit, EdgeNormal)
+
+	_, err := ComputeComplexity(c, ComplexityConfig{Contributor: &errorContributor{}})
+	if err == nil {
+		t.Fatal("expected error from contributor")
 	}
 }

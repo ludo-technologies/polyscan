@@ -23,10 +23,17 @@ type DeadCodeResult struct {
 	DeadBlocks  int
 }
 
+// DeadCodeConfig configures dead code detection.
+type DeadCodeConfig struct {
+	// Classifier provides language-specific statement classification.
+	// If nil, only structural analysis (unreachable blocks) is performed.
+	Classifier StatementClassifier
+}
+
 // DetectDeadCode identifies dead code in a CFG.
 // It uses AnalyzeReachability to find unreachable blocks, then examines
 // reachable blocks for code after terminators (return/break/continue/throw).
-func DetectDeadCode(c *CFG, classifier StatementClassifier) *DeadCodeResult {
+func DetectDeadCode(c *CFG, config DeadCodeConfig) *DeadCodeResult {
 	result := &DeadCodeResult{}
 
 	if c == nil {
@@ -38,7 +45,7 @@ func DetectDeadCode(c *CFG, classifier StatementClassifier) *DeadCodeResult {
 	// Run reachability analysis with the classifier so that successors of
 	// terminator blocks (return/break/continue/throw) are properly marked
 	// unreachable when no alternative path reaches them.
-	reachResult := AnalyzeReachability(c, classifier)
+	reachResult := AnalyzeReachability(c, ReachabilityConfig{Classifier: config.Classifier})
 
 	// Find unreachable blocks.
 	for id := range c.Blocks {
@@ -53,12 +60,12 @@ func DetectDeadCode(c *CFG, classifier StatementClassifier) *DeadCodeResult {
 	}
 
 	// For reachable blocks, check for code after terminators.
-	if classifier != nil {
+	if config.Classifier != nil {
 		for id, block := range c.Blocks {
 			if !reachResult.Reachable[id] {
 				continue
 			}
-			reason := findTerminatorInBlock(block, classifier)
+			reason := findTerminatorInBlock(block, config.Classifier)
 			if reason != "" {
 				severity := SeverityInfo
 				if reason == "after_return" || reason == "after_throw" {

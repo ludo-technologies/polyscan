@@ -1,13 +1,17 @@
 package graph
 
 import (
+	"errors"
 	"math"
 	"testing"
 )
 
 func TestCouplingEmptyGraph(t *testing.T) {
 	g := NewMapGraph()
-	result := ComputeCouplingMetrics(g, CouplingConfig{})
+	result, err := ComputeCouplingMetrics(g, CouplingConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if len(result) != 0 {
 		t.Fatalf("expected 0 metrics, got %d", len(result))
@@ -18,7 +22,10 @@ func TestCouplingIsolatedNode(t *testing.T) {
 	g := NewMapGraph()
 	g.AddNode("a")
 
-	result := ComputeCouplingMetrics(g, CouplingConfig{})
+	result, err := ComputeCouplingMetrics(g, CouplingConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	m := result["a"]
 	if m == nil {
@@ -40,7 +47,10 @@ func TestCouplingSimpleEdge(t *testing.T) {
 	g := NewMapGraph()
 	g.AddEdge("a", "b")
 
-	result := ComputeCouplingMetrics(g, CouplingConfig{})
+	result, err := ComputeCouplingMetrics(g, CouplingConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	ma := result["a"]
 	if ma.Ca != 0 || ma.Ce != 1 {
@@ -65,15 +75,18 @@ func TestCouplingWithAbstractness(t *testing.T) {
 	g.AddEdge("c", "b")
 
 	config := CouplingConfig{
-		AbstractnessFunc: func(nodeID string) float64 {
+		AbstractnessFunc: func(nodeID string) (float64, error) {
 			if nodeID == "b" {
-				return 0.8
+				return 0.8, nil
 			}
-			return 0.0
+			return 0.0, nil
 		},
 	}
 
-	result := ComputeCouplingMetrics(g, config)
+	result, err := ComputeCouplingMetrics(g, config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	mb := result["b"]
 	if mb.Ca != 2 || mb.Ce != 0 {
@@ -98,16 +111,19 @@ func TestCouplingMainSequence(t *testing.T) {
 	g.AddEdge("b", "c")
 
 	config := CouplingConfig{
-		AbstractnessFunc: func(nodeID string) float64 {
+		AbstractnessFunc: func(nodeID string) (float64, error) {
 			// b has Ca=1 Ce=1, so I=0.5. For main sequence: A=0.5
 			if nodeID == "b" {
-				return 0.5
+				return 0.5, nil
 			}
-			return 0.0
+			return 0.0, nil
 		},
 	}
 
-	result := ComputeCouplingMetrics(g, config)
+	result, err := ComputeCouplingMetrics(g, config)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	mb := result["b"]
 
 	if math.Abs(mb.Instability-0.5) > 1e-9 {
@@ -125,7 +141,10 @@ func TestCouplingDiamond(t *testing.T) {
 	g.AddEdge("b", "d")
 	g.AddEdge("c", "d")
 
-	result := ComputeCouplingMetrics(g, CouplingConfig{})
+	result, err := ComputeCouplingMetrics(g, CouplingConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	// a: Ca=0, Ce=2
 	if result["a"].Ca != 0 || result["a"].Ce != 2 {
@@ -150,9 +169,28 @@ func TestCouplingNilAbstractnessFunc(t *testing.T) {
 	g := NewMapGraph()
 	g.AddEdge("a", "b")
 
-	result := ComputeCouplingMetrics(g, CouplingConfig{})
+	result, err := ComputeCouplingMetrics(g, CouplingConfig{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result["a"].Abstractness != 0.0 {
 		t.Fatalf("expected default Abstractness=0.0, got %f", result["a"].Abstractness)
+	}
+}
+
+func TestCouplingAbstractnessError(t *testing.T) {
+	g := NewMapGraph()
+	g.AddEdge("a", "b")
+
+	config := CouplingConfig{
+		AbstractnessFunc: func(nodeID string) (float64, error) {
+			return 0, errors.New("abstractness failed")
+		},
+	}
+
+	_, err := ComputeCouplingMetrics(g, config)
+	if err == nil {
+		t.Fatal("expected error from AbstractnessFunc")
 	}
 }

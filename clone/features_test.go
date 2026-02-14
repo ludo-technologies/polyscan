@@ -172,7 +172,10 @@ func TestExtractFeatures_Determinism(t *testing.T) {
 
 func TestExtractSubtreeHashes_Nil(t *testing.T) {
 	ext := NewASTFeatureExtractor()
-	hashes := ext.ExtractSubtreeHashes(nil, 3)
+	hashes, err := ext.ExtractSubtreeHashes(nil, 3)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if len(hashes) != 0 {
 		t.Errorf("Expected 0 hashes for nil, got %d", len(hashes))
 	}
@@ -181,7 +184,10 @@ func TestExtractSubtreeHashes_Nil(t *testing.T) {
 func TestExtractSubtreeHashes_SingleNode(t *testing.T) {
 	ext := NewASTFeatureExtractor()
 	node := apted.NewTreeNode(0, "A")
-	hashes := ext.ExtractSubtreeHashes(node, 3)
+	hashes, err := ext.ExtractSubtreeHashes(node, 3)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if len(hashes) != 1 {
 		t.Errorf("Expected 1 hash for leaf, got %d", len(hashes))
 	}
@@ -203,8 +209,14 @@ func TestExtractSubtreeHashes_OrderSensitivity(t *testing.T) {
 	t2.AddChild(apted.NewTreeNode(1, "C"))
 	t2.AddChild(apted.NewTreeNode(2, "B"))
 
-	h1 := ext.ExtractSubtreeHashes(t1, 3)
-	h2 := ext.ExtractSubtreeHashes(t2, 3)
+	h1, err := ext.ExtractSubtreeHashes(t1, 3)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	h2, err := ext.ExtractSubtreeHashes(t2, 3)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 
 	// Root-level hashes should differ due to different child order
 	// Find the height=1 hash in each
@@ -226,7 +238,10 @@ func TestExtractSubtreeHashes_OrderSensitivity(t *testing.T) {
 
 func TestExtractNodeSequences_Nil(t *testing.T) {
 	ext := NewASTFeatureExtractor()
-	seqs := ext.ExtractNodeSequences(nil, 3)
+	seqs, err := ext.ExtractNodeSequences(nil, 3)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if len(seqs) != 0 {
 		t.Errorf("Expected 0 sequences for nil, got %d", len(seqs))
 	}
@@ -235,7 +250,10 @@ func TestExtractNodeSequences_Nil(t *testing.T) {
 func TestExtractNodeSequences_KTooLarge(t *testing.T) {
 	ext := NewASTFeatureExtractor()
 	node := apted.NewTreeNode(0, "A")
-	seqs := ext.ExtractNodeSequences(node, 5) // Only 1 label, k=5
+	seqs, err := ext.ExtractNodeSequences(node, 5) // Only 1 label, k=5
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if len(seqs) != 0 {
 		t.Errorf("Expected 0 sequences when k > labels, got %d", len(seqs))
 	}
@@ -244,7 +262,10 @@ func TestExtractNodeSequences_KTooLarge(t *testing.T) {
 func TestExtractNodeSequences_KEqualsOne(t *testing.T) {
 	ext := NewASTFeatureExtractor()
 	node := apted.NewTreeNode(0, "A")
-	seqs := ext.ExtractNodeSequences(node, 1)
+	seqs, err := ext.ExtractNodeSequences(node, 1)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if len(seqs) != 0 {
 		t.Errorf("Expected 0 for k=1 (k<=1 returns empty), got %d", len(seqs))
 	}
@@ -257,7 +278,10 @@ func TestExtractNodeSequences_Valid(t *testing.T) {
 	root.AddChild(apted.NewTreeNode(1, "B"))
 	root.AddChild(apted.NewTreeNode(2, "C"))
 
-	seqs := ext.ExtractNodeSequences(root, 2)
+	seqs, err := ext.ExtractNodeSequences(root, 2)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	// Expected: ["A:B", "B:C"]
 	if len(seqs) != 2 {
 		t.Fatalf("Expected 2 sequences, got %d", len(seqs))
@@ -276,7 +300,10 @@ func TestExtractNodeSequences_StripsPayload(t *testing.T) {
 	root := apted.NewTreeNode(0, "Name(foo)")
 	root.AddChild(apted.NewTreeNode(1, "Constant(42)"))
 
-	seqs := ext.ExtractNodeSequences(root, 2)
+	seqs, err := ext.ExtractNodeSequences(root, 2)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
 	if len(seqs) != 1 {
 		t.Fatalf("Expected 1 sequence, got %d", len(seqs))
 	}

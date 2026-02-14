@@ -42,9 +42,11 @@ func (e EdgeType) String() string {
 
 // Edge represents a directed edge between two basic blocks.
 type Edge struct {
-	From *BasicBlock
-	To   *BasicBlock
-	Type EdgeType
+	From  *BasicBlock
+	To    *BasicBlock
+	Type  EdgeType
+	Label string // Language-specific flow description (e.g. switch case value, yield, await).
+	Data  any    // Optional language-specific edge metadata.
 }
 
 // BasicBlock represents a basic block in the control flow graph.
@@ -53,7 +55,12 @@ type BasicBlock struct {
 	Label string
 
 	// Statements contains the AST nodes in this block.
-	// The type is language-specific (e.g. []*parser.Node), stored as []any.
+	// Each element is a language-specific AST node stored as any.
+	// Language adapters recover the concrete type via type assertion:
+	//
+	//   for _, stmt := range block.Statements {
+	//       node := stmt.(*parser.Node) // pyscn or jscan
+	//   }
 	Statements []any
 
 	Predecessors []*Edge
@@ -134,7 +141,11 @@ type CFG struct {
 	Blocks map[string]*BasicBlock
 	Name   string
 
-	// FunctionNode is the original AST node for the function (language-specific).
+	// FunctionNode is the original AST node for the function.
+	// This field is opaque to codescan-core; language adapters store their
+	// own function node type here and recover it via type assertion:
+	//
+	//   fnNode := cfg.FunctionNode.(*parser.Node)
 	FunctionNode any
 
 	nextBlockID int

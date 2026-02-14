@@ -18,12 +18,12 @@ type CouplingConfig struct {
 	// pyscn: ratio of public names matching abstract patterns.
 	// jscan: export ratio.
 	// If nil, Abstractness defaults to 0.0 for all nodes.
-	AbstractnessFunc func(nodeID string) float64
+	AbstractnessFunc func(nodeID string) (float64, error)
 }
 
 // ComputeCouplingMetrics computes Robert Martin's coupling metrics for all
 // nodes in the directed graph.
-func ComputeCouplingMetrics(g DirectedGraph, config CouplingConfig) map[string]*CouplingMetrics {
+func ComputeCouplingMetrics(g DirectedGraph, config CouplingConfig) (map[string]*CouplingMetrics, error) {
 	result := make(map[string]*CouplingMetrics)
 
 	for _, nodeID := range g.NodeIDs() {
@@ -37,7 +37,11 @@ func ComputeCouplingMetrics(g DirectedGraph, config CouplingConfig) map[string]*
 
 		var abstractness float64
 		if config.AbstractnessFunc != nil {
-			abstractness = config.AbstractnessFunc(nodeID)
+			var err error
+			abstractness, err = config.AbstractnessFunc(nodeID)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		distance := math.Abs(abstractness + instability - 1.0)
@@ -52,5 +56,5 @@ func ComputeCouplingMetrics(g DirectedGraph, config CouplingConfig) map[string]*
 		}
 	}
 
-	return result
+	return result, nil
 }

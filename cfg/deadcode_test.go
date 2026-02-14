@@ -11,7 +11,7 @@ func TestDeadCodeNone(t *testing.T) {
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 	c.ConnectBlocks(b1, c.Exit, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	if len(result.Findings) != 0 {
 		t.Fatalf("expected no findings, got %d", len(result.Findings))
@@ -28,7 +28,7 @@ func TestDeadCodeUnreachable(t *testing.T) {
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 	c.ConnectBlocks(b1, c.Exit, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	if result.DeadBlocks != 1 {
 		t.Fatalf("expected 1 dead block, got %d", result.DeadBlocks)
@@ -59,7 +59,7 @@ func TestDeadCodeAfterReturn(t *testing.T) {
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 	// No successor — return terminates flow.
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	found := false
 	for _, f := range result.Findings {
@@ -82,7 +82,7 @@ func TestDeadCodeAfterBreak(t *testing.T) {
 	b1.AddStatement("x = 1") // dead code after break
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	found := false
 	for _, f := range result.Findings {
@@ -105,7 +105,7 @@ func TestDeadCodeAfterThrow(t *testing.T) {
 	b1.AddStatement("cleanup") // dead code after throw
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	found := false
 	for _, f := range result.Findings {
@@ -128,7 +128,7 @@ func TestDeadCodeAfterContinue(t *testing.T) {
 	b1.AddStatement("x = 1") // dead code after continue
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	found := false
 	for _, f := range result.Findings {
@@ -152,7 +152,7 @@ func TestDeadCodeTerminatorAtEnd(t *testing.T) {
 	b1.AddStatement("return")
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	for _, f := range result.Findings {
 		if f.BlockID == b1.ID {
@@ -173,7 +173,7 @@ func TestDeadCodeNilClassifier(t *testing.T) {
 
 	// Without classifier, only structurally disconnected blocks are detected.
 	// b1's successor (exit) is reachable because nil classifier follows all edges.
-	result := DetectDeadCode(c, nil)
+	result := DetectDeadCode(c, DeadCodeConfig{})
 
 	if result.DeadBlocks != 1 {
 		t.Fatalf("expected 1 dead block (orphan only), got %d", result.DeadBlocks)
@@ -184,7 +184,7 @@ func TestDeadCodeNilClassifier(t *testing.T) {
 }
 
 func TestDeadCodeNilCFG(t *testing.T) {
-	result := DetectDeadCode(nil, nil)
+	result := DetectDeadCode(nil, DeadCodeConfig{})
 	if result.TotalBlocks != 0 {
 		t.Fatalf("expected 0 total blocks, got %d", result.TotalBlocks)
 	}
@@ -198,7 +198,7 @@ func TestDeadCodeTotalBlocks(t *testing.T) {
 	c.ConnectBlocks(b1, b2, EdgeNormal)
 	c.ConnectBlocks(b2, c.Exit, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	// entry + exit + b1 + b2 = 4
 	if result.TotalBlocks != 4 {
@@ -216,7 +216,7 @@ func TestDeadCodeMixed(t *testing.T) {
 	_ = orphan
 	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	// Sort findings by reason for deterministic checking.
 	sort.Slice(result.Findings, func(i, j int) bool {
@@ -253,7 +253,7 @@ func TestDeadCodeSuccessorOfReturnBlock(t *testing.T) {
 	c.ConnectBlocks(retBlock, nextBlock, EdgeNormal)
 	c.ConnectBlocks(nextBlock, c.Exit, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	// nextBlock should be unreachable (only path is through return_block which terminates).
 	foundNext := false
@@ -290,7 +290,7 @@ func TestDeadCodeAlternatePathAroundReturn(t *testing.T) {
 	c.ConnectBlocks(normBlock, join, EdgeNormal)
 	c.ConnectBlocks(join, c.Exit, EdgeNormal)
 
-	result := DetectDeadCode(c, &testClassifier{})
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
 
 	// join is reachable via normBlock, so it should NOT be reported.
 	for _, f := range result.Findings {
