@@ -30,10 +30,12 @@ type ComplexityResult struct {
 
 // ComputeComplexity computes McCabe cyclomatic complexity for a CFG.
 // A decision point is a block that has at least one outgoing edge of type
-// EdgeCondTrue, EdgeCondFalse, EdgeLoop, or EdgeException. Each such block
-// counts as exactly one decision point regardless of how many decision edges
-// it has (e.g. an if-else has both EdgeCondTrue and EdgeCondFalse but is one
-// decision point). McCabe = DecisionPoints + ExtraContributions + 1.
+// EdgeCondTrue, EdgeCondFalse, or EdgeException. Each such block counts as
+// exactly one decision point regardless of how many decision edges it has
+// (e.g. an if-else has both EdgeCondTrue and EdgeCondFalse but is one
+// decision point). EdgeLoop is a back-edge and does not count as a decision
+// point; loop headers should use EdgeCondTrue/EdgeCondFalse for the
+// loop-body vs exit branch. McCabe = DecisionPoints + ExtraContributions + 1.
 func ComputeComplexity(c *CFG, config ComplexityConfig) (*ComplexityResult, error) {
 	result := &ComplexityResult{
 		EdgeBreakdown: make(map[EdgeType]int),
@@ -49,7 +51,7 @@ func ComputeComplexity(c *CFG, config ComplexityConfig) (*ComplexityResult, erro
 		for _, edge := range block.Successors {
 			result.EdgeBreakdown[edge.Type]++
 			switch edge.Type {
-			case EdgeCondTrue, EdgeCondFalse, EdgeLoop, EdgeException:
+			case EdgeCondTrue, EdgeCondFalse, EdgeException:
 				isDecision = true
 			}
 		}

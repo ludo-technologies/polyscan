@@ -107,14 +107,16 @@ func TestComplexityNestedIf(t *testing.T) {
 }
 
 func TestComplexityLoop(t *testing.T) {
+	// Loop header uses EdgeCondTrue/EdgeCondFalse for the branch decision.
+	// EdgeLoop is only used for the back-edge from body to header.
 	c := NewCFG("loop")
-	loopBlock := c.CreateBlock("loop")
+	header := c.CreateBlock("header")
 	body := c.CreateBlock("body")
 
-	c.ConnectBlocks(c.Entry, loopBlock, EdgeNormal)
-	c.ConnectBlocks(loopBlock, body, EdgeLoop)
-	c.ConnectBlocks(body, loopBlock, EdgeNormal)
-	c.ConnectBlocks(loopBlock, c.Exit, EdgeNormal)
+	c.ConnectBlocks(c.Entry, header, EdgeNormal)
+	c.ConnectBlocks(header, body, EdgeCondTrue)
+	c.ConnectBlocks(header, c.Exit, EdgeCondFalse)
+	c.ConnectBlocks(body, header, EdgeLoop)
 
 	result, err := ComputeComplexity(c, ComplexityConfig{})
 	if err != nil {
@@ -122,10 +124,13 @@ func TestComplexityLoop(t *testing.T) {
 	}
 
 	if result.DecisionPoints != 1 {
-		t.Fatalf("expected 1 decision point (loop), got %d", result.DecisionPoints)
+		t.Fatalf("expected 1 decision point (loop header), got %d", result.DecisionPoints)
 	}
 	if result.McCabe != 2 {
 		t.Fatalf("expected McCabe=2, got %d", result.McCabe)
+	}
+	if result.EdgeBreakdown[EdgeLoop] != 1 {
+		t.Fatalf("expected 1 loop edge, got %d", result.EdgeBreakdown[EdgeLoop])
 	}
 }
 
