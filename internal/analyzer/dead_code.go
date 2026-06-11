@@ -153,8 +153,18 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 
 	// Sort findings by line number for consistent output
 	sort.Slice(result.Findings, func(i, j int) bool {
-		return result.Findings[i].StartLine < result.Findings[j].StartLine
+		if result.Findings[i].StartLine != result.Findings[j].StartLine {
+			return result.Findings[i].StartLine < result.Findings[j].StartLine
+		}
+		return result.Findings[i].EndLine < result.Findings[j].EndLine
 	})
+
+	// Merge overlapping/contiguous findings that share a reason. A compound
+	// statement (e.g. `if`) spans its body, so the body's own block produces a
+	// finding whose line range is nested inside the `if` finding's range. Left
+	// as-is, the same source line is reported—and tallied—more than once. Merging
+	// collapses each contiguous dead region into a single non-overlapping finding.
+	result.Findings = mergeContiguousFindings(result.Findings)
 
 	result.AnalysisTime = time.Since(startTime)
 	return result
@@ -163,6 +173,15 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 // analyzeDeadBlock analyzes a dead block to determine the reason and create findings
 func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock) []*DeadCodeFinding {
 	var findings []*DeadCodeFinding
+
+	// Skip blocks whose only "statements" are empty separators (a bare `;`).
+	// A trailing semicolon (`return y;;`) parses as the terminating statement
+	// followed by an empty statement. That empty statement is technically
+	// unreachable, but reporting it is noise — there's nothing for the user to
+	// act on beyond a stylistic extra semicolon.
+	if isOnlyEmptyStatements(block) {
+		return findings
+	}
 
 	// Determine the reason for unreachability
 	reason, severity := dcd.determineDeadCodeReason(block)
@@ -290,6 +309,85 @@ func DetectAll(cfgs map[string]*CFG, filePath string) map[string]*DeadCodeResult
 	}
 
 	return results
+}
+
+// mergeContiguousFindings collapses findings whose line ranges overlap or are
+// directly adjacent (no reachable line between them) and that share the same
+// reason into a single finding. Findings must be pre-sorted by StartLine (then
+// EndLine). This removes the overlapping/duplicate ranges that arise because a
+// compound statement's finding spans its body while the body's block emits its
+// own nested finding.
+func mergeContiguousFindings(findings []*DeadCodeFinding) []*DeadCodeFinding {
+	if len(findings) <= 1 {
+		return findings
+	}
+
+	severityRank := map[SeverityLevel]int{
+		SeverityLevelInfo:     1,
+		SeverityLevelWarning:  2,
+		SeverityLevelCritical: 3,
+	}
+
+	merged := make([]*DeadCodeFinding, 0, len(findings))
+	current := findings[0]
+
+	for _, next := range findings[1:] {
+		// Contiguous if the next finding starts at or before the line right after
+		// the current region's end (overlapping or back-to-back lines).
+		contiguous := next.StartLine <= current.EndLine+1
+		if contiguous && next.Reason == current.Reason {
+			if next.EndLine > current.EndLine {
+				current.EndLine = next.EndLine
+			}
+			current.Code = mergeCodeLines(current.Code, next.Code)
+			if severityRank[next.Severity] > severityRank[current.Severity] {
+				current.Severity = next.Severity
+				current.Description = next.Description
+			}
+			continue
+		}
+		merged = append(merged, current)
+		current = next
+	}
+	merged = append(merged, current)
+
+	return merged
+}
+
+// mergeCodeLines appends the lines of b to a, skipping a leading line of b that
+// duplicates the trailing line of a. This keeps the merged snippet readable when
+// a nested-body block repeats the line already shown by its enclosing statement.
+func mergeCodeLines(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	aLines := strings.Split(a, "\n")
+	bLines := strings.Split(b, "\n")
+	if len(aLines) > 0 && len(bLines) > 0 && aLines[len(aLines)-1] == bLines[0] {
+		bLines = bLines[1:]
+	}
+	if len(bLines) == 0 {
+		return a
+	}
+	return a + "\n" + strings.Join(bLines, "\n")
+}
+
+// isOnlyEmptyStatements reports whether every statement in the block is an
+// empty separator node (a bare `;`). Such blocks are unreachable but carry no
+// actionable signal, so they should not produce dead-code findings.
+func isOnlyEmptyStatements(block *BasicBlock) bool {
+	if block == nil || len(block.Statements) == 0 {
+		return false
+	}
+	for _, stmt := range block.Statements {
+		if stmt == nil || stmt.Type != parser.NodeEmptyStatement {
+			return false
+		}
+	}
+	return true
 }
 
 // HasFindings returns true if there are any dead code findings

@@ -200,8 +200,8 @@ func DefaultDependencyGraphRequest() *DependencyGraphRequest {
 		IncludeExternal:          BoolPtr(false),
 		IncludeTypeImports:       BoolPtr(true),
 		DetectCycles:             BoolPtr(true),
-		InstabilityHighThreshold: 0.8,
-		InstabilityLowThreshold:  0.2,
+		InstabilityHighThreshold: 0.7,
+		InstabilityLowThreshold:  0.3,
 		DistanceThreshold:        0.3,
 	}
 }

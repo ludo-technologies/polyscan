@@ -24,6 +24,15 @@ func NewCircularDependencyDetector() *CircularDependencyDetector {
 	return &CircularDependencyDetector{}
 }
 
+// isLoadTimeEdge reports whether an edge participates in module loading.
+// Dynamic import() edges are evaluated only when the call executes, so they
+// cannot form a load-time circular import and are excluded from cycle
+// detection. A pair connected by both a static and a dynamic import is still
+// a load-time dependency via its static edge. See pyscn issue #460.
+func isLoadTimeEdge(edge *domain.DependencyEdge) bool {
+	return edge != nil && edge.EdgeType != domain.EdgeTypeDynamic
+}
+
 // DetectCycles finds all cycles in the dependency graph using Tarjan's SCC algorithm
 func (d *CircularDependencyDetector) DetectCycles(graph *domain.DependencyGraph) *domain.CircularDependencyAnalysis {
 	if graph == nil || graph.NodeCount() == 0 {
@@ -113,6 +122,11 @@ func (d *CircularDependencyDetector) strongconnect(v string, graph *domain.Depen
 	// Consider successors of v
 	edges := graph.GetOutgoingEdges(v)
 	for _, edge := range edges {
+		// Lazy (dynamic import) edges do not run at module load time, so
+		// they cannot form a load-time cycle. Skip them. See issue #460.
+		if !isLoadTimeEdge(edge) {
+			continue
+		}
 		w := edge.To
 		// Skip external/unresolved nodes that aren't in the graph
 		if graph.GetNode(w) == nil {
@@ -160,6 +174,9 @@ func (d *CircularDependencyDetector) buildCycleInfo(scc []string, graph *domain.
 	for _, from := range scc {
 		edges := graph.GetOutgoingEdges(from)
 		for _, edge := range edges {
+			if !isLoadTimeEdge(edge) {
+				continue // lazy edges are not load-time dependencies (#460)
+			}
 			if sccSet[edge.To] {
 				paths = append(paths, domain.DependencyPath{
 					From:   from,
@@ -268,6 +285,9 @@ func (d *CircularDependencyDetector) findBestEdgeToBreak(cycle domain.CircularDe
 	for _, module := range cycle.Modules {
 		edges := graph.GetOutgoingEdges(module)
 		for _, edge := range edges {
+			if !isLoadTimeEdge(edge) {
+				continue // breaking a lazy edge would not break the load-time cycle
+			}
 			if sccSet[edge.To] && edge.Weight < minWeight {
 				minWeight = edge.Weight
 				bestEdge = edge
@@ -321,6 +341,9 @@ func (d *CircularDependencyDetector) FindCyclePath(from, to string, graph *domai
 
 		edges := graph.GetOutgoingEdges(current)
 		for _, edge := range edges {
+			if !isLoadTimeEdge(edge) {
+				continue // lazy edges are not load-time dependencies (#460)
+			}
 			if dfs(edge.To) {
 				return true
 			}

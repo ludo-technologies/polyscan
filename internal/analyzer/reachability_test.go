@@ -377,27 +377,102 @@ func TestReachabilityAnalyzer_blockContainsReturn(t *testing.T) {
 	}
 }
 
-func TestCopyVisited(t *testing.T) {
-	original := map[string]bool{
-		"a": true,
-		"b": false,
-		"c": true,
-	}
+func TestReachabilityAfterReturn(t *testing.T) {
+	assertUnreachable := func(t *testing.T, result *ReachabilityResult, block *BasicBlock) {
+		t.Helper()
 
-	copied := copyVisited(original)
-
-	// Check that copy has same values
-	for k, v := range original {
-		if copied[k] != v {
-			t.Errorf("Copied map should have same value for key %s", k)
+		if _, exists := result.UnreachableBlocks[block.ID]; !exists {
+			t.Fatalf("expected %s to be unreachable after return", block.ID)
+		}
+		if _, exists := result.ReachableBlocks[block.ID]; exists {
+			t.Fatalf("expected %s to be removed from reachable blocks", block.ID)
 		}
 	}
 
-	// Modify copy and ensure original is unchanged
-	copied["d"] = true
-	if _, exists := original["d"]; exists {
-		t.Error("Modifying copy should not affect original")
-	}
+	t.Run("ImmediateSuccessorMarkedUnreachable", func(t *testing.T) {
+		cfg := NewCFG("after_return")
+
+		returnBlock := cfg.CreateBlock("return_block")
+		deadBlock := cfg.CreateBlock("dead_block")
+
+		returnBlock.AddStatement(&parser.Node{Type: parser.NodeReturnStatement})
+		deadBlock.AddStatement(&parser.Node{Type: parser.NodeExpressionStatement})
+
+		cfg.Entry.AddSuccessor(returnBlock, EdgeNormal)
+		returnBlock.AddSuccessor(cfg.Exit, EdgeReturn)
+		returnBlock.AddSuccessor(deadBlock, EdgeNormal)
+		deadBlock.AddSuccessor(cfg.Exit, EdgeNormal)
+
+		analyzer := NewReachabilityAnalyzer(cfg)
+		result := analyzer.AnalyzeReachability()
+
+		assertUnreachable(t, result, deadBlock)
+		if !result.HasUnreachableCode() {
+			t.Fatal("expected unreachable code to be reported")
+		}
+
+		unreachableWithStatements := result.GetUnreachableBlocksWithStatements()
+		if len(unreachableWithStatements) != 1 || unreachableWithStatements[deadBlock.ID] == nil {
+			t.Fatalf("expected only %s to be reported as unreachable code, got %#v", deadBlock.ID, unreachableWithStatements)
+		}
+	})
+
+	t.Run("SharedDeadTailMarkedUnreachable", func(t *testing.T) {
+		cfg := NewCFG("after_return_shared_tail")
+
+		returnBlock := cfg.CreateBlock("return_block")
+		leftDead := cfg.CreateBlock("left_dead")
+		rightDead := cfg.CreateBlock("right_dead")
+		sharedDead := cfg.CreateBlock("shared_dead")
+		leafDead := cfg.CreateBlock("leaf_dead")
+
+		returnBlock.AddStatement(&parser.Node{Type: parser.NodeReturnStatement})
+		leftDead.AddStatement(&parser.Node{Type: parser.NodeReturnStatement})
+		rightDead.AddStatement(&parser.Node{Type: parser.NodeReturnStatement})
+		sharedDead.AddStatement(&parser.Node{Type: parser.NodeReturnStatement})
+		leafDead.AddStatement(&parser.Node{Type: parser.NodeExpressionStatement})
+
+		cfg.Entry.AddSuccessor(returnBlock, EdgeNormal)
+		returnBlock.AddSuccessor(cfg.Exit, EdgeReturn)
+		returnBlock.AddSuccessor(leftDead, EdgeNormal)
+		returnBlock.AddSuccessor(rightDead, EdgeNormal)
+		leftDead.AddSuccessor(sharedDead, EdgeNormal)
+		rightDead.AddSuccessor(sharedDead, EdgeNormal)
+		sharedDead.AddSuccessor(leafDead, EdgeNormal)
+		leafDead.AddSuccessor(cfg.Exit, EdgeNormal)
+
+		analyzer := NewReachabilityAnalyzer(cfg)
+		result := analyzer.AnalyzeReachability()
+
+		assertUnreachable(t, result, leftDead)
+		assertUnreachable(t, result, rightDead)
+		assertUnreachable(t, result, sharedDead)
+		assertUnreachable(t, result, leafDead)
+	})
+
+	t.Run("CyclicDeadTailMarkedUnreachable", func(t *testing.T) {
+		cfg := NewCFG("after_return_cycle")
+
+		returnBlock := cfg.CreateBlock("return_block")
+		deadA := cfg.CreateBlock("dead_a")
+		deadB := cfg.CreateBlock("dead_b")
+
+		returnBlock.AddStatement(&parser.Node{Type: parser.NodeReturnStatement})
+		deadA.AddStatement(&parser.Node{Type: parser.NodeReturnStatement})
+		deadB.AddStatement(&parser.Node{Type: parser.NodeReturnStatement})
+
+		cfg.Entry.AddSuccessor(returnBlock, EdgeNormal)
+		returnBlock.AddSuccessor(cfg.Exit, EdgeReturn)
+		returnBlock.AddSuccessor(deadA, EdgeNormal)
+		deadA.AddSuccessor(deadB, EdgeNormal)
+		deadB.AddSuccessor(deadA, EdgeNormal)
+
+		analyzer := NewReachabilityAnalyzer(cfg)
+		result := analyzer.AnalyzeReachability()
+
+		assertUnreachable(t, result, deadA)
+		assertUnreachable(t, result, deadB)
+	})
 }
 
 func TestReachabilityResult_AnalysisTime(t *testing.T) {

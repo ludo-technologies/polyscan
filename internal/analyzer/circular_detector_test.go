@@ -331,3 +331,45 @@ func TestGenerateCycleDescription(t *testing.T) {
 		t.Error("Expected description to mention 3 modules")
 	}
 }
+
+func TestDetectCyclesSkipsDynamicEdges(t *testing.T) {
+	// A -> B (static), B -> A (dynamic import only): a dynamic import is
+	// evaluated at call time, not module load time, so this is not a
+	// load-time cycle. See pyscn issue #460.
+	graph := domain.NewDependencyGraph()
+	graph.AddNode(&domain.ModuleNode{ID: "a"})
+	graph.AddNode(&domain.ModuleNode{ID: "b"})
+	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b", EdgeType: domain.EdgeTypeImport, Weight: 1})
+	graph.AddEdge(&domain.DependencyEdge{From: "b", To: "a", EdgeType: domain.EdgeTypeDynamic, Weight: 1})
+
+	detector := NewCircularDependencyDetector()
+	result := detector.DetectCycles(graph)
+
+	if result.HasCircularDependencies {
+		t.Error("Expected no circular dependencies when back edge is dynamic-only")
+	}
+	if result.TotalCycles != 0 {
+		t.Errorf("Expected 0 cycles, got %d", result.TotalCycles)
+	}
+}
+
+func TestDetectCyclesKeepsCycleWithStaticAndDynamicEdges(t *testing.T) {
+	// A -> B (static), B -> A (static AND dynamic): the static back edge
+	// still forms a load-time cycle; the extra dynamic edge must not hide it.
+	graph := domain.NewDependencyGraph()
+	graph.AddNode(&domain.ModuleNode{ID: "a"})
+	graph.AddNode(&domain.ModuleNode{ID: "b"})
+	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b", EdgeType: domain.EdgeTypeImport, Weight: 1})
+	graph.AddEdge(&domain.DependencyEdge{From: "b", To: "a", EdgeType: domain.EdgeTypeDynamic, Weight: 1})
+	graph.AddEdge(&domain.DependencyEdge{From: "b", To: "a", EdgeType: domain.EdgeTypeImport, Weight: 1})
+
+	detector := NewCircularDependencyDetector()
+	result := detector.DetectCycles(graph)
+
+	if !result.HasCircularDependencies {
+		t.Error("Expected circular dependencies to be detected via the static back edge")
+	}
+	if result.TotalCycles != 1 {
+		t.Errorf("Expected 1 cycle, got %d", result.TotalCycles)
+	}
+}

@@ -2,6 +2,8 @@ package analyzer
 
 import (
 	"testing"
+
+	"github.com/ludo-technologies/jscan/internal/parser"
 )
 
 func TestSeverityLevelConstants(t *testing.T) {
@@ -479,5 +481,191 @@ func TestDeadCodeDetector_Detect_NestedControlFlow(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("Result should not be nil")
+	}
+}
+
+// TestDeadCodeSkipsTrailingSemicolonNoise ensures the dead-code detector does
+// not emit findings for the empty statement produced by a trailing `;` after a
+// terminating statement (return/throw).
+func TestDeadCodeSkipsTrailingSemicolonNoise(t *testing.T) {
+	code := `
+		function f(x) {
+			if (x === null) {
+				throw new Error("nope");;
+			}
+			return x;
+		}
+
+		function g(y) {
+			return y;;
+		}
+	`
+	ast := parseJS(t, code)
+
+	for _, fnName := range []string{"f", "g"} {
+		funcNode := findFunction(ast, fnName)
+		if funcNode == nil {
+			t.Fatalf("expected function node for %s", fnName)
+		}
+
+		builder := NewCFGBuilder()
+		cfg, err := builder.Build(funcNode)
+		if err != nil {
+			t.Fatalf("Build failed for %s: %v", fnName, err)
+		}
+
+		result := NewDeadCodeDetector(cfg).Detect()
+		for _, finding := range result.Findings {
+			if finding.Code == string(parser.NodeEmptyStatement) {
+				t.Errorf("function %s: dead-code finding for a bare ';' (trailing-semicolon empty statement) should be filtered out; got %+v",
+					fnName, finding)
+			}
+		}
+	}
+}
+
+func TestDeadCodeNoOverlappingFindings(t *testing.T) {
+	// A compound statement (if) spans its body, so the body's own block used to
+	// emit a finding whose range was nested inside the if's finding range,
+	// double-counting the same source line. The whole region after `throw` is
+	// one contiguous dead region and should produce non-overlapping findings.
+	code := `
+		function doFlip(showWidgets) {
+			throw new Error("not implemented");
+			let tooltip = null;
+			if (showWidgets) {
+				renderWidgets();
+			}
+			if (tooltip) {
+				renderNotifications();
+			}
+		}
+	`
+	ast := parseJS(t, code)
+	funcNode := findFunction(ast, "doFlip")
+	if funcNode == nil {
+		t.Fatal("expected function node for doFlip")
+	}
+
+	builder := NewCFGBuilder()
+	cfg, err := builder.Build(funcNode)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	result := NewDeadCodeDetector(cfg).Detect()
+	if len(result.Findings) == 0 {
+		t.Fatal("expected dead-code findings after throw")
+	}
+
+	// Findings must not have overlapping line ranges: each finding's start line
+	// must be strictly after the previous finding's end line.
+	for i := 1; i < len(result.Findings); i++ {
+		prev := result.Findings[i-1]
+		cur := result.Findings[i]
+		if cur.StartLine <= prev.EndLine {
+			t.Errorf("findings overlap: %+v then %+v", prev, cur)
+		}
+	}
+}
+
+func TestMergeContiguousFindings(t *testing.T) {
+	mk := func(start, end int, reason DeadCodeReason, sev SeverityLevel) *DeadCodeFinding {
+		return &DeadCodeFinding{StartLine: start, EndLine: end, Reason: reason, Severity: sev, Code: "x"}
+	}
+
+	t.Run("merges overlapping same-reason findings", func(t *testing.T) {
+		in := []*DeadCodeFinding{
+			mk(4, 6, ReasonUnreachableAfterThrow, SeverityLevelWarning),
+			mk(6, 6, ReasonUnreachableAfterThrow, SeverityLevelCritical),
+		}
+		out := mergeContiguousFindings(in)
+		if len(out) != 1 {
+			t.Fatalf("expected 1 finding, got %d", len(out))
+		}
+		if out[0].StartLine != 4 || out[0].EndLine != 6 {
+			t.Errorf("expected merged range 4-6, got %d-%d", out[0].StartLine, out[0].EndLine)
+		}
+		if out[0].Severity != SeverityLevelCritical {
+			t.Errorf("expected highest severity to be kept, got %s", out[0].Severity)
+		}
+	})
+
+	t.Run("merges adjacent same-reason findings", func(t *testing.T) {
+		in := []*DeadCodeFinding{
+			mk(4, 6, ReasonUnreachableAfterThrow, SeverityLevelCritical),
+			mk(7, 8, ReasonUnreachableAfterThrow, SeverityLevelCritical),
+		}
+		out := mergeContiguousFindings(in)
+		if len(out) != 1 {
+			t.Fatalf("expected 1 finding, got %d", len(out))
+		}
+		if out[0].EndLine != 8 {
+			t.Errorf("expected merged end line 8, got %d", out[0].EndLine)
+		}
+	})
+
+	t.Run("does not merge across a gap", func(t *testing.T) {
+		in := []*DeadCodeFinding{
+			mk(4, 4, ReasonUnreachableAfterThrow, SeverityLevelCritical),
+			mk(6, 6, ReasonUnreachableAfterThrow, SeverityLevelCritical),
+		}
+		out := mergeContiguousFindings(in)
+		if len(out) != 2 {
+			t.Errorf("expected 2 findings, got %d", len(out))
+		}
+	})
+
+	t.Run("does not merge different reasons", func(t *testing.T) {
+		in := []*DeadCodeFinding{
+			mk(4, 6, ReasonUnreachableAfterThrow, SeverityLevelCritical),
+			mk(6, 6, ReasonUnreachableBranch, SeverityLevelWarning),
+		}
+		out := mergeContiguousFindings(in)
+		if len(out) != 2 {
+			t.Errorf("expected 2 findings, got %d", len(out))
+		}
+	})
+}
+
+func TestMergeCodeLines(t *testing.T) {
+	cases := []struct {
+		a, b, expected string
+	}{
+		{"", "b", "b"},
+		{"a", "", "a"},
+		{"a", "b", "a\nb"},
+		// Duplicate boundary line (nested body repeats enclosing line) is collapsed.
+		{"if\nCall", "Call", "if\nCall"},
+	}
+	for _, tc := range cases {
+		if got := mergeCodeLines(tc.a, tc.b); got != tc.expected {
+			t.Errorf("mergeCodeLines(%q, %q) = %q, expected %q", tc.a, tc.b, got, tc.expected)
+		}
+	}
+}
+
+func TestIsOnlyEmptyStatements(t *testing.T) {
+	if isOnlyEmptyStatements(nil) {
+		t.Error("nil block should not be empty-statements-only")
+	}
+	if isOnlyEmptyStatements(&BasicBlock{}) {
+		t.Error("empty block should not be empty-statements-only")
+	}
+
+	semi := &parser.Node{Type: parser.NodeEmptyStatement}
+	ret := &parser.Node{Type: parser.NodeReturnStatement}
+
+	if !isOnlyEmptyStatements(&BasicBlock{Statements: []*parser.Node{semi}}) {
+		t.Error("block with only a separator should be empty-statements-only")
+	}
+	if !isOnlyEmptyStatements(&BasicBlock{Statements: []*parser.Node{semi, semi}}) {
+		t.Error("block with multiple separators should be empty-statements-only")
+	}
+	if isOnlyEmptyStatements(&BasicBlock{Statements: []*parser.Node{ret}}) {
+		t.Error("block with a real statement should not be empty-statements-only")
+	}
+	if isOnlyEmptyStatements(&BasicBlock{Statements: []*parser.Node{semi, ret}}) {
+		t.Error("block mixing separators and a real statement should not be empty-statements-only")
 	}
 }

@@ -29,7 +29,7 @@ func TestAddFragment(t *testing.T) {
 	mh := NewMinHasher(128)
 
 	sig := mh.ComputeSignature([]string{"a", "b", "c"})
-	err := idx.AddFragment("frag1", sig)
+	err := idx.AddFragment(1, sig)
 	if err != nil {
 		t.Errorf("AddFragment failed: %v", err)
 	}
@@ -44,16 +44,16 @@ func TestAddFragmentErrors(t *testing.T) {
 	mh := NewMinHasher(128)
 
 	// Empty signature
-	err := idx.AddFragment("frag1", nil)
+	err := idx.AddFragment(1, nil)
 	if err == nil {
 		t.Error("Expected error for nil signature")
 	}
 
-	// Empty ID
+	// Negative ID
 	sig := mh.ComputeSignature([]string{"a", "b"})
-	err = idx.AddFragment("", sig)
+	err = idx.AddFragment(-1, sig)
 	if err == nil {
-		t.Error("Expected error for empty ID")
+		t.Error("Expected error for negative ID")
 	}
 }
 
@@ -66,21 +66,21 @@ func TestFindCandidates(t *testing.T) {
 	sig2 := mh.ComputeSignature([]string{"a", "b", "c", "x", "y"})
 	sig3 := mh.ComputeSignature([]string{"p", "q", "r", "s", "t"})
 
-	_ = idx.AddFragment("similar1", sig1)
-	_ = idx.AddFragment("similar2", sig2)
-	_ = idx.AddFragment("different", sig3)
+	_ = idx.AddFragment(1, sig1)
+	_ = idx.AddFragment(2, sig2)
+	_ = idx.AddFragment(3, sig3)
 
-	// Query with sig1 - should find similar2
+	// Query with sig1 - should find itself
 	candidates := idx.FindCandidates(sig1)
 
 	if len(candidates) == 0 {
 		t.Error("Expected at least one candidate")
 	}
 
-	// Should include similar1 (itself)
+	// Should include fragment 1 (itself)
 	found := false
 	for _, c := range candidates {
-		if c == "similar1" {
+		if c == 1 {
 			found = true
 			break
 		}
@@ -113,9 +113,9 @@ func TestGetSignature(t *testing.T) {
 	mh := NewMinHasher(128)
 
 	sig := mh.ComputeSignature([]string{"a", "b", "c"})
-	_ = idx.AddFragment("frag1", sig)
+	_ = idx.AddFragment(1, sig)
 
-	retrieved := idx.GetSignature("frag1")
+	retrieved := idx.GetSignature(1)
 	if retrieved == nil {
 		t.Error("Expected to retrieve signature")
 	}
@@ -124,7 +124,7 @@ func TestGetSignature(t *testing.T) {
 	}
 
 	// Non-existent
-	retrieved = idx.GetSignature("nonexistent")
+	retrieved = idx.GetSignature(999)
 	if retrieved != nil {
 		t.Error("Expected nil for non-existent ID")
 	}
@@ -147,8 +147,8 @@ func TestDuplicateAvoidance(t *testing.T) {
 	sig := mh.ComputeSignature([]string{"a", "b", "c"})
 
 	// Add same fragment twice
-	_ = idx.AddFragment("frag1", sig)
-	_ = idx.AddFragment("frag1", sig)
+	_ = idx.AddFragment(1, sig)
+	_ = idx.AddFragment(1, sig)
 
 	// Size should still be 1
 	if idx.Size() != 1 {
@@ -157,13 +157,13 @@ func TestDuplicateAvoidance(t *testing.T) {
 
 	// Candidates should not have duplicates
 	candidates := idx.FindCandidates(sig)
-	idCount := make(map[string]int)
+	idCount := make(map[int]int)
 	for _, c := range candidates {
 		idCount[c]++
 	}
 	for id, count := range idCount {
 		if count > 1 {
-			t.Errorf("Found duplicate candidate %s (count: %d)", id, count)
+			t.Errorf("Found duplicate candidate %d (count: %d)", id, count)
 		}
 	}
 }
@@ -186,9 +186,9 @@ func TestLSHSensitivity(t *testing.T) {
 
 	// Create index and add fragments
 	idx := NewLSHIndex(32, 4)
-	_ = idx.AddFragment("base", baseSig)
-	_ = idx.AddFragment("similar", similarSig)
-	_ = idx.AddFragment("different", differentSig)
+	_ = idx.AddFragment(1, baseSig)
+	_ = idx.AddFragment(2, similarSig)
+	_ = idx.AddFragment(3, differentSig)
 
 	// Query with similar signature
 	candidates := idx.FindCandidates(similarSig)
@@ -197,10 +197,10 @@ func TestLSHSensitivity(t *testing.T) {
 	hasBase := false
 	hasDifferent := false
 	for _, c := range candidates {
-		if c == "base" {
+		if c == 1 {
 			hasBase = true
 		}
-		if c == "different" {
+		if c == 3 {
 			hasDifferent = true
 		}
 	}
@@ -222,10 +222,88 @@ func TestLSHIndexWithManyFragments(t *testing.T) {
 			"common",
 		}
 		sig := mh.ComputeSignature(features)
-		_ = idx.AddFragment("frag_"+string(rune('0'+i%10))+string(rune('0'+i/10)), sig)
+		_ = idx.AddFragment(i, sig)
 	}
 
 	if idx.Size() != 100 {
 		t.Errorf("Expected 100 fragments, got %d", idx.Size())
+	}
+}
+
+func TestLSHIndexFindCandidatesKeepsOversizedBucketCandidates(t *testing.T) {
+	mh := NewMinHasher(128)
+	sig := mh.ComputeSignature([]string{"same", "feature", "set"})
+
+	lsh := NewLSHIndex(32, 4).WithMaxCandidates(2)
+	for _, id := range []int{1, 2, 3} {
+		if err := lsh.AddFragment(id, sig); err != nil {
+			t.Fatalf("add %d: %v", id, err)
+		}
+	}
+
+	cands := lsh.FindCandidates(sig)
+	if len(cands) != 2 {
+		t.Fatalf("expected oversized bucket candidates capped at 2; got %v", cands)
+	}
+}
+
+func TestLSHIndexFindCandidatesCapsTotalCandidates(t *testing.T) {
+	mh := NewMinHasher(128)
+	query := mh.ComputeSignature([]string{"shared", "query", "features"})
+
+	lsh := NewLSHIndex(32, 4).WithMaxCandidates(2)
+	keys := lsh.computeBandKeys(query)
+	lsh.buckets[keys[0]] = []int{1}
+	lsh.buckets[keys[1]] = []int{2}
+	lsh.buckets[keys[2]] = []int{3}
+
+	cands := lsh.FindCandidates(query)
+	if len(cands) > 2 {
+		t.Fatalf("expected candidates to be capped at 2; got %v", cands)
+	}
+}
+
+func TestLSHIndexFindCandidatesUsesDefaultCapAtBoundary(t *testing.T) {
+	mh := NewMinHasher(128)
+	sig := mh.ComputeSignature([]string{"same", "feature", "set"})
+
+	lsh := NewLSHIndex(32, 4)
+	for id := 0; id <= defaultLSHMaxCandidates; id++ {
+		if err := lsh.AddFragment(id, sig); err != nil {
+			t.Fatalf("add %d: %v", id, err)
+		}
+	}
+
+	cands := lsh.FindCandidates(sig)
+	if len(cands) != defaultLSHMaxCandidates {
+		t.Fatalf("candidate count mismatch: want %d got %d", defaultLSHMaxCandidates, len(cands))
+	}
+	for i, id := range cands {
+		if id != i {
+			t.Fatalf("candidate order mismatch at %d: got %d", i, id)
+		}
+	}
+}
+
+func TestLSHIndexFindCandidatesReturnsDeterministicIndexes(t *testing.T) {
+	mh := NewMinHasher(128)
+	sig := mh.ComputeSignature([]string{"same", "feature", "set"})
+
+	lsh := NewLSHIndex(32, 4)
+	for _, id := range []int{4, 2, 3, 1} {
+		if err := lsh.AddFragment(id, sig); err != nil {
+			t.Fatalf("add %d: %v", id, err)
+		}
+	}
+
+	cands := lsh.FindCandidates(sig)
+	want := []int{1, 2, 3, 4}
+	if len(cands) != len(want) {
+		t.Fatalf("candidate count mismatch: want %v got %v", want, cands)
+	}
+	for i := range want {
+		if cands[i] != want[i] {
+			t.Fatalf("candidate order mismatch: want %v got %v", want, cands)
+		}
 	}
 }

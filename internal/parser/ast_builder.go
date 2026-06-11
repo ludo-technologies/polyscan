@@ -100,6 +100,10 @@ func (b *ASTBuilder) buildNode(tsNode *sitter.Node) *Node {
 		return b.buildVariableDeclaration(tsNode)
 	case "expression_statement":
 		return b.buildExpressionStatement(tsNode)
+	case "empty_statement":
+		node := NewNode(NodeEmptyStatement)
+		node.Location = b.getLocation(tsNode)
+		return node
 	case "call_expression":
 		return b.buildCallExpression(tsNode)
 	case "member_expression":

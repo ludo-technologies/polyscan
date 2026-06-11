@@ -10,11 +10,11 @@ import (
 func TestDefaultCouplingMetricsConfig(t *testing.T) {
 	config := DefaultCouplingMetricsConfig()
 
-	if config.InstabilityHighThreshold != 0.8 {
-		t.Errorf("Expected InstabilityHighThreshold 0.8, got %f", config.InstabilityHighThreshold)
+	if config.InstabilityHighThreshold != 0.7 {
+		t.Errorf("Expected InstabilityHighThreshold 0.7, got %f", config.InstabilityHighThreshold)
 	}
-	if config.InstabilityLowThreshold != 0.2 {
-		t.Errorf("Expected InstabilityLowThreshold 0.2, got %f", config.InstabilityLowThreshold)
+	if config.InstabilityLowThreshold != 0.3 {
+		t.Errorf("Expected InstabilityLowThreshold 0.3, got %f", config.InstabilityLowThreshold)
 	}
 	if config.DistanceThreshold != 0.3 {
 		t.Errorf("Expected DistanceThreshold 0.3, got %f", config.DistanceThreshold)
@@ -132,21 +132,30 @@ func TestClassifyStabilityZone(t *testing.T) {
 		instability  float64
 		abstractness float64
 		distance     float64
+		afferent     int
 		expected     string
 	}{
-		{0.5, 0.5, 0.0, "main_sequence"},       // On main sequence
-		{0.5, 0.5, 0.2, "main_sequence"},       // Near main sequence
-		{0.2, 0.2, 0.6, "zone_of_pain"},        // Stable + concrete
-		{0.1, 0.1, 0.8, "zone_of_pain"},        // Very stable + concrete
-		{0.8, 0.8, 0.6, "zone_of_uselessness"}, // Unstable + abstract
-		{0.9, 0.9, 0.8, "zone_of_uselessness"}, // Very unstable + abstract
+		{0.5, 0.5, 0.0, 0, "main_sequence"},       // On main sequence
+		{0.5, 0.5, 0.2, 0, "main_sequence"},       // Near main sequence
+		{0.2, 0.2, 0.6, 2, "zone_of_pain"},        // Stable + concrete, depended on
+		{0.1, 0.1, 0.8, 5, "zone_of_pain"},        // Very stable + concrete, depended on
+		{0.2, 0.2, 0.6, 1, ""},                    // Stable + concrete but nothing depends on it
+		{0.8, 0.8, 0.6, 0, "zone_of_uselessness"}, // Unstable + abstract
+		{0.9, 0.9, 0.8, 0, "zone_of_uselessness"}, // Very unstable + abstract
+		{0.5, 0.5, 0.35, 0, ""},                   // Off the main sequence but in no zone
 	}
 
 	for _, tc := range testCases {
-		result := calc.classifyStabilityZone(tc.instability, tc.abstractness, tc.distance)
+		m := &domain.ModuleDependencyMetrics{
+			Instability:      tc.instability,
+			Abstractness:     tc.abstractness,
+			Distance:         tc.distance,
+			AfferentCoupling: tc.afferent,
+		}
+		result := calc.classifyStabilityZone(m)
 		if result != tc.expected {
-			t.Errorf("Zone(I=%f, A=%f, D=%f) = %s, expected %s",
-				tc.instability, tc.abstractness, tc.distance, result, tc.expected)
+			t.Errorf("Zone(I=%f, A=%f, D=%f, Ca=%d) = %q, expected %q",
+				tc.instability, tc.abstractness, tc.distance, tc.afferent, result, tc.expected)
 		}
 	}
 }

@@ -112,6 +112,7 @@ type CloneDetectorConfig struct {
 	LSHBands               int     // Number of LSH bands (default: 32)
 	LSHRows                int     // Rows per band (default: 4)
 	LSHMinHashCount        int     // Number of MinHash functions (default: 128)
+	LSHMaxCandidates       int     // Maximum candidates returned per LSH query
 }
 
 // DefaultCloneDetectorConfig returns default configuration
@@ -145,6 +146,7 @@ func DefaultCloneDetectorConfig() *CloneDetectorConfig {
 		LSHBands:               32,
 		LSHRows:                4,
 		LSHMinHashCount:        128,
+		LSHMaxCandidates:       defaultLSHMaxCandidates,
 	}
 }
 
@@ -496,23 +498,18 @@ func (cd *CloneDetector) DetectClonesWithLSH(ctx context.Context, fragments []*C
 	hasher := NewMinHasher(cd.cloneDetectorConfig.LSHMinHashCount)
 
 	type fragRec struct {
-		id  string
 		idx int
 		sig *MinHashSignature
 	}
 	records := make([]fragRec, 0, len(cd.fragments))
 	sigByIndex := make(map[int]*MinHashSignature, len(cd.fragments))
-	idToIndex := make(map[string]int, len(cd.fragments))
 	for i, f := range cd.fragments {
 		if f == nil || f.TreeNode == nil {
 			continue
 		}
-		// Build a stable ID for the fragment
-		id := fmt.Sprintf("%s:%d-%d", f.Location.FilePath, f.Location.StartLine, f.Location.EndLine)
 		sig := hasher.ComputeSignature(f.Features)
-		records = append(records, fragRec{id: id, idx: i, sig: sig})
+		records = append(records, fragRec{idx: i, sig: sig})
 		sigByIndex[i] = sig
-		idToIndex[id] = i
 	}
 
 	// Edge case: if signatures cannot be built, fallback
@@ -521,9 +518,10 @@ func (cd *CloneDetector) DetectClonesWithLSH(ctx context.Context, fragments []*C
 	}
 
 	// Stage 2: LSH indexing
-	lsh := NewLSHIndex(cd.cloneDetectorConfig.LSHBands, cd.cloneDetectorConfig.LSHRows)
+	lsh := NewLSHIndex(cd.cloneDetectorConfig.LSHBands, cd.cloneDetectorConfig.LSHRows).
+		WithMaxCandidates(cd.cloneDetectorConfig.LSHMaxCandidates)
 	for _, r := range records {
-		_ = lsh.AddFragment(r.id, r.sig)
+		_ = lsh.AddFragment(r.idx, r.sig)
 	}
 	_ = lsh.BuildIndex()
 
@@ -543,8 +541,7 @@ func (cd *CloneDetector) DetectClonesWithLSH(ctx context.Context, fragments []*C
 			break
 		}
 		cands := lsh.FindCandidates(r.sig)
-		for _, cid := range cands {
-			j := idToIndex[cid]
+		for _, j := range cands {
 			i := r.idx
 			if j == i || j < 0 || i < 0 {
 				continue

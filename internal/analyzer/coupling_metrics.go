@@ -7,12 +7,19 @@ import (
 	"github.com/ludo-technologies/jscan/domain"
 )
 
+const (
+	mainSequenceMaxDistance = 0.2
+	zoneMinDistance         = 0.5
+	lowAbstractness         = 0.3
+	highAbstractness        = 0.7
+)
+
 // CouplingMetricsConfig configures the CouplingMetricsCalculator
 type CouplingMetricsConfig struct {
-	// InstabilityHighThreshold defines the threshold for high instability (default: 0.8)
+	// InstabilityHighThreshold defines the threshold for high instability (default: 0.7)
 	InstabilityHighThreshold float64
 
-	// InstabilityLowThreshold defines the threshold for low instability (default: 0.2)
+	// InstabilityLowThreshold defines the threshold for low instability (default: 0.3)
 	InstabilityLowThreshold float64
 
 	// DistanceThreshold defines the threshold for main sequence deviation (default: 0.3)
@@ -28,8 +35,8 @@ type CouplingMetricsConfig struct {
 // DefaultCouplingMetricsConfig returns a config with sensible defaults
 func DefaultCouplingMetricsConfig() *CouplingMetricsConfig {
 	return &CouplingMetricsConfig{
-		InstabilityHighThreshold: 0.8,
-		InstabilityLowThreshold:  0.2,
+		InstabilityHighThreshold: 0.7,
+		InstabilityLowThreshold:  0.3,
 		DistanceThreshold:        0.3,
 		CouplingHighThreshold:    10,
 		CouplingMediumThreshold:  5,
@@ -143,13 +150,13 @@ func (c *CouplingMetricsCalculator) CalculateCouplingAnalysis(graph *domain.Depe
 		}
 
 		// Classify by zone
-		zone := c.classifyStabilityZone(m.Instability, m.Abstractness, m.Distance)
+		zone := c.classifyStabilityZone(m)
 		switch zone {
 		case "zone_of_pain":
 			zoneOfPain = append(zoneOfPain, nodeID)
 		case "zone_of_uselessness":
 			zoneOfUselessness = append(zoneOfUselessness, nodeID)
-		default:
+		case "main_sequence":
 			mainSequence = append(mainSequence, nodeID)
 		}
 	}
@@ -231,26 +238,33 @@ func (c *CouplingMetricsCalculator) calculateDistance(instability, abstractness 
 	return math.Abs(abstractness + instability - 1.0)
 }
 
-// classifyStabilityZone classifies a module into a stability zone
-func (c *CouplingMetricsCalculator) classifyStabilityZone(instability, abstractness, distance float64) string {
-	// Main Sequence: D < threshold
-	if distance < c.config.DistanceThreshold {
-		return "main_sequence"
-	}
-
-	// Zone of Pain: Low I (stable) + Low A (concrete)
-	// Hard to change, lots depend on it, but it's concrete
-	if instability < 0.5 && abstractness < 0.5 {
+// classifyStabilityZone classifies a module into a stability zone.
+// Modules between the main sequence band and the zones belong to no zone
+// and return an empty string.
+func (c *CouplingMetricsCalculator) classifyStabilityZone(m *domain.ModuleDependencyMetrics) string {
+	// Zone of Pain: stable concrete modules far from the main sequence that
+	// other modules actually depend on. Hard to change, lots depend on it.
+	if m.Distance >= zoneMinDistance &&
+		m.AfferentCoupling >= 2 &&
+		m.Instability <= c.config.InstabilityLowThreshold &&
+		m.Abstractness <= lowAbstractness {
 		return "zone_of_pain"
 	}
 
-	// Zone of Uselessness: High I (unstable) + High A (abstract)
-	// Abstract but nothing uses it
-	if instability > 0.5 && abstractness > 0.5 {
+	// Zone of Uselessness: unstable abstract modules far from the main
+	// sequence. Abstract but nothing uses it.
+	if m.Distance >= zoneMinDistance &&
+		m.Instability >= c.config.InstabilityHighThreshold &&
+		m.Abstractness >= highAbstractness {
 		return "zone_of_uselessness"
 	}
 
-	return "main_sequence"
+	// Main Sequence: modules close to A + I = 1
+	if m.Distance <= mainSequenceMaxDistance {
+		return "main_sequence"
+	}
+
+	return ""
 }
 
 // assessRiskLevel assesses the risk level based on coupling and distance
