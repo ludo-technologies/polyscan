@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-12
+
+### Changed
+
+- Overhaul clone detection accuracy (synced with pyscn): APTED correctness fixes (key-root ordering, forest-distance subtree cost, max-based similarity normalization), Type-1/Type-2 gating on textual and normalized-AST-hash similarity, recalibrated thresholds (0.85/0.75/0.70/0.65), Type-3 disabled by default, exact complete-linkage clustering, and MinLines/MinNodes defaults raised to 10/20
+- Switch the duplication score metric to clone-group density (groups per 1000 lines, 0-10% penalty scale)
+- Soften CBO coupling score calibration and use architecture compliance directly as the architecture score
+- Recalibrate coupling zone classification (Zone of Pain / Zone of Uselessness predicates, instability thresholds 0.2/0.8 to 0.3/0.7)
+- Exclude dynamic `import()` edges from circular dependency detection; load-time cycles are still reported when a static edge exists
+- Report module-scope code as `<module>` instead of `__main__`
+
+### Fixed
+
+- Share clones per fragment so overlapping clone groups merge correctly
+- Reject overlapping same-file fragment pairs and remove strict-subset clone group members
+- Merge contiguous same-reason dead code findings and skip empty-statement-only blocks
+
+### Performance
+
+- Optimize cross-file dead code analysis with a shared import graph
+- Speed up clone detection with a Jaccard pre-filter, cached fragment features, and an LSH candidate cap
+
 ## [0.6.2] - 2026-02-19
 
 ### Fixed
