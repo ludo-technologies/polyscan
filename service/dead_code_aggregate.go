@@ -174,7 +174,7 @@ func AnalyzeDeadCodeWithTask(ctx context.Context, req domain.DeadCodeRequest, ta
 		}
 
 		for funcName, result := range results {
-			if funcName == "__main__" {
+			if funcName == domain.ModuleFunctionName {
 				continue
 			}
 

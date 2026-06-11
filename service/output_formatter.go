@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -394,38 +395,33 @@ func (f *OutputFormatterImpl) writeAnalyzeJSON(
 	return WriteJSON(writer, response)
 }
 
-// calculateDuplicationPercentage calculates the percentage of duplicated code
+// calculateDuplicationPercentage calculates the code duplication metric based on
+// K-Core clone groups. K-Core groups represent true duplication clusters where each
+// fragment is similar to at least k other fragments (default k=2), which filters out
+// false positives from structural similarity.
 func calculateDuplicationPercentage(response *domain.CloneResponse) float64 {
-	if response == nil || response.Statistics == nil || response.Statistics.LinesAnalyzed == 0 {
+	if response == nil || response.Statistics == nil {
 		return 0.0
 	}
 
-	// Estimate duplicated lines from clone pairs
-	duplicatedLines := 0
-	seenLocations := make(map[string]bool)
-
-	for _, pair := range response.ClonePairs {
-		if pair.Clone1 != nil && pair.Clone1.Location != nil {
-			key := pair.Clone1.Location.String()
-			if !seenLocations[key] {
-				seenLocations[key] = true
-				duplicatedLines += pair.Clone1.LineCount
-			}
-		}
-		if pair.Clone2 != nil && pair.Clone2.Location != nil {
-			key := pair.Clone2.Location.String()
-			if !seenLocations[key] {
-				seenLocations[key] = true
-				duplicatedLines += pair.Clone2.LineCount
-			}
-		}
+	totalLines := response.Statistics.LinesAnalyzed
+	groupCount := response.Statistics.TotalCloneGroups
+	if totalLines == 0 || groupCount == 0 {
+		return 0.0
 	}
 
-	pct := float64(duplicatedLines) / float64(response.Statistics.LinesAnalyzed) * 100.0
-	if pct > 100.0 {
-		pct = 100.0
+	// Calculate group density: groups per 1000 lines of code
+	// This normalizes for project size
+	linesInThousands := float64(totalLines) / domain.GroupDensityLinesUnit
+	if linesInThousands < domain.GroupDensityMinLines {
+		linesInThousands = domain.GroupDensityMinLines
 	}
-	return pct
+	groupDensity := float64(groupCount) / linesInThousands
+
+	// Convert density to percentage for penalty calculation
+	// 0.5 groups/1000 lines = 10% duplication (max penalty)
+	// This makes the scoring stricter for duplicate code clusters
+	return math.Min(domain.DuplicationThresholdHigh, groupDensity*domain.GroupDensityCoefficient)
 }
 
 // writeComplexityText writes complexity response as plain text

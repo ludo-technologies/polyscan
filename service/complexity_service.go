@@ -133,7 +133,7 @@ func (s *ComplexityServiceImpl) analyzeFile(ctx context.Context, filePath string
 
 	// Analyze complexity for each function
 	for funcName, cfg := range cfgs {
-		if funcName == "__main__" {
+		if funcName == domain.ModuleFunctionName {
 			continue // Skip main module
 		}
 

@@ -98,7 +98,7 @@ func (s *DeadCodeServiceImpl) analyzeFile(ctx context.Context, filePath string, 
 
 	for functionName, cfg := range cfgs {
 		// Skip module-level code
-		if functionName == "__main__" {
+		if functionName == domain.ModuleFunctionName {
 			continue
 		}
 

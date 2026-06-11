@@ -84,6 +84,96 @@ func TestCalculateHealthScore_CyclePenaltyLogFloor(t *testing.T) {
 	}
 }
 
+func TestCalculateHealthScore_DuplicationPenalty(t *testing.T) {
+	tests := []struct {
+		name            string
+		duplication     float64
+		wantDuplication int // expected DuplicationScore
+		wantHealth      int
+	}{
+		{
+			// 0-10% scale: 1/10*20 = 2 penalty
+			name:            "low duplication penalised from zero",
+			duplication:     1.0,
+			wantDuplication: 90,
+			wantHealth:      98,
+		},
+		{
+			// 5/10*20 = 10 penalty
+			name:            "medium duplication",
+			duplication:     5.0,
+			wantDuplication: 50,
+			wantHealth:      90,
+		},
+		{
+			// 10% reaches the max penalty (20)
+			name:            "max penalty at threshold high",
+			duplication:     10.0,
+			wantDuplication: 0,
+			wantHealth:      80,
+		},
+		{
+			name:            "no duplication no penalty",
+			duplication:     0.0,
+			wantDuplication: 100,
+			wantHealth:      100,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &AnalyzeSummary{CodeDuplication: tt.duplication}
+			if err := s.CalculateHealthScore(); err != nil {
+				t.Fatalf("CalculateHealthScore() error: %v", err)
+			}
+			if s.DuplicationScore != tt.wantDuplication {
+				t.Errorf("DuplicationScore = %d, want %d", s.DuplicationScore, tt.wantDuplication)
+			}
+			if s.HealthScore != tt.wantHealth {
+				t.Errorf("HealthScore = %d, want %d", s.HealthScore, tt.wantHealth)
+			}
+		})
+	}
+}
+
+func TestCalculateHealthScore_CouplingCalibration(t *testing.T) {
+	// Softened CBO curve: a repo with a healthy average CBO and ~10% high-coupling
+	// classes should not floor the coupling score.
+	s := &AnalyzeSummary{
+		CBOClasses:            100,
+		HighCouplingClasses:   10, // 10%
+		MediumCouplingClasses: 20,
+		// weighted = 10 + 0.3*20 = 16; ratio = 0.16; penalty = 0.16/0.40*20 = 8
+	}
+	if err := s.CalculateHealthScore(); err != nil {
+		t.Fatalf("CalculateHealthScore() error: %v", err)
+	}
+	if s.CouplingScore != 60 { // 100 - (8/20)*100
+		t.Errorf("CouplingScore = %d, want 60", s.CouplingScore)
+	}
+	if s.HealthScore != 92 || s.Grade != "A" {
+		t.Errorf("HealthScore = %d (%s), want 92 (A)", s.HealthScore, s.Grade)
+	}
+}
+
+func TestCalculateHealthScore_ArchitectureScoreUsesCompliance(t *testing.T) {
+	s := &AnalyzeSummary{
+		ArchEnabled:    true,
+		ArchCompliance: 0.125,
+	}
+	if err := s.CalculateHealthScore(); err != nil {
+		t.Fatalf("CalculateHealthScore() error: %v", err)
+	}
+	// Compliance is used directly as the score: 0.125 * 100 = 12.5 → 13
+	if s.ArchitectureScore != 13 {
+		t.Errorf("ArchitectureScore = %d, want 13", s.ArchitectureScore)
+	}
+	// The health penalty is still (1-compliance)*MaxArchPenalty = 10.5 → 11
+	if s.HealthScore != 89 {
+		t.Errorf("HealthScore = %d, want 89", s.HealthScore)
+	}
+}
+
 func TestCalculateHealthScore_MSDPenalty(t *testing.T) {
 	tests := []struct {
 		name    string

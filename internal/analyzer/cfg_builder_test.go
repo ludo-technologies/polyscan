@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ludo-technologies/jscan/domain"
 	"github.com/ludo-technologies/jscan/internal/parser"
 )
 
@@ -117,8 +118,8 @@ func TestCFGBuilder_Build_Program(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build failed: %v", err)
 	}
-	if cfg.Name != LabelMainModule {
-		t.Errorf("CFG name should be '%s', got %s", LabelMainModule, cfg.Name)
+	if cfg.Name != domain.ModuleFunctionName {
+		t.Errorf("CFG name should be '%s', got %s", domain.ModuleFunctionName, cfg.Name)
 	}
 }
 
@@ -851,13 +852,13 @@ func TestCFGBuilder_BuildAll(t *testing.T) {
 		t.Fatalf("BuildAll failed: %v", err)
 	}
 
-	// Should have __main__, foo, bar
+	// Should have module-scope code, foo, bar
 	if len(cfgs) < 3 {
 		t.Errorf("BuildAll should produce at least 3 CFGs, got %d", len(cfgs))
 	}
 
-	if cfgs["__main__"] == nil {
-		t.Error("Should have __main__ CFG")
+	if cfgs[domain.ModuleFunctionName] == nil {
+		t.Error("Should have module-scope CFG")
 	}
 	if cfgs["foo"] == nil {
 		t.Error("Should have 'foo' CFG")
@@ -1069,7 +1070,7 @@ func TestCFGBuilder_BuildAll_ArrowInVariable(t *testing.T) {
 		t.Fatalf("BuildAll failed: %v", err)
 	}
 
-	// Should have __main__ plus at least one function for the arrow
+	// Should have module-scope code plus at least one function for the arrow
 	if len(cfgs) < 2 {
 		t.Errorf("BuildAll should detect arrow function in variable declaration, got %d CFGs", len(cfgs))
 	}
@@ -1077,7 +1078,7 @@ func TestCFGBuilder_BuildAll_ArrowInVariable(t *testing.T) {
 	// Check that a CFG exists for the arrow function (may be named "add" or "anonymous_<line>")
 	found := false
 	for name := range cfgs {
-		if name != "__main__" {
+		if name != domain.ModuleFunctionName {
 			found = true
 			break
 		}
@@ -1103,7 +1104,7 @@ func TestCFGBuilder_BuildAll_FunctionExpressionInVariable(t *testing.T) {
 
 	found := false
 	for name := range cfgs {
-		if name != "__main__" {
+		if name != domain.ModuleFunctionName {
 			found = true
 			break
 		}
@@ -1133,7 +1134,7 @@ func TestCFGBuilder_BuildAll_AssignmentFunctionExpression(t *testing.T) {
 	// The named function expression should be found (name: "init")
 	found := false
 	for name := range cfgs {
-		if name != "__main__" {
+		if name != domain.ModuleFunctionName {
 			found = true
 			break
 		}
@@ -1158,7 +1159,7 @@ func TestCFGBuilder_BuildAll_ObjectMethods(t *testing.T) {
 		t.Fatalf("BuildAll failed: %v", err)
 	}
 
-	// Should have __main__ + at least 2 methods
+	// Should have module-scope code + at least 2 methods
 	if len(cfgs) < 3 {
 		t.Errorf("BuildAll should detect object methods, got %d CFGs (want >= 3)", len(cfgs))
 	}
@@ -1180,7 +1181,7 @@ func TestCFGBuilder_BuildAll_ExportedArrowFunction(t *testing.T) {
 
 	found := false
 	for name := range cfgs {
-		if name != "__main__" {
+		if name != domain.ModuleFunctionName {
 			found = true
 			break
 		}
@@ -1206,7 +1207,7 @@ func TestCFGBuilder_BuildAll_CallbackArgument(t *testing.T) {
 
 	found := false
 	for name := range cfgs {
-		if name != "__main__" {
+		if name != domain.ModuleFunctionName {
 			found = true
 			break
 		}
@@ -1233,7 +1234,7 @@ func TestCFGBuilder_BuildAll_Mixed(t *testing.T) {
 		t.Fatalf("BuildAll failed: %v", err)
 	}
 
-	// Should have __main__ + declared + arrow + assignment func + object method = 5
+	// Should have module-scope code + declared + arrow + assignment func + object method = 5
 	if len(cfgs) < 5 {
 		t.Errorf("BuildAll should detect all mixed function patterns, got %d CFGs (want >= 5)", len(cfgs))
 	}

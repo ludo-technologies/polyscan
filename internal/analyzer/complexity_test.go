@@ -550,7 +550,7 @@ func TestComplexityAnalyzer_AnalyzeFile_MultipleFunctions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AnalyzeFile failed: %v", err)
 	}
-	// Should have results for __main__, add, subtract, multiply
+	// Should have results for module-scope, add, subtract, multiply
 	if len(results) < 4 {
 		t.Errorf("Should have at least 4 results, got %d", len(results))
 	}

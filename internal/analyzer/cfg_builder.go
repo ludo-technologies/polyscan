@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/ludo-technologies/jscan/domain"
 	"github.com/ludo-technologies/jscan/internal/parser"
 )
 
@@ -13,7 +14,6 @@ const (
 	LabelFunctionBody = "func_body"
 	LabelClassBody    = "class_body"
 	LabelUnreachable  = "unreachable"
-	LabelMainModule   = "main"
 	LabelEntry        = "ENTRY"
 	LabelExit         = "EXIT"
 
@@ -81,7 +81,7 @@ func (b *CFGBuilder) Build(node *parser.Node) (*CFG, error) {
 	}
 
 	// Initialize CFG based on node type
-	cfgName := LabelMainModule
+	cfgName := domain.ModuleFunctionName
 	if node.IsFunction() && node.Name != "" {
 		cfgName = node.Name
 	} else if node.Type == parser.NodeClass && node.Name != "" {
@@ -136,7 +136,7 @@ func (b *CFGBuilder) BuildAll(node *parser.Node) (map[string]*CFG, error) {
 	if err != nil {
 		return nil, err
 	}
-	allCFGs["__main__"] = mainCFG
+	allCFGs[domain.ModuleFunctionName] = mainCFG
 
 	// Add all function CFGs discovered during Build (via processStatement)
 	for name, cfg := range b.functionCFGs {

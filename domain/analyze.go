@@ -17,20 +17,26 @@ const (
 	ComplexityPenaltyLow      = 6
 
 	// Code duplication thresholds and penalties
-	DuplicationThresholdHigh   = 30.0
-	DuplicationThresholdMedium = 15.0
-	DuplicationThresholdLow    = 5.0
+	// 0% = perfect, 10% = max penalty
+	DuplicationThresholdHigh   = 10.0
+	DuplicationThresholdMedium = 5.0
+	DuplicationThresholdLow    = 0.0
 	DuplicationPenaltyHigh     = 20
 	DuplicationPenaltyMedium   = 12
 	DuplicationPenaltyLow      = 6
 
-	// CBO coupling thresholds and penalties
-	CouplingRatioHigh     = 0.30 // 30% or more classes with high coupling
-	CouplingRatioMedium   = 0.15 // 15-30% classes with high coupling
-	CouplingRatioLow      = 0.05 // 5-15% classes with high coupling
-	CouplingPenaltyHigh   = 20   // Aligned with other high penalties
-	CouplingPenaltyMedium = 12   // Aligned with other medium penalties
-	CouplingPenaltyLow    = 6    // Aligned with other low penalties
+	// K-Core group density calculation constants
+	// Group density = groups / (lines / GroupDensityLinesUnit)
+	// CodeDuplication% = min(DuplicationThresholdHigh, density * GroupDensityCoefficient)
+	GroupDensityLinesUnit   = 1000.0 // Calculate density per 1000 lines
+	GroupDensityMinLines    = 1.0    // Minimum lines in thousands (for small projects)
+	GroupDensityCoefficient = 20.0   // Multiplier to convert density to percentage
+
+	// CBO coupling scoring curve (used by calculateCouplingPenalty)
+	// Penalty grows linearly with the weighted ratio of problematic classes
+	// and saturates (reaches the max penalty) at CouplingSaturationRatio.
+	CouplingMediumWeight    = 0.3  // Medium-risk classes count 0.3 vs High = 1.0
+	CouplingSaturationRatio = 0.40 // weighted ratio at which the penalty maxes out
 
 	// Maximum penalties
 	MaxDeadCodePenalty = 20
@@ -244,15 +250,16 @@ func (s *AnalyzeSummary) calculateDeadCodePenalty(_ float64) int {
 }
 
 // calculateDuplicationPenalty calculates the penalty for code duplication (max 20)
-// Uses continuous linear function starting from 1% duplication
+// Uses continuous linear function based on defined thresholds
 func (s *AnalyzeSummary) calculateDuplicationPenalty() int {
-	// Linear penalty: starts at 1%, reaches max (20) at 20%
-	// Formula: penalty = (duplication - 1) / 19 * 20
-	if s.CodeDuplication <= 1.0 {
+	// Linear penalty: 0% = 0 penalty, 10% = max penalty (20)
+	if s.CodeDuplication <= DuplicationThresholdLow {
 		return 0
 	}
 
-	penalty := (s.CodeDuplication - 1.0) / 19.0 * 20.0
+	// Formula: penalty = (duplication - low) / (high - low) * 20
+	penaltyRange := DuplicationThresholdHigh - DuplicationThresholdLow
+	penalty := (s.CodeDuplication - DuplicationThresholdLow) / penaltyRange * 20.0
 	if penalty > 20.0 {
 		penalty = 20.0
 	}
@@ -268,13 +275,13 @@ func (s *AnalyzeSummary) calculateCouplingPenalty() int {
 	}
 
 	// Calculate combined problematic classes ratio
-	// Weight: High Risk = 1.0, Medium Risk = 0.5
-	weightedProblematicClasses := float64(s.HighCouplingClasses) + (0.5 * float64(s.MediumCouplingClasses))
+	// Weight: High Risk = 1.0, Medium Risk = CouplingMediumWeight
+	weightedProblematicClasses := float64(s.HighCouplingClasses) + (CouplingMediumWeight * float64(s.MediumCouplingClasses))
 	ratio := weightedProblematicClasses / float64(s.CBOClasses)
 
-	// Linear penalty: starts at 0%, reaches max (20) at 50%
-	// Formula: penalty = ratio / 0.50 * 20
-	penalty := ratio / 0.50 * 20.0
+	// Linear penalty: starts at 0%, reaches max (20) at CouplingSaturationRatio
+	// Formula: penalty = ratio / CouplingSaturationRatio * 20
+	penalty := ratio / CouplingSaturationRatio * 20.0
 	if penalty > 20.0 {
 		penalty = 20.0
 	}
@@ -431,8 +438,8 @@ func (s *AnalyzeSummary) CalculateHealthScore() error {
 	score -= dependencyPenalty
 
 	architecturePenalty := s.calculateArchitecturePenalty()
-	normalizedArchPenalty := normalizeToScoreBase(architecturePenalty, MaxArchitecturePenalty)
-	s.ArchitectureScore = penaltyToScore(normalizedArchPenalty, MaxScoreBase)
+	// Use compliance directly as score (98% compliance = 98 points)
+	s.ArchitectureScore = int(math.Round(s.ArchCompliance * 100))
 	score -= architecturePenalty
 
 	// Minimum score floor

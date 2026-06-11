@@ -16,7 +16,7 @@ The initial catch-up must be done by **state comparison**, not by replaying indi
 1. For each target file, compare pyscn's current `origin/main` content against jscan's current content and identify missing fixes and constant changes (use the commit log only to understand the intent of a change)
 2. Split the work into one PR per area, ordered by churn:
    - **Clone detection** — **Done** (2026-06-11, compared against pyscn `73acc60`. PR: sync/catchup-clone) — covered `clone_detector.go`, `apted*.go`, the grouping strategies, `domain/clone.go`, `ast_features.go`, and newly ported `textual_similarity.go` / `syntactic_similarity.go`
-   - **Scoring** — `domain/analyze.go` (16), `domain/system_analysis.go` (9), `domain/complexity.go` (9). Goal: identical grade computation in both tools
+   - **Scoring** — **Done** (2026-06-11, compared against pyscn `8650522`. PR: sync/catchup-scoring) — covered `domain/analyze.go` (duplication 0–10% scale + group-density metric, CBO calibration, architecture score = compliance), `domain/system_analysis.go` (WeightedViolations), `domain/complexity.go` (`ModuleFunctionName`) and the `__main__` → `<module>` label migration
    - **Misc** — `dependency_graph.go`, `reachability.go`, `lsh_index.go`, `coupling_metrics.go`, and other low-commit files
 3. Once all areas are done, delete this section and update the baseline SHA to the `origin/main` HEAD used during the catch-up
 
@@ -59,7 +59,7 @@ The initial catch-up must be done by **state comparison**, not by replaying indi
 
 | pyscn | jscan | Classification | Notes |
 |---|---|---|---|
-| `domain/analyze.go` | `domain/analyze.go` | sync | Health-score computation and penalty constants. **Grade computation must match across both tools** |
+| `domain/analyze.go` | `domain/analyze.go` | sync | Health-score computation and penalty constants. **Grade computation must match across both tools**. Intentional divergence: `calculateComplexityPenalty` (jscan uses high/medium count ratio, ESLint-aligned; pyscn uses average complexity) and `calculateDeadCodePenalty` (jscan uses per-file rate) — jscan-side improvements, do not overwrite |
 | `domain/system_analysis.go` | `domain/system_analysis.go` | sync | Same as above |
 | `domain/complexity.go` | `domain/complexity.go` | case-by-case | Keep thresholds and risk-level definitions aligned |
 | `domain/clone.go` | `domain/clone.go` | case-by-case | Keep similarity thresholds and clone-type definitions aligned |
@@ -100,9 +100,21 @@ Skipped during the clone detection catch-up (2026-06-11):
 - **star_medoid graph optimization** (`buildSimilarityGraph` / `mostSimilarMedoid`) — performance-only change, structurally different from jscan's StarMedoid implementation (iterative reassignment over domain.Clone). The `averageGroupSimilarity` change to count only existing pairs was ported
 - **pyscn's removal of the content-less `ExtractFragments`** — jscan tests still use it, so both variants were kept
 
+Skipped during the scoring catch-up (2026-06-11):
+
+- **LCOM cohesion scoring** (`CohesionMediumWeight` / `CohesionSaturationRatio`, `calculateCohesionPenalty`, `CohesionScore`, the LCOM summary fields, `57fcc66`) — depends on the unported LCOM4 feature. Port together with `lcom.go` / `domain/lcom.go`
+- **Cognitive complexity / RawMetrics fields in `domain/complexity.go`** (`8aa6d21`, `ce469ce`) — unported features
+- **Mock/synthetic fixture detection** (`MockData*` fields, `15bd414`) — pyscn-specific lint feature
+- **Suggestions** (`Suggestions` field, `1eaf9f6`) — depends on unported `domain/suggestion.go`
+- **Analyze config plumbing** (`AnalyzeOutputFormatter`, `AnalyzeExecutionConfig`, `AnalyzeConfigurationLoader`, `Enabled`/`ReportUnchanged`/`Request` fields, `222d190`, `779200a`, `13644b4`, `e79a414`, `d6fd3da`, `ca75d12`) — jscan's config-loader layer differs, out of scope
+- **Architecture style presets / warn rules / neutral prefixes / cohesion-responsibility validation** (`ad79460`, `1c9839d`, `61f0431`, `3708845`, `ddcf1c5`) — jscan does not implement architecture validation (the `ArchitectureAnalysisResult` types are unused scaffolding); only the `WeightedViolations` field was ported for type alignment
+- **`AbstractClassCount`** (`f63540d`) — Python ABC detection; jscan computes abstractness its own way in `coupling_metrics.go` from TS interfaces/abstract classes
+- **Django migration exclusion / Python default patterns** (`a33f1c7`, `DefaultPythonModuleIncludePatterns`) — Python-specific
+
 ## Sync history
 
 | Date | pyscn SHA | Summary |
 |---|---|---|
 | 2026-06-11 | `f0457d7` | Set the baseline to the state jscan's initial implementation was based on (v1.4.1). The ~210 commits since then are the unported backlog targeted by the initial catch-up |
 | 2026-06-11 | `73acc60` | Initial catch-up: clone detection area done. APTED correctness fixes (ascending key roots, forest-distance subtreeCost, max(size) normalization), bounded large-tree approximation (same-shape distance, label/shape profiles), Jaccard pre-filter, Type-1 textual-match gate and Type-2 syntactic gate (ported textual/syntactic similarity), threshold recalibration (0.85/0.75/0.70/0.65), Type-3 disabled by default, overlapping-range pair rejection (isOverlappingLocation), strict-subset group member removal (group_dedup), complete_linkage rewritten as agglomerative clustering, MinLines/MinNodes 10/20, LSH auto-enable by estimated pair count, introduced `parser.OrderedChildren` |
+| 2026-06-11 | `8650522` | Initial catch-up: scoring area done. Duplication metric switched to K-Core group density (groups per 1000 lines × 20, capped at 10%) with 0–10% penalty scale (`0886cfb`, `760bc87`), CBO coupling calibration softened (medium weight 0.3, saturation 0.40, `333c9ac`, `9c84a3d`), architecture score now uses compliance directly (`3c9927c`), `WeightedViolations` exposed (`e6b9920`), module-scope label `__main__` → `<module>` via `domain.ModuleFunctionName` (`2cc013c`) |
