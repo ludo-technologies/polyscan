@@ -39,6 +39,14 @@ func (ct CloneType) String() string {
 	}
 }
 
+// DefaultEnabledCloneTypes defines the clone types enabled by default.
+// Type-3 is excluded by default to reduce near-miss false positives in
+// day-to-day analysis. Users can opt in when they want broader detection.
+var DefaultEnabledCloneTypes = []CloneType{Type1Clone, Type2Clone, Type4Clone}
+
+// DefaultEnabledCloneTypeStrings provides string representations for config files.
+var DefaultEnabledCloneTypeStrings = []string{"type1", "type2", "type4"}
+
 // CloneLocation represents a location of a clone in source code
 type CloneLocation struct {
 	FilePath  string `json:"file_path" yaml:"file_path" csv:"file_path"`
@@ -119,12 +127,14 @@ func (cg *CloneGroup) AddClone(clone *Clone) {
 
 // CloneStatistics provides statistics about clone detection results
 type CloneStatistics struct {
-	TotalClones       int            `json:"total_clones" yaml:"total_clones" csv:"total_clones"`
+	TotalFragments    int            `json:"total_fragments" yaml:"total_fragments" csv:"total_fragments"` // All extracted fragments (functions, classes, etc.)
+	TotalClones       int            `json:"total_clones" yaml:"total_clones" csv:"total_clones"`          // Fragments detected as clones
 	TotalClonePairs   int            `json:"total_clone_pairs" yaml:"total_clone_pairs" csv:"total_clone_pairs"`
 	TotalCloneGroups  int            `json:"total_clone_groups" yaml:"total_clone_groups" csv:"total_clone_groups"`
 	ClonesByType      map[string]int `json:"clones_by_type" yaml:"clones_by_type" csv:"clones_by_type"`
 	AverageSimilarity float64        `json:"average_similarity" yaml:"average_similarity" csv:"average_similarity"`
 	LinesAnalyzed     int            `json:"lines_analyzed" yaml:"lines_analyzed" csv:"lines_analyzed"`
+	NodesAnalyzed     int            `json:"nodes_analyzed" yaml:"nodes_analyzed" csv:"nodes_analyzed"`
 	FilesAnalyzed     int            `json:"files_analyzed" yaml:"files_analyzed" csv:"files_analyzed"`
 }
 
@@ -286,6 +296,7 @@ func (req *CloneRequest) Validate() error {
 	}
 
 	// Validate threshold ordering (Type1 > Type2 > Type3 > Type4)
+	// This ordering is required by the classifyCloneType else-if chain.
 	if req.Type1Threshold <= req.Type2Threshold {
 		return NewValidationError("type1_threshold should be > type2_threshold")
 	}
@@ -323,9 +334,9 @@ func DefaultCloneRequest() *CloneRequest {
 		Recursive:           true,
 		IncludePatterns:     []string{"**/*.py"},
 		ExcludePatterns:     []string{"test_*.py", "*_test.py"},
-		MinLines:            5,
-		MinNodes:            10,
-		SimilarityThreshold: 0.8,
+		MinLines:            constants.DefaultCloneMinLines,
+		MinNodes:            constants.DefaultCloneMinNodes,
+		SimilarityThreshold: constants.DefaultCloneSimilarityThreshold,
 		MaxEditDistance:     50.0,
 		IgnoreLiterals:      false,
 		IgnoreIdentifiers:   false,
@@ -339,14 +350,14 @@ func DefaultCloneRequest() *CloneRequest {
 		SortBy:              SortBySimilarity,
 		GroupClones:         true,
 		GroupMode:           "connected",
-		GroupThreshold:      constants.DefaultType3CloneThreshold,
+		GroupThreshold:      constants.DefaultType4CloneThreshold,
 		KCoreK:              2,
 		MinSimilarity:       0.0,
 		MaxSimilarity:       1.0,
-		CloneTypes:          []CloneType{Type1Clone, Type2Clone, Type3Clone, Type4Clone},
+		CloneTypes:          DefaultEnabledCloneTypes,
 		// LSH defaults (auto-enable based on fragment count)
 		LSHEnabled:             "auto",
-		LSHAutoThreshold:       200,
+		LSHAutoThreshold:       constants.DefaultLSHAutoThreshold,
 		LSHSimilarityThreshold: 0.50,
 		LSHBands:               32,
 		LSHRows:                4,
@@ -361,8 +372,8 @@ func NewCloneStatistics() *CloneStatistics {
 	}
 }
 
-// ShouldUseLSH determines whether to use LSH based on configuration and fragment count
-// This centralizes the LSH decision logic used by both clone detection and progress estimation
+// ShouldUseLSH determines whether to use LSH based on configuration and fragment count.
+// This centralizes the legacy LSH decision logic used by callers that only know fragment count.
 func ShouldUseLSH(lshEnabled string, fragmentCount int, autoThreshold int) bool {
 	if lshEnabled == "true" {
 		return true
@@ -373,7 +384,36 @@ func ShouldUseLSH(lshEnabled string, fragmentCount int, autoThreshold int) bool 
 	// Auto mode (default) or empty string
 	threshold := autoThreshold
 	if threshold == 0 {
-		threshold = 200 // Default threshold
+		threshold = constants.DefaultLSHAutoThreshold
 	}
 	return fragmentCount >= threshold
+}
+
+// ShouldUseLSHWithPairEstimate determines whether to use LSH based on explicit
+// configuration, fragment count, and the estimated number of pairwise comparisons.
+func ShouldUseLSHWithPairEstimate(lshEnabled string, fragmentCount int, autoThreshold int, pairThreshold int) bool {
+	if lshEnabled == "true" {
+		return true
+	}
+	if lshEnabled == "false" {
+		return false
+	}
+	if ShouldUseLSH(lshEnabled, fragmentCount, autoThreshold) {
+		return true
+	}
+
+	threshold := pairThreshold
+	if threshold <= 0 {
+		threshold = constants.DefaultLSHAutoPairThreshold
+	}
+
+	return estimatedClonePairs(fragmentCount) > int64(threshold)
+}
+
+func estimatedClonePairs(fragmentCount int) int64 {
+	if fragmentCount <= 1 {
+		return 0
+	}
+	n := int64(fragmentCount)
+	return n * (n - 1) / 2
 }

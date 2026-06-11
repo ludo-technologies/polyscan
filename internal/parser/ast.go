@@ -305,6 +305,69 @@ func (n *Node) Walk(visitor func(*Node) bool) {
 	}
 }
 
+// GetChildren returns all child nodes in the parser's canonical order.
+func (n *Node) GetChildren() []*Node {
+	return OrderedChildren(n)
+}
+
+// OrderedChildren returns every structural child exactly once in a stable
+// order. Expression operands come before statement bodies and branches so the
+// resulting order roughly follows source evaluation order.
+func OrderedChildren(node *Node) []*Node {
+	if node == nil {
+		return nil
+	}
+
+	children := make([]*Node, 0, len(node.Children)+len(node.Body)+len(node.Params))
+	seen := make(map[*Node]struct{})
+
+	appendNode := func(child *Node) {
+		if child == nil {
+			return
+		}
+		if _, ok := seen[child]; ok {
+			return
+		}
+		seen[child] = struct{}{}
+		children = append(children, child)
+	}
+	appendNodes := func(nodes []*Node) {
+		for _, child := range nodes {
+			appendNode(child)
+		}
+	}
+
+	appendNodes(node.Children)
+	appendNodes(node.Params)
+	appendNodes(node.TypeParameters)
+	appendNode(node.Init)
+	appendNode(node.Test)
+	appendNode(node.Update)
+	appendNode(node.Left)
+	appendNode(node.Right)
+	appendNode(node.Argument)
+	appendNode(node.Callee)
+	appendNode(node.Object)
+	appendNode(node.Property)
+	appendNodes(node.Arguments)
+	appendNodes(node.Declarations)
+	appendNode(node.Source)
+	appendNodes(node.Specifiers)
+	appendNode(node.Imported)
+	appendNode(node.Local)
+	appendNode(node.Declaration)
+	appendNode(node.TypeAnnotation)
+	appendNodes(node.Body)
+	appendNode(node.Consequent)
+	appendNode(node.Alternate)
+	appendNodes(node.Cases)
+	appendNode(node.Handler)
+	appendNodes(node.Handlers)
+	appendNode(node.Finalizer)
+
+	return children
+}
+
 // String returns a string representation of the node
 func (n *Node) String() string {
 	if n.Name != "" {

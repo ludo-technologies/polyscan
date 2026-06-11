@@ -60,6 +60,9 @@ func (s *CloneServiceImpl) DetectClones(ctx context.Context, req *domain.CloneRe
 	if req.MaxEditDistance > 0 {
 		config.MaxEditDistance = req.MaxEditDistance
 	}
+	if req.SimilarityThreshold > 0 {
+		config.SimilarityThreshold = req.SimilarityThreshold
+	}
 	config.IgnoreLiterals = req.IgnoreLiterals
 	config.IgnoreIdentifiers = req.IgnoreIdentifiers
 
@@ -70,6 +73,7 @@ func (s *CloneServiceImpl) DetectClones(ctx context.Context, req *domain.CloneRe
 	var allFragments []*analyzer.CodeFragment
 	filesAnalyzed := 0
 	linesAnalyzed := 0
+	nodesAnalyzed := 0
 	var errors []string
 
 	for _, filePath := range req.Paths {
@@ -94,12 +98,15 @@ func (s *CloneServiceImpl) DetectClones(ctx context.Context, req *domain.CloneRe
 			continue
 		}
 
-		// Extract fragments from the AST
-		fragments := detector.ExtractFragments(ast.Body, filePath)
+		// Extract fragments from the AST with source content for Type-1 textual gating
+		fragments := detector.ExtractFragmentsWithSource(ast.Body, filePath, content)
 		allFragments = append(allFragments, fragments...)
 
 		filesAnalyzed++
 		linesAnalyzed += countLines(content)
+		for _, node := range ast.Body {
+			nodesAnalyzed += countASTNodes(node)
+		}
 	}
 
 	if len(allFragments) == 0 {
@@ -109,12 +116,14 @@ func (s *CloneServiceImpl) DetectClones(ctx context.Context, req *domain.CloneRe
 			ClonePairs:  []*domain.ClonePair{},
 			CloneGroups: []*domain.CloneGroup{},
 			Statistics: &domain.CloneStatistics{
+				TotalFragments:    0,
 				TotalClones:       0,
 				TotalClonePairs:   0,
 				TotalCloneGroups:  0,
 				ClonesByType:      make(map[string]int),
 				AverageSimilarity: 0,
 				LinesAnalyzed:     linesAnalyzed,
+				NodesAnalyzed:     nodesAnalyzed,
 				FilesAnalyzed:     filesAnalyzed,
 			},
 			Duration: time.Since(startTime).Milliseconds(),
@@ -127,8 +136,8 @@ func (s *CloneServiceImpl) DetectClones(ctx context.Context, req *domain.CloneRe
 		return response, nil
 	}
 
-	// Determine whether to use LSH acceleration
-	useLSH := domain.ShouldUseLSH(req.LSHEnabled, len(allFragments), req.LSHAutoThreshold)
+	// Determine whether to use LSH based on configuration and estimated exact-pair cost.
+	useLSH := domain.ShouldUseLSHWithPairEstimate(req.LSHEnabled, len(allFragments), req.LSHAutoThreshold, config.MaxClonePairs)
 	if useLSH {
 		detector.SetUseLSH(true)
 	}
@@ -143,8 +152,14 @@ func (s *CloneServiceImpl) DetectClones(ctx context.Context, req *domain.CloneRe
 		clonePairs, cloneGroups = detector.DetectClonesWithContext(ctx, allFragments)
 	}
 
+	// Filter results based on request criteria (clone types, similarity range)
+	clonePairs = filterClonePairs(clonePairs, req)
+	cloneGroups = filterCloneGroups(cloneGroups, req)
+
 	// Build statistics
 	statistics := s.buildStatistics(clonePairs, cloneGroups, filesAnalyzed, linesAnalyzed)
+	statistics.TotalFragments = len(allFragments)
+	statistics.NodesAnalyzed = nodesAnalyzed
 
 	// Sort clone pairs by similarity (descending)
 	sort.Slice(clonePairs, func(i, j int) bool {
@@ -245,6 +260,80 @@ func (s *CloneServiceImpl) extractUniqueClones(pairs []*domain.ClonePair) []*dom
 	}
 
 	return clones
+}
+
+// cloneTypeEnabled reports whether the given type is in the enabled set.
+// An empty set means no type filtering (all types pass).
+func cloneTypeEnabled(t domain.CloneType, enabled []domain.CloneType) bool {
+	if len(enabled) == 0 {
+		return true
+	}
+	for _, e := range enabled {
+		if t == e {
+			return true
+		}
+	}
+	return false
+}
+
+// similarityInRange reports whether the similarity is within the requested range.
+// MaxSimilarity <= 0 means no upper bound.
+func similarityInRange(similarity float64, req *domain.CloneRequest) bool {
+	if similarity < req.MinSimilarity {
+		return false
+	}
+	if req.MaxSimilarity > 0 && similarity > req.MaxSimilarity {
+		return false
+	}
+	return true
+}
+
+// filterClonePairs filters clone pairs based on request criteria
+func filterClonePairs(pairs []*domain.ClonePair, req *domain.CloneRequest) []*domain.ClonePair {
+	filtered := make([]*domain.ClonePair, 0, len(pairs))
+	for _, pair := range pairs {
+		if pair == nil {
+			continue
+		}
+		if !similarityInRange(pair.Similarity, req) {
+			continue
+		}
+		if !cloneTypeEnabled(pair.Type, req.CloneTypes) {
+			continue
+		}
+		filtered = append(filtered, pair)
+	}
+	return filtered
+}
+
+// filterCloneGroups filters clone groups based on request criteria
+func filterCloneGroups(groups []*domain.CloneGroup, req *domain.CloneRequest) []*domain.CloneGroup {
+	filtered := make([]*domain.CloneGroup, 0, len(groups))
+	for _, group := range groups {
+		if group == nil {
+			continue
+		}
+		if !similarityInRange(group.Similarity, req) {
+			continue
+		}
+		if !cloneTypeEnabled(group.Type, req.CloneTypes) {
+			continue
+		}
+		filtered = append(filtered, group)
+	}
+	return filtered
+}
+
+// countASTNodes counts all structural nodes in an AST subtree
+func countASTNodes(node *parser.Node) int {
+	if node == nil {
+		return 0
+	}
+	count := 1
+	for _, child := range parser.OrderedChildren(node) {
+		count += countASTNodes(child)
+	}
+	return count
 }
 
 // countLines counts the number of lines in content

@@ -372,9 +372,9 @@ func TestMajorityCloneTypeClones(t *testing.T) {
 func TestMajorityCloneTypeClonesEmpty(t *testing.T) {
 	majority := majorityCloneTypeClones(nil, []*domain.Clone{})
 
-	// Default fallback
-	if majority != domain.Type3Clone {
-		t.Errorf("Expected Type3Clone as fallback, got %v", majority)
+	// Conservative default fallback: never report unknown as Type-1
+	if majority != domain.Type4Clone {
+		t.Errorf("Expected Type4Clone as fallback, got %v", majority)
 	}
 }
 
@@ -535,9 +535,13 @@ func TestCompleteLinkageGroupingNonClique(t *testing.T) {
 
 	groups := grouping.GroupClones(pairs)
 
-	// Should form 2 cliques of size 2: (1,2) and (2,3)
-	if len(groups) != 2 {
-		t.Errorf("Expected 2 groups (two overlapping pairs), got %d", len(groups))
+	// Complete-linkage clustering merges one pair first; the chained clone
+	// cannot join because it lacks an edge to every member. One group remains.
+	if len(groups) != 1 {
+		t.Errorf("Expected 1 group (complete-linkage merges one pair), got %d", len(groups))
+	}
+	if len(groups) > 0 && groups[0].Size != 2 {
+		t.Errorf("Expected group size 2, got %d", groups[0].Size)
 	}
 }
 

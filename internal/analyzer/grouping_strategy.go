@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"container/heap"
 	"container/list"
 	"fmt"
 	"sort"
@@ -651,215 +652,140 @@ func NewCompleteLinkageGrouping(threshold float64) *CompleteLinkageGrouping {
 func (c *CompleteLinkageGrouping) GetName() string { return "Complete Linkage" }
 
 func (c *CompleteLinkageGrouping) GroupClones(pairs []*domain.ClonePair) []*domain.CloneGroup {
-	if len(pairs) == 0 {
+	input := c.collectInput(pairs)
+	if len(input.clones) < 2 {
 		return []*domain.CloneGroup{}
 	}
 
-	// Build adjacency set and clone map
-	clones := make([]*domain.Clone, 0)
-	seen := make(map[int]struct{})
-	adj := make(map[int]map[int]bool)
-	simMap := make(map[string]float64)
-	typeMap := make(map[string]domain.CloneType)
+	clusterer := newCompleteLinkageClusterer(input.clones, input.edges)
+	clusterer.mergeUntilStable()
 
-	addClone := func(clone *domain.Clone) {
-		if clone == nil {
-			return
-		}
-		if _, ok := seen[clone.ID]; !ok {
-			seen[clone.ID] = struct{}{}
-			clones = append(clones, clone)
-			adj[clone.ID] = make(map[int]bool)
-		}
+	return c.buildGroups(clusterer.activeClusters(), input.similarities, input.types)
+}
+
+type completeLinkageInput struct {
+	clones       []*domain.Clone
+	similarities map[string]float64
+	types        map[string]domain.CloneType
+	edges        []completeLinkageEdge
+}
+
+type completeLinkagePairRecord struct {
+	left       *domain.Clone
+	right      *domain.Clone
+	similarity float64
+	cloneType  domain.CloneType
+}
+
+type completeLinkageEdge struct {
+	leftID  int
+	rightID int
+	score   float64
+}
+
+func (c *CompleteLinkageGrouping) collectInput(pairs []*domain.ClonePair) completeLinkageInput {
+	input := completeLinkageInput{
+		clones:       make([]*domain.Clone, 0),
+		similarities: make(map[string]float64),
+		types:        make(map[string]domain.CloneType),
 	}
 
-	for _, p := range pairs {
-		if p == nil || p.Clone1 == nil || p.Clone2 == nil {
+	seen := make(map[int]struct{})
+	pairRecords := make(map[string]completeLinkagePairRecord)
+	for _, pair := range pairs {
+		if pair == nil || pair.Clone1 == nil || pair.Clone2 == nil {
 			continue
 		}
-		addClone(p.Clone1)
-		addClone(p.Clone2)
-		key := clonePairKey(p.Clone1, p.Clone2)
-		if old, ok := simMap[key]; !ok || p.Similarity > old {
-			simMap[key] = p.Similarity
-			typeMap[key] = p.Type
+
+		if _, ok := seen[pair.Clone1.ID]; !ok {
+			seen[pair.Clone1.ID] = struct{}{}
+			input.clones = append(input.clones, pair.Clone1)
 		}
-		if p.Similarity >= c.threshold {
-			adj[p.Clone1.ID][p.Clone2.ID] = true
-			adj[p.Clone2.ID][p.Clone1.ID] = true
+		if _, ok := seen[pair.Clone2.ID]; !ok {
+			seen[pair.Clone2.ID] = struct{}{}
+			input.clones = append(input.clones, pair.Clone2)
 		}
-	}
 
-	if len(clones) == 0 {
-		return []*domain.CloneGroup{}
-	}
-
-	// Build clone ID to clone map and sorted ID list
-	cloneByID := make(map[int]*domain.Clone)
-	cloneIDs := make([]int, 0, len(clones))
-	for _, clone := range clones {
-		cloneByID[clone.ID] = clone
-		cloneIDs = append(cloneIDs, clone.ID)
-	}
-	sort.Ints(cloneIDs)
-
-	// Find all maximal cliques using Bron-Kerbosch with pivot
-	cliques := make([][]int, 0)
-	c.bronKerbosch(
-		[]int{},  // R: current clique
-		cloneIDs, // P: potential candidates
-		[]int{},  // X: excluded
-		adj,
-		&cliques,
-	)
-
-	// Filter cliques by minimum size and deduplicate
-	filteredCliques := make([][]int, 0)
-	for _, clique := range cliques {
-		if len(clique) >= 2 {
-			filteredCliques = append(filteredCliques, clique)
+		key := clonePairKey(pair.Clone1, pair.Clone2)
+		record, ok := pairRecords[key]
+		if !ok || pair.Similarity > record.similarity {
+			pairRecords[key] = completeLinkagePairRecord{
+				left:       pair.Clone1,
+				right:      pair.Clone2,
+				similarity: pair.Similarity,
+				cloneType:  pair.Type,
+			}
+			input.similarities[key] = pair.Similarity
+			input.types[key] = pair.Type
 		}
 	}
 
-	// Sort cliques by size (descending) for deterministic output
-	sort.Slice(filteredCliques, func(i, j int) bool {
-		return len(filteredCliques[i]) > len(filteredCliques[j])
-	})
+	cloneIndexes := make(map[int]int, len(input.clones))
+	for index, clone := range input.clones {
+		cloneIndexes[clone.ID] = index
+	}
 
-	// Convert to CloneGroups
-	groups := make([]*domain.CloneGroup, 0, len(filteredCliques))
+	input.edges = make([]completeLinkageEdge, 0, len(pairRecords))
+	for _, record := range pairRecords {
+		if record.similarity < c.threshold {
+			continue
+		}
+
+		leftID, rightID := orderClusterIDs(cloneIndexes[record.left.ID], cloneIndexes[record.right.ID])
+		input.edges = append(input.edges, completeLinkageEdge{
+			leftID:  leftID,
+			rightID: rightID,
+			score:   record.similarity,
+		})
+	}
+
+	return input
+}
+
+func (c *CompleteLinkageGrouping) buildGroups(activeClusters []*completeLinkageCluster, similarities map[string]float64, types map[string]domain.CloneType) []*domain.CloneGroup {
+	groups := make([]*domain.CloneGroup, 0, len(activeClusters))
 	groupID := 0
-	for _, clique := range filteredCliques {
-		members := make([]*domain.Clone, 0, len(clique))
-		for _, id := range clique {
-			members = append(members, cloneByID[id])
+	for _, cluster := range activeClusters {
+		members := cluster.members
+		if len(members) < 2 {
+			continue
 		}
-		sort.Slice(members, func(i, j int) bool { return cloneLess(members[i], members[j]) })
+
+		// Keep a final safety check so the optimized clusterer cannot return a
+		// non-clique even if an internal update regresses later.
+		valid := true
+		for i := 0; i < len(members) && valid; i++ {
+			for j := i + 1; j < len(members); j++ {
+				if cloneSimilarity(similarities, members[i], members[j]) < c.threshold {
+					valid = false
+					break
+				}
+			}
+		}
+		if !valid {
+			continue
+		}
+
+		sortedMembers := append([]*domain.Clone(nil), members...)
+		sort.Slice(sortedMembers, func(i, j int) bool { return cloneLess(sortedMembers[i], sortedMembers[j]) })
 
 		g := &domain.CloneGroup{
 			ID:     groupID,
-			Clones: make([]*domain.Clone, 0, len(members)),
-			Size:   len(members),
+			Clones: make([]*domain.Clone, 0, len(sortedMembers)),
+			Size:   len(sortedMembers),
 		}
 		groupID++
-		for _, clone := range members {
+		for _, clone := range sortedMembers {
 			g.AddClone(clone)
 		}
-		g.Similarity = averageGroupSimilarityClones(simMap, members)
-		g.Type = majorityCloneTypeClones(typeMap, members)
+		g.Similarity = averageGroupSimilarityClones(similarities, sortedMembers)
+		g.Type = majorityCloneTypeClones(types, sortedMembers)
 		groups = append(groups, g)
 	}
 
-	// Sort groups by similarity then size
-	sort.Slice(groups, func(i, j int) bool {
-		if !almostEqual(groups[i].Similarity, groups[j].Similarity) {
-			return groups[i].Similarity > groups[j].Similarity
-		}
-		if groups[i].Size != groups[j].Size {
-			return groups[i].Size > groups[j].Size
-		}
-		if len(groups[i].Clones) == 0 || len(groups[j].Clones) == 0 {
-			return false
-		}
-		return cloneLess(groups[i].Clones[0], groups[j].Clones[0])
-	})
+	sortCloneGroups(groups)
 
 	return groups
-}
-
-// bronKerbosch implements Bron-Kerbosch algorithm with pivot for finding maximal cliques
-func (c *CompleteLinkageGrouping) bronKerbosch(R, P, X []int, adj map[int]map[int]bool, result *[][]int) {
-	if len(P) == 0 && len(X) == 0 {
-		if len(R) >= 2 {
-			clique := make([]int, len(R))
-			copy(clique, R)
-			*result = append(*result, clique)
-		}
-		return
-	}
-
-	// Choose pivot from P ∪ X that maximizes |P ∩ N(u)|
-	pivot := c.choosePivot(P, X, adj)
-	pivotNeighbors := adj[pivot]
-
-	// Iterate over P \ N(pivot)
-	pCopy := make([]int, len(P))
-	copy(pCopy, P)
-
-	for _, v := range pCopy {
-		if pivotNeighbors[v] {
-			continue // Skip neighbors of pivot
-		}
-
-		// New R = R ∪ {v}
-		newR := append([]int{}, R...)
-		newR = append(newR, v)
-
-		// New P = P ∩ N(v)
-		newP := c.intersect(P, adj[v])
-
-		// New X = X ∩ N(v)
-		newX := c.intersect(X, adj[v])
-
-		c.bronKerbosch(newR, newP, newX, adj, result)
-
-		// P = P \ {v}
-		P = c.remove(P, v)
-		// X = X ∪ {v}
-		X = append(X, v)
-	}
-}
-
-// choosePivot selects a pivot vertex that maximizes connections to P
-// Ties are broken by choosing the smallest ID for deterministic behavior
-func (c *CompleteLinkageGrouping) choosePivot(P, X []int, adj map[int]map[int]bool) int {
-	maxConnections := -1
-	pivot := -1
-
-	candidates := append([]int{}, P...)
-	candidates = append(candidates, X...)
-
-	for _, u := range candidates {
-		connections := 0
-		for _, p := range P {
-			if adj[u][p] {
-				connections++
-			}
-		}
-		// Use smallest ID as tie-breaker for determinism
-		if connections > maxConnections || (connections == maxConnections && (pivot == -1 || u < pivot)) {
-			maxConnections = connections
-			pivot = u
-		}
-	}
-
-	if pivot == -1 && len(P) > 0 {
-		pivot = P[0]
-	}
-
-	return pivot
-}
-
-// intersect returns the intersection of slice and set (represented as map keys)
-func (c *CompleteLinkageGrouping) intersect(slice []int, set map[int]bool) []int {
-	result := make([]int, 0)
-	for _, v := range slice {
-		if set[v] {
-			result = append(result, v)
-		}
-	}
-	return result
-}
-
-// remove removes an element from a slice
-func (c *CompleteLinkageGrouping) remove(slice []int, elem int) []int {
-	result := make([]int, 0, len(slice))
-	for _, v := range slice {
-		if v != elem {
-			result = append(result, v)
-		}
-	}
-	return result
 }
 
 // CentroidGrouping uses BFS expansion with strict similarity to all existing members
@@ -1105,7 +1031,8 @@ func cloneSimilarity(sims map[string]float64, a, b *domain.Clone) float64 {
 	return 0.0
 }
 
-// averageGroupSimilarityClones computes average pairwise similarity among clones using cache
+// averageGroupSimilarityClones computes average pairwise similarity among clones using cache.
+// Only pairs that exist in the similarity map are counted (missing pairs are skipped, not treated as 0).
 func averageGroupSimilarityClones(sims map[string]float64, members []*domain.Clone) float64 {
 	if len(members) < 2 {
 		return 1.0
@@ -1114,8 +1041,11 @@ func averageGroupSimilarityClones(sims map[string]float64, members []*domain.Clo
 	cnt := 0
 	for i := 0; i < len(members); i++ {
 		for j := i + 1; j < len(members); j++ {
-			sum += cloneSimilarity(sims, members[i], members[j])
-			cnt++
+			key := clonePairKey(members[i], members[j])
+			if sim, ok := sims[key]; ok {
+				sum += sim
+				cnt++
+			}
 		}
 	}
 	if cnt == 0 {
@@ -1131,6 +1061,9 @@ func majorityCloneTypeClones(typeMap map[string]domain.CloneType, members []*dom
 		for j := i + 1; j < len(members); j++ {
 			key := clonePairKey(members[i], members[j])
 			if t, ok := typeMap[key]; ok {
+				if t == 0 {
+					continue
+				}
 				counts[t]++
 			}
 		}
@@ -1138,15 +1071,448 @@ func majorityCloneTypeClones(typeMap map[string]domain.CloneType, members []*dom
 	var best domain.CloneType
 	maxC := -1
 	for t, c := range counts {
-		if c > maxC {
+		if c > maxC || (c == maxC && t < best) {
 			maxC = c
 			best = t
 		}
 	}
 	if maxC < 0 {
-		return domain.Type3Clone // fallback reasonable default
+		return domain.Type4Clone // conservative fallback: never report unknown as Type-1
 	}
 	return best
+}
+
+// completeLinkageClusterer stores only threshold-qualified inter-cluster edges.
+// That keeps sparse workloads sparse while still supporting exact complete-linkage
+// merges, since a merged cluster can stay adjacent to C only if both source
+// clusters already had qualifying edges to C.
+type completeLinkageClusterer struct {
+	clusters      []completeLinkageCluster
+	bestNeighbors *completeLinkageBestNeighborHeap
+}
+
+type completeLinkageCluster struct {
+	members   []*domain.Clone
+	neighbors map[int]float64
+	active    bool
+}
+
+func newCompleteLinkageClusterer(clones []*domain.Clone, edges []completeLinkageEdge) *completeLinkageClusterer {
+	clusterer := &completeLinkageClusterer{
+		clusters:      make([]completeLinkageCluster, len(clones)),
+		bestNeighbors: newCompleteLinkageBestNeighborHeap(len(clones)),
+	}
+
+	for clusterID, clone := range clones {
+		clusterer.clusters[clusterID] = completeLinkageCluster{
+			members:   []*domain.Clone{clone},
+			neighbors: make(map[int]float64),
+			active:    true,
+		}
+	}
+
+	for _, edge := range edges {
+		clusterer.clusters[edge.leftID].neighbors[edge.rightID] = edge.score
+		clusterer.clusters[edge.rightID].neighbors[edge.leftID] = edge.score
+	}
+
+	for clusterID := range clusterer.clusters {
+		clusterer.recomputeBestNeighbor(clusterID)
+	}
+
+	return clusterer
+}
+
+func (c *completeLinkageClusterer) mergeUntilStable() {
+	for {
+		bestNeighbor, ok := c.bestNeighbors.popBest()
+		if !ok {
+			return
+		}
+
+		targetID, sourceID := orderClusterIDs(bestNeighbor.clusterID, bestNeighbor.neighborID)
+		if !c.clusters[targetID].active || !c.clusters[sourceID].active {
+			continue
+		}
+
+		c.mergeClusters(targetID, sourceID)
+	}
+}
+
+func (c *completeLinkageClusterer) mergeClusters(targetID, sourceID int) {
+	target := &c.clusters[targetID]
+	source := &c.clusters[sourceID]
+	target.members = append(target.members, source.members...)
+
+	affected := make(map[int]struct{}, len(target.neighbors)+len(source.neighbors))
+	for neighborID := range target.neighbors {
+		affected[neighborID] = struct{}{}
+	}
+	for neighborID := range source.neighbors {
+		affected[neighborID] = struct{}{}
+	}
+	delete(affected, targetID)
+	delete(affected, sourceID)
+
+	newTargetNeighbors := make(map[int]float64)
+	for neighborID := range affected {
+		if !c.clusters[neighborID].active {
+			continue
+		}
+
+		neighbor := &c.clusters[neighborID]
+		delete(neighbor.neighbors, sourceID)
+
+		targetScore, targetOK := target.neighbors[neighborID]
+		sourceScore, sourceOK := source.neighbors[neighborID]
+		if !targetOK || !sourceOK {
+			delete(neighbor.neighbors, targetID)
+			continue
+		}
+
+		mergedScore := targetScore
+		if sourceScore < mergedScore {
+			mergedScore = sourceScore
+		}
+		newTargetNeighbors[neighborID] = mergedScore
+		neighbor.neighbors[targetID] = mergedScore
+	}
+
+	target.neighbors = newTargetNeighbors
+	source.active = false
+	source.members = nil
+	source.neighbors = nil
+
+	c.bestNeighbors.remove(sourceID)
+	for neighborID := range affected {
+		if c.clusters[neighborID].active {
+			c.recomputeBestNeighbor(neighborID)
+		}
+	}
+	c.recomputeBestNeighbor(targetID)
+}
+
+func (c *completeLinkageClusterer) recomputeBestNeighbor(clusterID int) {
+	cluster := &c.clusters[clusterID]
+	if !cluster.active {
+		c.bestNeighbors.remove(clusterID)
+		return
+	}
+
+	bestNeighborID, bestScore, ok := c.findBestNeighbor(clusterID)
+	if !ok {
+		c.bestNeighbors.remove(clusterID)
+		return
+	}
+
+	c.bestNeighbors.set(clusterID, bestNeighborID, bestScore)
+}
+
+func (c *completeLinkageClusterer) findBestNeighbor(clusterID int) (int, float64, bool) {
+	cluster := &c.clusters[clusterID]
+	bestNeighborID := -1
+	bestScore := 0.0
+	for neighborID, score := range cluster.neighbors {
+		if !c.clusters[neighborID].active {
+			continue
+		}
+		if bestNeighborID == -1 || betterCompleteLinkageNeighbor(clusterID, neighborID, score, bestNeighborID, bestScore) {
+			bestNeighborID = neighborID
+			bestScore = score
+		}
+	}
+	if bestNeighborID == -1 {
+		return 0, 0.0, false
+	}
+
+	return bestNeighborID, bestScore, true
+}
+
+func betterCompleteLinkageNeighbor(clusterID, candidateNeighborID int, candidateScore float64, bestNeighborID int, bestScore float64) bool {
+	if !almostEqual(candidateScore, bestScore) {
+		return candidateScore > bestScore
+	}
+
+	candidateLeft, candidateRight := orderClusterIDs(clusterID, candidateNeighborID)
+	bestLeft, bestRight := orderClusterIDs(clusterID, bestNeighborID)
+	if candidateLeft != bestLeft {
+		return candidateLeft < bestLeft
+	}
+	return candidateRight < bestRight
+}
+
+func (c *completeLinkageClusterer) activeClusters() []*completeLinkageCluster {
+	activeClusters := make([]*completeLinkageCluster, 0)
+	for clusterID := range c.clusters {
+		if c.clusters[clusterID].active {
+			activeClusters = append(activeClusters, &c.clusters[clusterID])
+		}
+	}
+	return activeClusters
+}
+
+type completeLinkageBestNeighbor struct {
+	clusterID  int
+	neighborID int
+	score      float64
+}
+
+type completeLinkageBestNeighborHeap struct {
+	entries   []completeLinkageBestNeighbor
+	positions []int
+}
+
+func newCompleteLinkageBestNeighborHeap(clusterCount int) *completeLinkageBestNeighborHeap {
+	positions := make([]int, clusterCount)
+	for i := range positions {
+		positions[i] = -1
+	}
+	return &completeLinkageBestNeighborHeap{positions: positions}
+}
+
+func (h *completeLinkageBestNeighborHeap) Len() int { return len(h.entries) }
+
+func (h *completeLinkageBestNeighborHeap) Less(i, j int) bool {
+	if !almostEqual(h.entries[i].score, h.entries[j].score) {
+		return h.entries[i].score > h.entries[j].score
+	}
+
+	leftI, rightI := orderClusterIDs(h.entries[i].clusterID, h.entries[i].neighborID)
+	leftJ, rightJ := orderClusterIDs(h.entries[j].clusterID, h.entries[j].neighborID)
+	if leftI != leftJ {
+		return leftI < leftJ
+	}
+	if rightI != rightJ {
+		return rightI < rightJ
+	}
+	return h.entries[i].clusterID < h.entries[j].clusterID
+}
+
+func (h *completeLinkageBestNeighborHeap) Swap(i, j int) {
+	h.entries[i], h.entries[j] = h.entries[j], h.entries[i]
+	h.positions[h.entries[i].clusterID] = i
+	h.positions[h.entries[j].clusterID] = j
+}
+
+func (h *completeLinkageBestNeighborHeap) Push(x any) {
+	entry := x.(completeLinkageBestNeighbor)
+	h.positions[entry.clusterID] = len(h.entries)
+	h.entries = append(h.entries, entry)
+}
+
+func (h *completeLinkageBestNeighborHeap) Pop() any {
+	last := len(h.entries) - 1
+	entry := h.entries[last]
+	h.entries = h.entries[:last]
+	h.positions[entry.clusterID] = -1
+	return entry
+}
+
+func (h *completeLinkageBestNeighborHeap) set(clusterID, neighborID int, score float64) {
+	if position := h.positions[clusterID]; position >= 0 {
+		h.entries[position].neighborID = neighborID
+		h.entries[position].score = score
+		heap.Fix(h, position)
+		return
+	}
+
+	heap.Push(h, completeLinkageBestNeighbor{
+		clusterID:  clusterID,
+		neighborID: neighborID,
+		score:      score,
+	})
+}
+
+func (h *completeLinkageBestNeighborHeap) remove(clusterID int) {
+	position := h.positions[clusterID]
+	if position < 0 {
+		return
+	}
+	heap.Remove(h, position)
+}
+
+func (h *completeLinkageBestNeighborHeap) popBest() (completeLinkageBestNeighbor, bool) {
+	if h.Len() == 0 {
+		return completeLinkageBestNeighbor{}, false
+	}
+	return heap.Pop(h).(completeLinkageBestNeighbor), true
+}
+
+func orderClusterIDs(firstID, secondID int) (int, int) {
+	if firstID < secondID {
+		return firstID, secondID
+	}
+	return secondID, firstID
+}
+
+type groupDedupeResult struct {
+	groups     []*domain.CloneGroup
+	suppressed map[string]struct{} // keyed by cloneID location key
+}
+
+// dedupeStrictSubsetGroupMembers removes clone-group members whose source
+// range is a strict subset of (or identical to) another member's range in the
+// same file. Groups reduced to fewer than two members are dropped.
+//
+// Why this exists: the pair-detection paths already reject *direct* pairs
+// between overlapping same-file fragments (see isOverlappingLocation), so
+// clone pairs cannot contain a same-file `(A, B)` where one strictly covers
+// the other. Union-Find grouping, however, still merges such fragments into
+// one group via a shared distinct-file neighbor — e.g., pairs
+// `(A=x.ts:512-542, C=y.ts:1-30)` and `(B=x.ts:515-542, C=y.ts:1-30)` are both
+// legal yet transitively connect A and B. This post-pass collapses those
+// overlapping windows back to the maximal one per file.
+//
+// For exactly-equal ranges (which UF can produce in the same way), the first
+// occurrence is kept; later duplicates are suppressed for deterministic output.
+func dedupeStrictSubsetGroupMembers(groups []*domain.CloneGroup, pairs []*domain.ClonePair) groupDedupeResult {
+	result := groupDedupeResult{
+		groups:     groups,
+		suppressed: make(map[string]struct{}),
+	}
+	if len(groups) == 0 {
+		return result
+	}
+
+	out := make([]*domain.CloneGroup, 0, len(groups))
+	var similarities map[string]float64
+	var cloneTypes map[string]domain.CloneType
+	metadataReady := false
+	anyChanged := false
+	for _, g := range groups {
+		if g == nil {
+			continue
+		}
+		kept, suppressed := filterMaximalPerFile(g.Clones)
+		for key := range suppressed {
+			result.suppressed[key] = struct{}{}
+		}
+		groupChanged := len(suppressed) > 0
+		anyChanged = anyChanged || groupChanged
+		if len(kept) < 2 {
+			continue
+		}
+		g.Clones = kept
+		g.Size = len(kept)
+		if groupChanged {
+			if !metadataReady {
+				similarities, cloneTypes = clonePairMetadata(pairs)
+				metadataReady = true
+			}
+			g.Similarity = averageGroupSimilarityClones(similarities, g.Clones)
+			g.Type = majorityCloneTypeClones(cloneTypes, g.Clones)
+		}
+		out = append(out, g)
+	}
+	if anyChanged {
+		sortCloneGroups(out)
+	}
+	result.groups = out
+	return result
+}
+
+// filterMaximalPerFile returns the subset of clones that are maximal under
+// the same-file containment order. A clone is suppressed if any other kept
+// clone in the same file strictly covers it, or if it duplicates an earlier
+// clone's range exactly.
+func filterMaximalPerFile(clones []*domain.Clone) ([]*domain.Clone, map[string]struct{}) {
+	suppressedClones := make(map[string]struct{})
+	n := len(clones)
+	if n <= 1 {
+		return clones, suppressedClones
+	}
+	suppressed := make([]bool, n)
+	for i := 0; i < n; i++ {
+		if suppressed[i] || clones[i] == nil || clones[i].Location == nil {
+			continue
+		}
+		for j := 0; j < n; j++ {
+			if i == j || suppressed[j] || clones[j] == nil || clones[j].Location == nil {
+				continue
+			}
+			if covers(clones[i].Location, clones[j].Location, i, j) {
+				suppressed[j] = true
+			}
+		}
+	}
+	out := make([]*domain.Clone, 0, n)
+	for i, c := range clones {
+		if suppressed[i] {
+			if c != nil {
+				suppressedClones[cloneID(c)] = struct{}{}
+			}
+			continue
+		}
+		out = append(out, c)
+	}
+	return out, suppressedClones
+}
+
+// covers reports whether outer (at index iOuter) covers inner (at index
+// iInner) in the same file. Strict coverage suppresses inner outright;
+// identical ranges suppress only the later index so that exactly one survives.
+func covers(outer, inner *domain.CloneLocation, iOuter, iInner int) bool {
+	if outer.FilePath != inner.FilePath {
+		return false
+	}
+	if outer.StartLine > inner.StartLine || outer.EndLine < inner.EndLine {
+		return false
+	}
+	if outer.StartLine == inner.StartLine && outer.EndLine == inner.EndLine {
+		return iOuter < iInner
+	}
+	return true
+}
+
+func clonePairMetadata(pairs []*domain.ClonePair) (map[string]float64, map[string]domain.CloneType) {
+	similarities := make(map[string]float64, len(pairs))
+	cloneTypes := make(map[string]domain.CloneType, len(pairs))
+	for _, pair := range pairs {
+		if pair == nil || pair.Clone1 == nil || pair.Clone2 == nil {
+			continue
+		}
+		key := clonePairKey(pair.Clone1, pair.Clone2)
+		if old, ok := similarities[key]; !ok || pair.Similarity > old {
+			similarities[key] = pair.Similarity
+			cloneTypes[key] = pair.Type
+		}
+	}
+	return similarities, cloneTypes
+}
+
+func filterClonePairsWithSuppressedMembers(pairs []*domain.ClonePair, suppressed map[string]struct{}) []*domain.ClonePair {
+	if len(pairs) == 0 || len(suppressed) == 0 {
+		return pairs
+	}
+	out := make([]*domain.ClonePair, 0, len(pairs))
+	for _, pair := range pairs {
+		if pair == nil {
+			continue
+		}
+		if _, ok := suppressed[cloneID(pair.Clone1)]; ok {
+			continue
+		}
+		if _, ok := suppressed[cloneID(pair.Clone2)]; ok {
+			continue
+		}
+		out = append(out, pair)
+	}
+	return out
+}
+
+func sortCloneGroups(groups []*domain.CloneGroup) {
+	sort.Slice(groups, func(i, j int) bool {
+		if !almostEqual(groups[i].Similarity, groups[j].Similarity) {
+			return groups[i].Similarity > groups[j].Similarity
+		}
+		if groups[i].Size != groups[j].Size {
+			return groups[i].Size > groups[j].Size
+		}
+		if len(groups[i].Clones) == 0 || len(groups[j].Clones) == 0 {
+			return false
+		}
+		return cloneLess(groups[i].Clones[0], groups[j].Clones[0])
+	})
 }
 
 func almostEqual(a, b float64) bool {

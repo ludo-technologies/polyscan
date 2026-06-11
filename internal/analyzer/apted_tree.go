@@ -120,125 +120,8 @@ func (tc *TreeConverter) ConvertAST(astNode *parser.Node) *TreeNode {
 	// Store reference to original AST node
 	treeNode.OriginalNode = astNode
 
-	// Convert children recursively
-	for _, child := range astNode.Children {
+	for _, child := range parser.OrderedChildren(astNode) {
 		if childNode := tc.ConvertAST(child); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-
-	// Convert body nodes
-	for _, bodyNode := range astNode.Body {
-		if childNode := tc.ConvertAST(bodyNode); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-
-	// Convert params
-	for _, param := range astNode.Params {
-		if childNode := tc.ConvertAST(param); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-
-	// Convert cases
-	for _, caseNode := range astNode.Cases {
-		if childNode := tc.ConvertAST(caseNode); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-
-	// Convert handlers
-	for _, handler := range astNode.Handlers {
-		if childNode := tc.ConvertAST(handler); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-
-	// Convert arguments
-	for _, arg := range astNode.Arguments {
-		if childNode := tc.ConvertAST(arg); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-
-	// Convert declarations
-	for _, decl := range astNode.Declarations {
-		if childNode := tc.ConvertAST(decl); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-
-	// Convert specifiers
-	for _, spec := range astNode.Specifiers {
-		if childNode := tc.ConvertAST(spec); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-
-	// Convert individual nodes
-	if astNode.Test != nil {
-		if childNode := tc.ConvertAST(astNode.Test); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Consequent != nil {
-		if childNode := tc.ConvertAST(astNode.Consequent); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Alternate != nil {
-		if childNode := tc.ConvertAST(astNode.Alternate); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Init != nil {
-		if childNode := tc.ConvertAST(astNode.Init); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Update != nil {
-		if childNode := tc.ConvertAST(astNode.Update); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Handler != nil {
-		if childNode := tc.ConvertAST(astNode.Handler); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Finalizer != nil {
-		if childNode := tc.ConvertAST(astNode.Finalizer); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Left != nil {
-		if childNode := tc.ConvertAST(astNode.Left); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Right != nil {
-		if childNode := tc.ConvertAST(astNode.Right); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Argument != nil {
-		if childNode := tc.ConvertAST(astNode.Argument); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Callee != nil {
-		if childNode := tc.ConvertAST(astNode.Callee); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Object != nil {
-		if childNode := tc.ConvertAST(astNode.Object); childNode != nil {
-			treeNode.AddChild(childNode)
-		}
-	}
-	if astNode.Property != nil {
-		if childNode := tc.ConvertAST(astNode.Property); childNode != nil {
 			treeNode.AddChild(childNode)
 		}
 	}
@@ -269,7 +152,8 @@ func (tc *TreeConverter) getNodeLabel(astNode *parser.Node) string {
 		if astNode.Name != "" {
 			label = fmt.Sprintf("Class(%s)", astNode.Name)
 		}
-	case parser.NodeBinaryExpression, parser.NodeUnaryExpression, parser.NodeLogicalExpression:
+	case parser.NodeBinaryExpression, parser.NodeUnaryExpression, parser.NodeLogicalExpression,
+		parser.NodeAssignmentExpression, parser.NodeUpdateExpression:
 		if astNode.Operator != "" {
 			label = fmt.Sprintf("%s(%s)", astNode.Type, astNode.Operator)
 		}

@@ -21,8 +21,8 @@ func TestDefaultCloneDetectorConfig(t *testing.T) {
 	if config.CostModelType != "javascript" {
 		t.Errorf("Expected CostModelType 'javascript', got %s", config.CostModelType)
 	}
-	if config.GroupingMode != GroupingModeKCore {
-		t.Errorf("Expected GroupingMode 'k_core', got %s", config.GroupingMode)
+	if config.GroupingMode != GroupingModeConnected {
+		t.Errorf("Expected GroupingMode 'connected', got %s", config.GroupingMode)
 	}
 }
 
@@ -175,26 +175,64 @@ func TestShouldIncludeFragment(t *testing.T) {
 	}
 }
 
-func TestClassifyCloneType(t *testing.T) {
+func TestClassifyClonePair(t *testing.T) {
 	config := DefaultCloneDetectorConfig()
 	detector := NewCloneDetector(config)
 
+	sameFeatures := []string{"type:IfStatement", "type:ReturnStatement"}
+	differentFeatures := []string{"type:ForStatement", "type:ThrowStatement"}
+
 	testCases := []struct {
+		name       string
 		similarity float64
+		fragment1  *CodeFragment
+		fragment2  *CodeFragment
 		expected   domain.CloneType
 	}{
-		{0.99, domain.Type1Clone},
-		{0.96, domain.Type2Clone},
-		{0.90, domain.Type3Clone},
-		{0.75, domain.Type4Clone},
-		{0.50, 0}, // Not a clone
+		{
+			name:       "exact textual match above Type-1 threshold",
+			similarity: 0.90,
+			fragment1:  &CodeFragment{Content: "if (a) { return 1; }", Features: sameFeatures},
+			fragment2:  &CodeFragment{Content: "if (a) { return 1; }", Features: sameFeatures},
+			expected:   domain.Type1Clone,
+		},
+		{
+			name:       "no textual match is capped below Type-1, syntactic match gives Type-2",
+			similarity: 0.90,
+			fragment1:  &CodeFragment{Content: "if (a) { return 1; }", Features: sameFeatures},
+			fragment2:  &CodeFragment{Content: "if (b) { return 2; }", Features: sameFeatures},
+			expected:   domain.Type2Clone,
+		},
+		{
+			name:       "syntactic mismatch falls through to Type-3",
+			similarity: 0.90,
+			fragment1:  &CodeFragment{Content: "if (a) { return 1; }", Features: sameFeatures},
+			fragment2:  &CodeFragment{Content: "for (;;) { throw x; }", Features: differentFeatures},
+			expected:   domain.Type3Clone,
+		},
+		{
+			name:       "structural similarity at Type-4 level",
+			similarity: 0.66,
+			fragment1:  &CodeFragment{Content: "if (a) { return 1; }", Features: sameFeatures},
+			fragment2:  &CodeFragment{Content: "for (;;) { throw x; }", Features: differentFeatures},
+			expected:   domain.Type4Clone,
+		},
+		{
+			name:       "below all thresholds is not a clone",
+			similarity: 0.50,
+			fragment1:  &CodeFragment{Content: "if (a) { return 1; }", Features: sameFeatures},
+			fragment2:  &CodeFragment{Content: "for (;;) { throw x; }", Features: differentFeatures},
+			expected:   0,
+		},
 	}
 
 	for _, tc := range testCases {
-		result := detector.classifyCloneType(tc.similarity, 0)
-		if result != tc.expected {
-			t.Errorf("For similarity %.2f, expected %v, got %v", tc.similarity, tc.expected, result)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			result, _ := detector.classifyClonePair(tc.fragment1, tc.fragment2, tc.similarity)
+			if result != tc.expected {
+				t.Errorf("For similarity %.2f, expected %v, got %v", tc.similarity, tc.expected, result)
+			}
+		})
 	}
 }
 
@@ -422,7 +460,7 @@ func TestHelperFunctions(t *testing.T) {
 	}
 }
 
-func TestSimilarityFromDistance_MatchesAnalyzerFormula(t *testing.T) {
+func TestComputeDistanceAndSimilarity_MatchesAnalyzerFormula(t *testing.T) {
 	analyzer := NewAPTEDAnalyzer(NewJavaScriptCostModel())
 
 	treeA := &TreeNode{
@@ -452,11 +490,14 @@ func TestSimilarityFromDistance_MatchesAnalyzerFormula(t *testing.T) {
 	PrepareTreeForAPTED(treeA)
 	PrepareTreeForAPTED(treeB)
 
-	distance := analyzer.ComputeDistance(treeA, treeB)
-	got := similarityFromDistance(distance, treeA, treeB)
-	want := analyzer.ComputeSimilarity(treeA, treeB)
+	wantDistance := analyzer.ComputeDistance(treeA, treeB)
+	gotDistance, gotSimilarity := analyzer.ComputeDistanceAndSimilarity(treeA, treeB)
+	wantSimilarity := analyzer.ComputeSimilarity(treeA, treeB)
 
-	if math.Abs(got-want) > 1e-12 {
-		t.Fatalf("similarity mismatch: got %.12f, want %.12f", got, want)
+	if math.Abs(gotDistance-wantDistance) > 1e-12 {
+		t.Fatalf("distance mismatch: got %.12f, want %.12f", gotDistance, wantDistance)
+	}
+	if math.Abs(gotSimilarity-wantSimilarity) > 1e-12 {
+		t.Fatalf("similarity mismatch: got %.12f, want %.12f", gotSimilarity, wantSimilarity)
 	}
 }
