@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-10
+
+### Changed
+
+- Change the code duplication metric from clone-group density to cloned-fragment ratio (clonedFragments/totalFragments), rescaling the 0-10% penalty band to 0-30%
+
+### Fixed
+
+- Populate previously-empty fragment hashes in clone output
+- Prefer the highest-similarity clone type when classifying clone groups, so a strong Type-2/4 pair is no longer hidden behind weaker Type-3 transitive edges and dropped by the default type filter
+- Suppress clone groups fully covered by another group's larger, comparable-or-better windows, fixing double-counted duplication from overlapping windows
+- Drop clone groups left without any positive-similarity backing pair after dedup
+
 ## [0.7.0] - 2026-06-12
 
 ### Changed
