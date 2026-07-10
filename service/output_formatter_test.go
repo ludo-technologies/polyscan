@@ -35,6 +35,25 @@ func TestWriteJSON(t *testing.T) {
 	}
 }
 
+func TestCalculateDuplicationPercentageReportsUncappedRatio(t *testing.T) {
+	response := &domain.CloneResponse{Statistics: &domain.CloneStatistics{
+		TotalFragments: 100,
+		TotalClones:    50,
+	}}
+
+	if got := calculateDuplicationPercentage(response); got != 50 {
+		t.Fatalf("expected actual 50%% fragment ratio, got %.1f%%", got)
+	}
+
+	summary := BuildAnalyzeSummary(nil, nil, response, nil, nil)
+	if summary.CodeDuplication != 50 {
+		t.Fatalf("expected summary to retain actual ratio, got %.1f%%", summary.CodeDuplication)
+	}
+	if summary.DuplicationScore != 0 {
+		t.Fatalf("expected duplication score to saturate at zero, got %d", summary.DuplicationScore)
+	}
+}
+
 func TestOutputFormatterWriteComplexityJSON(t *testing.T) {
 	formatter := NewOutputFormatter()
 

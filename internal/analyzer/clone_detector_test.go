@@ -3,6 +3,7 @@ package analyzer
 import (
 	"context"
 	"math"
+	"regexp"
 	"testing"
 
 	"github.com/ludo-technologies/jscan/domain"
@@ -95,6 +96,67 @@ func TestNewCodeFragment(t *testing.T) {
 	if fragment.Size != 3 { // 1 root + 2 children
 		t.Errorf("Expected Size 3, got %d", fragment.Size)
 	}
+	if fragment.Hash == "" {
+		t.Error("Expected Hash to be computed from content")
+	}
+}
+
+func TestCodeFragment_Hash(t *testing.T) {
+	location := &CodeLocation{FilePath: "test.js", StartLine: 1, EndLine: 2}
+	node := &parser.Node{Type: parser.NodeFunction}
+
+	newFragment := func(content string) *CodeFragment {
+		return NewCodeFragment(location, node, content)
+	}
+
+	t.Run("non-empty content produces 16-char hex hash", func(t *testing.T) {
+		fragment := newFragment("function f() {\n  return 1;\n}")
+		if matched, _ := regexp.MatchString("^[0-9a-f]{16}$", fragment.Hash); !matched {
+			t.Errorf("expected 16-char hex hash, got %q", fragment.Hash)
+		}
+	})
+
+	t.Run("empty content produces empty hash", func(t *testing.T) {
+		fragment := newFragment("")
+		if fragment.Hash != "" {
+			t.Errorf("expected empty hash for empty content, got %q", fragment.Hash)
+		}
+	})
+
+	t.Run("Type-1 variants share the same hash", func(t *testing.T) {
+		original := newFragment("function f() {\n  return 1;\n}")
+		reformatted := newFragment("function f() {\n      return  1;\n}")
+		commented := newFragment("function f() { // comment\n  return 1;\n}")
+
+		if original.Hash != reformatted.Hash {
+			t.Error("whitespace differences should not change the hash")
+		}
+		if original.Hash != commented.Hash {
+			t.Error("comments should not change the hash")
+		}
+	})
+
+	t.Run("different code produces different hashes", func(t *testing.T) {
+		f1 := newFragment("function f() {\n  return 1;\n}")
+		f2 := newFragment("function f() {\n  return 2;\n}")
+		if f1.Hash == f2.Hash {
+			t.Error("expected different hashes for different code")
+		}
+	})
+
+	t.Run("literal whitespace produces different hashes", func(t *testing.T) {
+		withTwoSpaces := newFragment("function f() { return \"a  b\"; }")
+		withOneSpace := newFragment("function f() { return \"a b\"; }")
+		if withTwoSpaces.Hash == withOneSpace.Hash {
+			t.Error("whitespace inside a string literal must affect the hash")
+		}
+
+		multilineTemplate := newFragment("function f() { return `a\n b`; }")
+		singleLineTemplate := newFragment("function f() { return `a b`; }")
+		if multilineTemplate.Hash == singleLineTemplate.Hash {
+			t.Error("whitespace inside a template literal must affect the hash")
+		}
+	})
 }
 
 func TestCodeLocationString(t *testing.T) {

@@ -166,8 +166,8 @@ func (s *CloneServiceImpl) DetectClones(ctx context.Context, req *domain.CloneRe
 		return clonePairs[i].Similarity > clonePairs[j].Similarity
 	})
 
-	// Extract unique clones from pairs
-	clones := s.extractUniqueClones(clonePairs)
+	// Extract unique clones represented by either pairs or groups.
+	clones := s.extractUniqueClones(clonePairs, cloneGroups)
 
 	response := &domain.CloneResponse{
 		Clones:      clones,
@@ -208,10 +208,6 @@ func (s *CloneServiceImpl) buildStatistics(pairs []*domain.ClonePair, groups []*
 		LinesAnalyzed:    linesAnalyzed,
 	}
 
-	if len(pairs) == 0 {
-		return stats
-	}
-
 	// Count clones by type and calculate average similarity
 	totalSimilarity := 0.0
 	uniqueClones := make(map[string]bool)
@@ -230,15 +226,27 @@ func (s *CloneServiceImpl) buildStatistics(pairs []*domain.ClonePair, groups []*
 			uniqueClones[key] = true
 		}
 	}
+	for _, group := range groups {
+		if group == nil {
+			continue
+		}
+		for _, clone := range group.Clones {
+			if clone != nil && clone.Location != nil {
+				uniqueClones[clone.Location.String()] = true
+			}
+		}
+	}
 
 	stats.TotalClones = len(uniqueClones)
-	stats.AverageSimilarity = totalSimilarity / float64(len(pairs))
+	if len(pairs) > 0 {
+		stats.AverageSimilarity = totalSimilarity / float64(len(pairs))
+	}
 
 	return stats
 }
 
-// extractUniqueClones extracts unique clones from clone pairs
-func (s *CloneServiceImpl) extractUniqueClones(pairs []*domain.ClonePair) []*domain.Clone {
+// extractUniqueClones extracts unique clones represented by pairs or groups.
+func (s *CloneServiceImpl) extractUniqueClones(pairs []*domain.ClonePair, groups []*domain.CloneGroup) []*domain.Clone {
 	seen := make(map[string]*domain.Clone)
 	var clones []*domain.Clone
 
@@ -255,6 +263,21 @@ func (s *CloneServiceImpl) extractUniqueClones(pairs []*domain.ClonePair) []*dom
 			if _, exists := seen[key]; !exists {
 				seen[key] = pair.Clone2
 				clones = append(clones, pair.Clone2)
+			}
+		}
+	}
+	for _, group := range groups {
+		if group == nil {
+			continue
+		}
+		for _, clone := range group.Clones {
+			if clone == nil || clone.Location == nil {
+				continue
+			}
+			key := clone.Location.String()
+			if _, exists := seen[key]; !exists {
+				seen[key] = clone
+				clones = append(clones, clone)
 			}
 		}
 	}

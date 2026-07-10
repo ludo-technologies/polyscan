@@ -33,7 +33,7 @@ type CodeFragment struct {
 	ASTNode    *parser.Node
 	TreeNode   *TreeNode
 	Content    string   // Original source code content
-	Hash       string   // Hash for quick comparison
+	Hash       string   // FNV-64a hex hash of Type-1 normalized content; "" when no source content
 	Size       int      // Number of AST nodes
 	LineCount  int      // Number of source lines
 	Complexity int      // Cyclomatic complexity (if applicable)
@@ -46,6 +46,7 @@ func NewCodeFragment(location *CodeLocation, astNode *parser.Node, content strin
 		Location:  location,
 		ASTNode:   astNode,
 		Content:   content,
+		Hash:      hashFragmentContent(content),
 		Size:      calculateASTSize(astNode),
 		LineCount: location.EndLine - location.StartLine + 1,
 	}
@@ -956,9 +957,14 @@ func (cd *CloneDetector) groupClonesWithStrategy(strategy GroupingStrategy) {
 		cd.cloneGroups = []*domain.CloneGroup{}
 		return
 	}
-	dedupeResult := dedupeStrictSubsetGroupMembers(strategy.GroupClones(cd.clonePairs), cd.clonePairs)
-	cd.cloneGroups = dedupeResult.groups
-	cd.clonePairs = filterClonePairsWithSuppressedMembers(cd.clonePairs, dedupeResult.suppressed)
+	memberResult := dedupeStrictSubsetGroupMembers(strategy.GroupClones(cd.clonePairs), cd.clonePairs)
+	groupResult := dedupeCoveredGroups(memberResult.groups)
+	cd.cloneGroups = filterCloneGroupsWithoutBackingPairs(groupResult.groups, cd.clonePairs)
+	for key := range memberResult.suppressed {
+		groupResult.suppressed[key] = struct{}{}
+	}
+	cd.clonePairs = filterClonePairsWithSuppressedMembers(cd.clonePairs, groupResult.suppressed)
+	cd.clonePairs = filterSuppressedClonePairs(cd.clonePairs, groupResult.suppressedPairs)
 }
 
 // isSameLocation checks if two locations refer to the same code

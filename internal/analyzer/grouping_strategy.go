@@ -184,7 +184,7 @@ func (c *ConnectedGrouping) GroupClones(pairs []*domain.ClonePair) []*domain.Clo
 		// Compute average similarity using cached pairs among members
 		g.Similarity = averageGroupSimilarityClones(simMap, members)
 		// Determine predominant clone type from within-group available pairs
-		g.Type = majorityCloneTypeClones(typeMap, members)
+		g.Type = majorityCloneTypeClones(typeMap, simMap, members)
 		groups = append(groups, g)
 	}
 
@@ -354,7 +354,7 @@ func (kg *KCoreGrouping) GroupClones(pairs []*domain.ClonePair) []*domain.CloneG
 			g.AddClone(clone)
 		}
 		g.Similarity = averageGroupSimilarityClones(simMap, component)
-		g.Type = majorityCloneTypeClones(typeMap, component)
+		g.Type = majorityCloneTypeClones(typeMap, simMap, component)
 		groups = append(groups, g)
 	}
 
@@ -590,7 +590,7 @@ func (s *StarMedoidGrouping) GroupClones(pairs []*domain.ClonePair) []*domain.Cl
 			cg.AddClone(clone)
 		}
 		cg.Similarity = averageGroupSimilarityClones(simMap, g.members)
-		cg.Type = majorityCloneTypeClones(typeMap, g.members)
+		cg.Type = majorityCloneTypeClones(typeMap, simMap, g.members)
 		result = append(result, cg)
 	}
 
@@ -779,7 +779,7 @@ func (c *CompleteLinkageGrouping) buildGroups(activeClusters []*completeLinkageC
 			g.AddClone(clone)
 		}
 		g.Similarity = averageGroupSimilarityClones(similarities, sortedMembers)
-		g.Type = majorityCloneTypeClones(types, sortedMembers)
+		g.Type = majorityCloneTypeClones(types, similarities, sortedMembers)
 		groups = append(groups, g)
 	}
 
@@ -927,7 +927,7 @@ func (cg *CentroidGrouping) GroupClones(pairs []*domain.ClonePair) []*domain.Clo
 				g.AddClone(clone)
 			}
 			g.Similarity = averageGroupSimilarityClones(simMap, members)
-			g.Type = majorityCloneTypeClones(typeMap, members)
+			g.Type = majorityCloneTypeClones(typeMap, simMap, members)
 			groups = append(groups, g)
 		}
 	}
@@ -1054,29 +1054,31 @@ func averageGroupSimilarityClones(sims map[string]float64, members []*domain.Clo
 	return sum / float64(cnt)
 }
 
-// majorityCloneTypeClones chooses the most frequent CloneType among all pair edges in members
-func majorityCloneTypeClones(typeMap map[string]domain.CloneType, members []*domain.Clone) domain.CloneType {
-	counts := make(map[domain.CloneType]int)
+// majorityCloneTypeClones chooses the CloneType of the highest-similarity pair edge in
+// members. When several pairs share the maximum similarity, the most strict
+// (lowest enum) type wins. This prevents a high-similarity Type-2/Type-4 pair
+// from being hidden when lower-similarity Type-3 transitive edges outnumber it
+// in the same connected component.
+func majorityCloneTypeClones(typeMap map[string]domain.CloneType, simMap map[string]float64, members []*domain.Clone) domain.CloneType {
+	maxSim := -1.0
+	var best domain.CloneType
+	found := false
 	for i := 0; i < len(members); i++ {
 		for j := i + 1; j < len(members); j++ {
 			key := clonePairKey(members[i], members[j])
-			if t, ok := typeMap[key]; ok {
-				if t == 0 {
-					continue
-				}
-				counts[t]++
+			t, tok := typeMap[key]
+			s, sok := simMap[key]
+			if !tok || !sok || t == 0 {
+				continue
+			}
+			found = true
+			if s > maxSim || (almostEqual(s, maxSim) && t < best) {
+				maxSim = s
+				best = t
 			}
 		}
 	}
-	var best domain.CloneType
-	maxC := -1
-	for t, c := range counts {
-		if c > maxC || (c == maxC && t < best) {
-			maxC = c
-			best = t
-		}
-	}
-	if maxC < 0 {
+	if !found {
 		return domain.Type4Clone // conservative fallback: never report unknown as Type-1
 	}
 	return best
@@ -1346,8 +1348,9 @@ func orderClusterIDs(firstID, secondID int) (int, int) {
 }
 
 type groupDedupeResult struct {
-	groups     []*domain.CloneGroup
-	suppressed map[string]struct{} // keyed by cloneID location key
+	groups          []*domain.CloneGroup
+	suppressed      map[string]struct{} // keyed by cloneID location key
+	suppressedPairs map[string]struct{} // keyed by clonePairKey
 }
 
 // dedupeStrictSubsetGroupMembers removes clone-group members whose source
@@ -1400,7 +1403,7 @@ func dedupeStrictSubsetGroupMembers(groups []*domain.CloneGroup, pairs []*domain
 				metadataReady = true
 			}
 			g.Similarity = averageGroupSimilarityClones(similarities, g.Clones)
-			g.Type = majorityCloneTypeClones(cloneTypes, g.Clones)
+			g.Type = majorityCloneTypeClones(cloneTypes, similarities, g.Clones)
 		}
 		out = append(out, g)
 	}
@@ -1409,6 +1412,187 @@ func dedupeStrictSubsetGroupMembers(groups []*domain.CloneGroup, pairs []*domain
 	}
 	result.groups = out
 	return result
+}
+
+// coveredGroupSimilarityTolerance bounds how much weaker (in average
+// similarity) a covering group may be while still subsuming a covered group.
+// Overlapping windows of the same duplication shift similarity only slightly;
+// a covered group that matches much more strongly than its covering group is
+// a distinct, sharper finding (e.g., a near-identical inner block inside
+// loosely similar functions) and is kept.
+const coveredGroupSimilarityTolerance = 0.05
+
+// dedupeCoveredGroups suppresses whole clone groups that are covered by
+// another group: every member of the covered group fits inside a distinct
+// member of the covering group (same file, containing line range), and the
+// covering group's similarity is comparable or better. Such groups describe
+// the same duplication relationship through slightly smaller windows and
+// double-count it.
+//
+// Why dedupeStrictSubsetGroupMembers does not catch this: that pass compares
+// members *within* one group. Here the overlapping windows sit in *different*
+// groups, which stay disconnected because isOverlappingLocation forbids the
+// direct same-file pair that would have linked them.
+//
+// The group with the larger (covering) windows is kept, mirroring the
+// maximal-window policy of filterMaximalPerFile. When two groups cover each
+// other (identical member ranges), the earlier one in the slice wins.
+func dedupeCoveredGroups(groups []*domain.CloneGroup) groupDedupeResult {
+	result := groupDedupeResult{
+		groups:          groups,
+		suppressed:      make(map[string]struct{}),
+		suppressedPairs: make(map[string]struct{}),
+	}
+	if len(groups) < 2 {
+		return result
+	}
+
+	suppressed := make([]bool, len(groups))
+	for i, gi := range groups {
+		if gi == nil {
+			continue
+		}
+		// Compare against every other group, including already-suppressed
+		// ones: coverage is transitive, so a chain g1 ⊂ g2 ⊂ g3 still
+		// resolves to keeping only g3.
+		for j, gj := range groups {
+			if i == j || gj == nil {
+				continue
+			}
+			if !groupCoveredBy(gi, gj) {
+				continue
+			}
+			if groupCoveredBy(gj, gi) {
+				if j > i {
+					continue // mutual coverage: the earlier group survives
+				}
+			} else if gi.Similarity > gj.Similarity+coveredGroupSimilarityTolerance {
+				continue // gi is a distinctly stronger match than its cover
+			}
+			suppressed[i] = true
+			break
+		}
+	}
+
+	out := make([]*domain.CloneGroup, 0, len(groups))
+	keptPairs := make(map[string]struct{})
+	for i, g := range groups {
+		if g == nil || suppressed[i] {
+			continue
+		}
+		out = append(out, g)
+		for first := 0; first < len(g.Clones); first++ {
+			for second := first + 1; second < len(g.Clones); second++ {
+				keptPairs[clonePairKey(g.Clones[first], g.Clones[second])] = struct{}{}
+			}
+		}
+	}
+	for i, g := range groups {
+		if g == nil || !suppressed[i] {
+			continue
+		}
+		for first := 0; first < len(g.Clones); first++ {
+			for second := first + 1; second < len(g.Clones); second++ {
+				key := clonePairKey(g.Clones[first], g.Clones[second])
+				if _, needed := keptPairs[key]; !needed {
+					result.suppressedPairs[key] = struct{}{}
+				}
+			}
+		}
+	}
+	result.groups = out
+	return result
+}
+
+// groupCoveredBy reports whether every member of inner can be matched to a
+// distinct member of outer that covers it (same file, containing range,
+// equality included). Distinctness matters: two disjoint inner blocks inside
+// one outer member describe duplication *within* that member, which the outer
+// group does not report.
+func groupCoveredBy(inner, outer *domain.CloneGroup) bool {
+	n := len(inner.Clones)
+	if n == 0 || n > len(outer.Clones) {
+		return false
+	}
+	candidates := make([][]int, n)
+	for i, c := range inner.Clones {
+		if c == nil || c.Location == nil {
+			return false
+		}
+		for j, oc := range outer.Clones {
+			if oc == nil || oc.Location == nil {
+				continue
+			}
+			if locationCovers(oc.Location, c.Location) {
+				candidates[i] = append(candidates[i], j)
+			}
+		}
+		if len(candidates[i]) == 0 {
+			return false
+		}
+	}
+	// Bipartite matching via augmenting paths; group sizes are small.
+	matchedInner := make([]int, len(outer.Clones))
+	for j := range matchedInner {
+		matchedInner[j] = -1
+	}
+	var assign func(i int, visited []bool) bool
+	assign = func(i int, visited []bool) bool {
+		for _, j := range candidates[i] {
+			if visited[j] {
+				continue
+			}
+			visited[j] = true
+			if matchedInner[j] == -1 || assign(matchedInner[j], visited) {
+				matchedInner[j] = i
+				return true
+			}
+		}
+		return false
+	}
+	for i := 0; i < n; i++ {
+		if !assign(i, make([]bool, len(outer.Clones))) {
+			return false
+		}
+	}
+	return true
+}
+
+// locationCovers reports whether outer contains inner (same file, inclusive
+// line and column ranges; equal ranges count as covered).
+func locationCovers(outer, inner *domain.CloneLocation) bool {
+	if outer.FilePath != inner.FilePath {
+		return false
+	}
+	startsBefore := outer.StartLine < inner.StartLine ||
+		(outer.StartLine == inner.StartLine && outer.StartCol <= inner.StartCol)
+	endsAfter := outer.EndLine > inner.EndLine ||
+		(outer.EndLine == inner.EndLine && outer.EndCol >= inner.EndCol)
+	return startsBefore && endsAfter
+}
+
+// filterCloneGroupsWithoutBackingPairs drops groups whose refreshed metadata
+// shows no positive-similarity pair actually backs them (e.g. every member
+// pair was filtered out upstream), which would otherwise surface a group with
+// zero similarity.
+func filterCloneGroupsWithoutBackingPairs(groups []*domain.CloneGroup, pairs []*domain.ClonePair) []*domain.CloneGroup {
+	if len(groups) == 0 {
+		return groups
+	}
+	similarities, cloneTypes := clonePairMetadata(pairs)
+	out := make([]*domain.CloneGroup, 0, len(groups))
+	for _, group := range groups {
+		if group == nil || len(group.Clones) < 2 {
+			continue
+		}
+		group.Similarity = averageGroupSimilarityClones(similarities, group.Clones)
+		group.Type = majorityCloneTypeClones(cloneTypes, similarities, group.Clones)
+		if group.Similarity <= 0 {
+			continue
+		}
+		out = append(out, group)
+	}
+	return out
 }
 
 // filterMaximalPerFile returns the subset of clones that are maximal under
@@ -1452,13 +1636,11 @@ func filterMaximalPerFile(clones []*domain.Clone) ([]*domain.Clone, map[string]s
 // iInner) in the same file. Strict coverage suppresses inner outright;
 // identical ranges suppress only the later index so that exactly one survives.
 func covers(outer, inner *domain.CloneLocation, iOuter, iInner int) bool {
-	if outer.FilePath != inner.FilePath {
+	if !locationCovers(outer, inner) {
 		return false
 	}
-	if outer.StartLine > inner.StartLine || outer.EndLine < inner.EndLine {
-		return false
-	}
-	if outer.StartLine == inner.StartLine && outer.EndLine == inner.EndLine {
+	if outer.StartLine == inner.StartLine && outer.StartCol == inner.StartCol &&
+		outer.EndLine == inner.EndLine && outer.EndCol == inner.EndCol {
 		return iOuter < iInner
 	}
 	return true
@@ -1493,6 +1675,23 @@ func filterClonePairsWithSuppressedMembers(pairs []*domain.ClonePair, suppressed
 			continue
 		}
 		if _, ok := suppressed[cloneID(pair.Clone2)]; ok {
+			continue
+		}
+		out = append(out, pair)
+	}
+	return out
+}
+
+func filterSuppressedClonePairs(pairs []*domain.ClonePair, suppressed map[string]struct{}) []*domain.ClonePair {
+	if len(pairs) == 0 || len(suppressed) == 0 {
+		return pairs
+	}
+	out := make([]*domain.ClonePair, 0, len(pairs))
+	for _, pair := range pairs {
+		if pair == nil {
+			continue
+		}
+		if _, ok := suppressed[clonePairKey(pair.Clone1, pair.Clone2)]; ok {
 			continue
 		}
 		out = append(out, pair)

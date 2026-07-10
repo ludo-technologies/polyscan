@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -279,7 +278,7 @@ func FormatCLISummary(summary *domain.AnalyzeSummary, duration time.Duration) st
 			summary.DeadCodeCount, summary.CriticalDeadCode)
 	}
 	if summary.CloneEnabled {
-		fmt.Fprintf(w, "  Duplication:     %3d/100 %s  (%.1f%% duplication, %d groups)\n",
+		fmt.Fprintf(w, "  Duplication:     %3d/100 %s  (%.1f%% fragments cloned, %d groups)\n",
 			summary.DuplicationScore, scoreIndicator(summary.DuplicationScore),
 			summary.CodeDuplication, summary.CloneGroups)
 	}
@@ -396,32 +395,20 @@ func (f *OutputFormatterImpl) writeAnalyzeJSON(
 }
 
 // calculateDuplicationPercentage calculates the code duplication metric based on
-// K-Core clone groups. K-Core groups represent true duplication clusters where each
-// fragment is similar to at least k other fragments (default k=2), which filters out
-// false positives from structural similarity.
+// fragment ratio: the proportion of all code fragments that are involved in
+// duplication (part of at least one clone pair or group).
 func calculateDuplicationPercentage(response *domain.CloneResponse) float64 {
 	if response == nil || response.Statistics == nil {
 		return 0.0
 	}
 
-	totalLines := response.Statistics.LinesAnalyzed
-	groupCount := response.Statistics.TotalCloneGroups
-	if totalLines == 0 || groupCount == 0 {
+	totalFragments := response.Statistics.TotalFragments
+	totalClones := response.Statistics.TotalClones
+	if totalFragments == 0 || totalClones == 0 {
 		return 0.0
 	}
 
-	// Calculate group density: groups per 1000 lines of code
-	// This normalizes for project size
-	linesInThousands := float64(totalLines) / domain.GroupDensityLinesUnit
-	if linesInThousands < domain.GroupDensityMinLines {
-		linesInThousands = domain.GroupDensityMinLines
-	}
-	groupDensity := float64(groupCount) / linesInThousands
-
-	// Convert density to percentage for penalty calculation
-	// 0.5 groups/1000 lines = 10% duplication (max penalty)
-	// This makes the scoring stricter for duplicate code clusters
-	return math.Min(domain.DuplicationThresholdHigh, groupDensity*domain.GroupDensityCoefficient)
+	return float64(totalClones) / float64(totalFragments) * 100
 }
 
 // writeComplexityText writes complexity response as plain text

@@ -42,6 +42,25 @@ func TestCloneServiceDetectClones_PartialFailureReturnsResponseAndError(t *testi
   }
   return value - 1;
 }
+
+func TestCloneStatisticsIncludesGroupOnlyMembers(t *testing.T) {
+	svc := NewCloneServiceWithDefaults()
+	a := &domain.Clone{Location: &domain.CloneLocation{FilePath: "a.js", StartLine: 1, EndLine: 10}}
+	b := &domain.Clone{Location: &domain.CloneLocation{FilePath: "b.js", StartLine: 1, EndLine: 10}}
+	c := &domain.Clone{Location: &domain.CloneLocation{FilePath: "c.js", StartLine: 1, EndLine: 10}}
+	pairs := []*domain.ClonePair{{Clone1: a, Clone2: b, Similarity: 0.95, Type: domain.Type2Clone}}
+	groups := []*domain.CloneGroup{{Clones: []*domain.Clone{a, b, c}, Type: domain.Type2Clone}}
+
+	stats := svc.buildStatistics(pairs, groups, 3, 30)
+	if stats.TotalClones != 3 {
+		t.Fatalf("expected all pair or group members to be counted, got %d", stats.TotalClones)
+	}
+
+	clones := svc.extractUniqueClones(pairs, groups)
+	if len(clones) != 3 {
+		t.Fatalf("expected group-only member in clone output, got %d clones", len(clones))
+	}
+}
 `)
 	if err := os.WriteFile(validFile, content, 0o644); err != nil {
 		t.Fatalf("failed to write fixture file: %v", err)

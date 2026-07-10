@@ -92,23 +92,23 @@ func TestCalculateHealthScore_DuplicationPenalty(t *testing.T) {
 		wantHealth      int
 	}{
 		{
-			// 0-10% scale: 1/10*20 = 2 penalty
+			// 0-30% scale: 1/30*20 = 0.67 -> 1 penalty
 			name:            "low duplication penalised from zero",
 			duplication:     1.0,
-			wantDuplication: 90,
-			wantHealth:      98,
+			wantDuplication: 95,
+			wantHealth:      99,
 		},
 		{
-			// 5/10*20 = 10 penalty
+			// 5/30*20 = 3.33 -> 3 penalty
 			name:            "medium duplication",
 			duplication:     5.0,
-			wantDuplication: 50,
-			wantHealth:      90,
+			wantDuplication: 85,
+			wantHealth:      97,
 		},
 		{
-			// 10% reaches the max penalty (20)
+			// 30% reaches the max penalty (20)
 			name:            "max penalty at threshold high",
-			duplication:     10.0,
+			duplication:     30.0,
 			wantDuplication: 0,
 			wantHealth:      80,
 		},
