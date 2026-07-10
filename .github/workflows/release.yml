@@ -119,9 +119,6 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Update npm (trusted publishing requires >= 11.5.1)
-        run: npm install -g npm@latest
-
       - name: Download binary artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
