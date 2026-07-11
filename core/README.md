@@ -9,7 +9,7 @@ Shared Go module that provides language-agnostic code analysis algorithms for th
 | `apted/` | APTED tree edit distance algorithm with configurable cost models and normalization |
 | `cbo/` | Coupling Between Objects (CBO) metric over language-provided dependency references |
 | `cfg/` | Control Flow Graph data structures, reachability analysis, McCabe cyclomatic complexity, dead code detection |
-| `clone/` | AST feature extraction, clone classification, and 5 clone grouping strategies (Connected, KCore, StarMedoid, CompleteLinkage, Centroid) |
+| `clone/` | AST feature extraction, clone classification, 5 clone grouping strategies (Connected, KCore, StarMedoid, CompleteLinkage, Centroid), and group dedup post-passes |
 | `dfa/` | Data-flow analysis framework over CFGs with language-injected variable reference extraction |
 | `domain/` | Shared type definitions, thresholds, and error taxonomy |
 | `graph/` | Directed graph abstraction, Tarjan SCC cycle detection, Robert Martin coupling metrics |

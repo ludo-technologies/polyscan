@@ -27,7 +27,18 @@ func (f *CodeFragment) ItemID() int {
 	return f.ID
 }
 
-// ItemKey returns the sorting key for GroupableItem.
+// ItemLocation returns the fragment's source location for GroupableItem.
+func (f *CodeFragment) ItemLocation() ItemLocation {
+	return ItemLocation{
+		FilePath:  f.FilePath,
+		StartLine: f.StartLine,
+		EndLine:   f.EndLine,
+		StartCol:  f.StartCol,
+		EndCol:    f.EndCol,
+	}
+}
+
+// ItemKey returns a stable location-based key for the fragment.
 func (f *CodeFragment) ItemKey() string {
 	return fmt.Sprintf("%s|%d|%d|%d|%d", f.FilePath, f.StartLine, f.EndLine, f.StartCol, f.EndCol)
 }
