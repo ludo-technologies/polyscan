@@ -1,6 +1,7 @@
 package apted
 
 import (
+	"fmt"
 	"math"
 	"testing"
 )
@@ -375,5 +376,346 @@ func BenchmarkTreePreparation(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		PrepareTreeForAPTED(root)
+	}
+}
+
+// identifierInsensitiveCostModel emulates a language cost model that ignores
+// identifier name differences: renaming between labels that share the same
+// profile key (text before "(") is free.
+type identifierInsensitiveCostModel struct {
+	base CostModel
+}
+
+func (m *identifierInsensitiveCostModel) Insert(node *TreeNode) float64 { return m.base.Insert(node) }
+func (m *identifierInsensitiveCostModel) Delete(node *TreeNode) float64 { return m.base.Delete(node) }
+func (m *identifierInsensitiveCostModel) Rename(node1, node2 *TreeNode) float64 {
+	if labelProfileKey(node1.Label) == labelProfileKey(node2.Label) {
+		return 0.0
+	}
+	return m.base.Rename(node1, node2)
+}
+
+func TestAPTEDAnalyzerLargeTreesPreserveLabelDistance(t *testing.T) {
+	for _, size := range []int{501, 2001} {
+		t.Run("different_labels", func(t *testing.T) {
+			tree1 := createWideTreeWithLabels(size, "left")
+			tree2 := createWideTreeWithLabels(size, "right")
+			analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+			distance, similarity := analyzer.ComputeDistanceAndSimilarity(tree1, tree2)
+
+			if distance != float64(size) {
+				t.Errorf("every node label differs, so each node needs one rename: want %d, got %f", size, distance)
+			}
+			if similarity != 0.0 {
+				t.Errorf("fully different labels must not produce clone similarity, got %f", similarity)
+			}
+		})
+
+		t.Run("identical_labels", func(t *testing.T) {
+			tree1 := createWideTreeWithLabels(size, "same")
+			tree2 := createWideTreeWithLabels(size, "same")
+			analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+			distance, similarity := analyzer.ComputeDistanceAndSimilarity(tree1, tree2)
+
+			if distance != 0.0 {
+				t.Errorf("expected zero distance, got %f", distance)
+			}
+			if similarity != 1.0 {
+				t.Errorf("expected similarity 1.0, got %f", similarity)
+			}
+		})
+
+		t.Run("ignored_identifier_labels", func(t *testing.T) {
+			tree1 := createWideIdentifierTree(size, "left")
+			tree2 := createWideIdentifierTree(size, "right")
+			analyzer := NewAPTEDAnalyzer(&identifierInsensitiveCostModel{base: NewDefaultCostModel()})
+
+			distance, similarity := analyzer.ComputeDistanceAndSimilarity(tree1, tree2)
+
+			if distance != 0.0 {
+				t.Errorf("expected zero distance with ignored identifiers, got %f", distance)
+			}
+			if similarity != 1.0 {
+				t.Errorf("expected similarity 1.0 with ignored identifiers, got %f", similarity)
+			}
+		})
+
+		t.Run("weighted_rename_cost", func(t *testing.T) {
+			tree1 := createWideTreeWithLabels(size, "left")
+			tree2 := createWideTreeWithLabels(size, "right")
+			costModel := NewWeightedCostModel(3.0, 3.0, 0.25, NewDefaultCostModel())
+			analyzer := NewAPTEDAnalyzer(costModel)
+
+			distance, similarity := analyzer.ComputeDistanceAndSimilarity(tree1, tree2)
+
+			if distance != float64(size)*0.25 {
+				t.Errorf("large-tree profiles should use rename cost when it is cheaper: want %f, got %f", float64(size)*0.25, distance)
+			}
+			if similarity != 0.75 {
+				t.Errorf("expected similarity 0.75, got %f", similarity)
+			}
+		})
+
+		t.Run("shifted_siblings", func(t *testing.T) {
+			tree1 := createWideTreeWithShiftedChildren(size, 0)
+			tree2 := createWideTreeWithShiftedChildren(size, 1)
+			analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+			distance, similarity := analyzer.ComputeDistanceAndSimilarity(tree1, tree2)
+
+			if distance != 2.0 {
+				t.Errorf("same-shape sibling shifts should use delete/insert alignment: want 2.0, got %f", distance)
+			}
+			expected := 1.0 - (2.0 / float64(size))
+			if math.Abs(similarity-expected) > 0.001 {
+				t.Errorf("expected similarity %f, got %f", expected, similarity)
+			}
+		})
+
+		t.Run("reversed_siblings", func(t *testing.T) {
+			tree1 := createWideTreeWithLabels(size, "child")
+			tree2 := createWideTreeWithReversedChildren(size)
+			analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+			distance, similarity := analyzer.ComputeDistanceAndSimilarity(tree1, tree2)
+
+			if distance != float64(size-1) {
+				t.Errorf("complex wide reorders should stay bounded: want %d, got %f", size-1, distance)
+			}
+			expected := 1.0 - (float64(size-1) / float64(size))
+			if math.Abs(similarity-expected) > 0.001 {
+				t.Errorf("expected similarity %f, got %f", expected, similarity)
+			}
+		})
+	}
+
+	t.Run("same_labels_different_large_shape", func(t *testing.T) {
+		tree1 := createTwoLevelTreeWithLabel(1000, 1, "same")
+		tree2 := createTwoLevelTreeWithLabel(500, 3, "same")
+		analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+		distance, similarity := analyzer.ComputeDistanceAndSimilarity(tree1, tree2)
+
+		if distance <= 0.0 {
+			t.Errorf("large trees with different shape must not look identical, got distance %f", distance)
+		}
+		if similarity >= 1.0 {
+			t.Errorf("expected similarity < 1.0, got %f", similarity)
+		}
+	})
+}
+
+func TestAPTEDAnalyzerSameShapeDistanceMatchesExactAPTED(t *testing.T) {
+	tests := []struct {
+		name      string
+		costModel CostModel
+		tree1     *TreeNode
+		tree2     *TreeNode
+	}{
+		{
+			name:      "default",
+			costModel: NewDefaultCostModel(),
+			tree1:     createWideTreeWithLabels(31, "left"),
+			tree2:     createWideTreeWithLabels(31, "right"),
+		},
+		{
+			name:      "weighted",
+			costModel: NewWeightedCostModel(3.0, 3.0, 0.25, NewDefaultCostModel()),
+			tree1:     createWideTreeWithLabels(31, "left"),
+			tree2:     createWideTreeWithLabels(31, "right"),
+		},
+		{
+			name:      "ignored_identifiers",
+			costModel: &identifierInsensitiveCostModel{base: NewDefaultCostModel()},
+			tree1:     createWideIdentifierTree(31, "left"),
+			tree2:     createWideIdentifierTree(31, "right"),
+		},
+		{
+			name:      "shifted_siblings",
+			costModel: NewDefaultCostModel(),
+			tree1:     createWideTreeWithShiftedChildren(31, 0),
+			tree2:     createWideTreeWithShiftedChildren(31, 1),
+		},
+		{
+			name:      "reversed_siblings",
+			costModel: NewDefaultCostModel(),
+			tree1:     createWideTreeWithLabels(31, "child"),
+			tree2:     createWideTreeWithReversedChildren(31),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			analyzer := NewAPTEDAnalyzer(tt.costModel)
+			exactDistance := analyzer.ComputeDistance(tt.tree1, tt.tree2)
+
+			sameShapeDistance, ok := analyzer.computeBoundedSameShapeDistance(tt.tree1, tt.tree2)
+
+			if !ok {
+				t.Fatal("expected same-shape distance to be computed")
+			}
+			if sameShapeDistance != exactDistance {
+				t.Errorf("same-shape distance %f should match exact APTED %f", sameShapeDistance, exactDistance)
+			}
+		})
+	}
+
+	t.Run("shape_mismatch", func(t *testing.T) {
+		analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+		_, ok := analyzer.computeBoundedSameShapeDistance(
+			createTwoLevelTreeWithLabel(5, 1, "same"),
+			createTwoLevelTreeWithLabel(3, 3, "same"),
+		)
+
+		if ok {
+			t.Error("expected shape mismatch to be rejected")
+		}
+	})
+
+	t.Run("budget_exhaustion_keeps_positional_child_cost", func(t *testing.T) {
+		analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+		// The large-tree same-shape path is a bounded clone-detection heuristic:
+		// when alignment budget is gone, it returns the positional signal rather
+		// than pretending the children are identical.
+		state := &sameShapeDistanceState{
+			distances:               make(map[nodePair]float64),
+			deleteCosts:             make(map[*TreeNode]float64),
+			insertCosts:             make(map[*TreeNode]float64),
+			alignmentCellsRemaining: 0,
+		}
+		left := []*TreeNode{
+			NewTreeNode(1, "A"),
+			NewTreeNode(2, "B"),
+			NewTreeNode(3, "C"),
+		}
+		right := []*TreeNode{
+			NewTreeNode(4, "A"),
+		}
+
+		distance := analyzer.sameShapeChildrenDistance(left, right, state)
+
+		if distance != 2.0 {
+			t.Errorf("expected positional child cost 2.0, got %f", distance)
+		}
+	})
+}
+
+func TestAPTEDAnalyzerLargeChainShift(t *testing.T) {
+	const size = largeTreeThreshold + 1
+	tree1 := createShiftedChain(size, 0)
+	tree2 := createShiftedChain(size, 1)
+	analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+	distance := analyzer.ComputeDistance(tree1, tree2)
+
+	if distance != 2.0 {
+		t.Errorf("single-node chain shift should cost one delete and one insert: want 2.0, got %f", distance)
+	}
+}
+
+func TestAPTEDAnalyzerLargeDepthChangeUsesEditCost(t *testing.T) {
+	const size = largeTreeThreshold + 1
+	tree1 := createShiftedChain(size, 0)
+	tree2 := createShiftedChain(size, 0)
+	leaf := tree2
+	for len(leaf.Children) == 1 {
+		leaf = leaf.Children[0]
+	}
+	leaf.AddChild(NewTreeNode(size+1, fmt.Sprintf("node_%d", size)))
+	analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+	distance := analyzer.ComputeDistance(tree1, tree2)
+
+	if distance != 1.0 {
+		t.Errorf("adding one leaf should cost one insert: want 1.0, got %f", distance)
+	}
+}
+
+func createWideTreeWithLabels(nodeCount int, labelPrefix string) *TreeNode {
+	root := NewTreeNode(1, labelPrefix+"_root")
+	for i := 2; i <= nodeCount; i++ {
+		root.AddChild(NewTreeNode(i, fmt.Sprintf("%s_%d", labelPrefix, i)))
+	}
+	return root
+}
+
+func createWideIdentifierTree(nodeCount int, namePrefix string) *TreeNode {
+	root := NewTreeNode(1, "Program")
+	for i := 2; i <= nodeCount; i++ {
+		root.AddChild(NewTreeNode(i, fmt.Sprintf("Identifier(%s_%d)", namePrefix, i)))
+	}
+	return root
+}
+
+func createWideTreeWithShiftedChildren(nodeCount, shift int) *TreeNode {
+	root := NewTreeNode(1, "root")
+	if nodeCount <= 1 {
+		return root
+	}
+
+	childCount := nodeCount - 1
+	for i := 0; i < childCount; i++ {
+		labelIndex := ((i + shift) % childCount) + 2
+		root.AddChild(NewTreeNode(i+2, fmt.Sprintf("child_%d", labelIndex)))
+	}
+	return root
+}
+
+func createWideTreeWithReversedChildren(nodeCount int) *TreeNode {
+	root := NewTreeNode(1, "child_root")
+	for i := nodeCount; i >= 2; i-- {
+		root.AddChild(NewTreeNode(i, fmt.Sprintf("child_%d", i)))
+	}
+	return root
+}
+
+func createTwoLevelTreeWithLabel(parentCount, childrenPerParent int, label string) *TreeNode {
+	root := NewTreeNode(1, label)
+	nextID := 2
+	for i := 0; i < parentCount; i++ {
+		parent := NewTreeNode(nextID, label)
+		nextID++
+		root.AddChild(parent)
+		for j := 0; j < childrenPerParent; j++ {
+			parent.AddChild(NewTreeNode(nextID, label))
+			nextID++
+		}
+	}
+	return root
+}
+
+func createShiftedChain(nodeCount, shift int) *TreeNode {
+	root := NewTreeNode(1, fmt.Sprintf("node_%d", shift))
+	current := root
+	for i := 1; i < nodeCount; i++ {
+		child := NewTreeNode(i+1, fmt.Sprintf("node_%d", i+shift))
+		current.AddChild(child)
+		current = child
+	}
+	return root
+}
+
+func TestComputeApproximateDistanceNilTrees(t *testing.T) {
+	analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+	// Both nil
+	if distance := analyzer.computeApproximateDistance(nil, nil); distance != 0.0 {
+		t.Errorf("Approximate distance between two nil trees should be 0, got %f", distance)
+	}
+
+	tree := NewTreeNode(1, "test")
+	tree.AddChild(NewTreeNode(2, "child"))
+
+	// First nil
+	if distance := analyzer.computeApproximateDistance(nil, tree); distance != float64(tree.Size()) {
+		t.Errorf("Approximate distance from nil should equal tree size, got %f", distance)
+	}
+
+	// Second nil
+	if distance := analyzer.computeApproximateDistance(tree, nil); distance != float64(tree.Size()) {
+		t.Errorf("Approximate distance to nil should equal tree size, got %f", distance)
 	}
 }
