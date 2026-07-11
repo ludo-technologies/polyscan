@@ -3,7 +3,7 @@ package clone
 import (
 	"sort"
 
-	"github.com/ludo-technologies/codescan-core/domain"
+	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
 // ClassifierConfig holds configuration for the clone classifier.

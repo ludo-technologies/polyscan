@@ -4,9 +4,9 @@ import (
 	"math"
 	"slices"
 
-	"github.com/ludo-technologies/codescan-core/cfg"
-	"github.com/ludo-technologies/codescan-core/dfa"
-	"github.com/ludo-technologies/codescan-core/domain"
+	"github.com/ludo-technologies/polyscan/core/cfg"
+	"github.com/ludo-technologies/polyscan/core/dfa"
+	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
 // CFGFeatures holds structural features extracted from a CFG.

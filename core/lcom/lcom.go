@@ -3,7 +3,7 @@ package lcom
 import (
 	"sort"
 
-	"github.com/ludo-technologies/codescan-core/domain"
+	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
 // MethodAccess describes a method and which instance variables it accesses.

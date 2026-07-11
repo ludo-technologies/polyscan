@@ -18,7 +18,7 @@ type TreeNode struct {
 	KeyRoot      bool
 
 	// OriginalNode holds the original language-specific AST node.
-	// This field is opaque to codescan-core; language adapters store their
+	// This field is opaque to polyscan core; language adapters store their
 	// own node type here and recover it via type assertion:
 	//
 	//   // pyscn

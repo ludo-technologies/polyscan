@@ -3,8 +3,8 @@ package clone
 import (
 	"fmt"
 
-	"github.com/ludo-technologies/codescan-core/apted"
-	"github.com/ludo-technologies/codescan-core/domain"
+	"github.com/ludo-technologies/polyscan/core/apted"
+	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
 // CodeFragment represents a code fragment for clone detection.

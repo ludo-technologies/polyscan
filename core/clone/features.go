@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ludo-technologies/codescan-core/apted"
+	"github.com/ludo-technologies/polyscan/core/apted"
 )
 
 // FeatureExtractor converts AST trees into feature sets for Jaccard similarity.

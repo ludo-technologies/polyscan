@@ -1,10 +1,10 @@
-# Contributing to codescan-core
+# Contributing to polyscan core
 
 ## Getting Started
 
 ```bash
-git clone https://github.com/ludo-technologies/codescan-core.git
-cd codescan-core
+git clone https://github.com/ludo-technologies/polyscan/core.git
+cd polyscan core
 go test ./...
 ```
 
@@ -47,7 +47,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Architecture Notes
 
-codescan-core is a shared library used by [pyscn](https://github.com/ludo-technologies/pyscn) and [jscan](https://github.com/ludo-technologies/jscan). Key constraints:
+polyscan core is a shared library used by [pyscn](https://github.com/ludo-technologies/pyscn) and [jscan](https://github.com/ludo-technologies/jscan). Key constraints:
 
 - **No language-specific dependencies.** Language-specific behavior is injected via interfaces (`StatementClassifier`, `CostModel`, `ComplexityContributor`, etc.)
 - **No external dependencies.** The module has zero third-party dependencies by design
@@ -55,7 +55,7 @@ codescan-core is a shared library used by [pyscn](https://github.com/ludo-techno
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/ludo-technologies/codescan-core/issues). Include:
+Use [GitHub Issues](https://github.com/ludo-technologies/polyscan/core/issues). Include:
 
 - Go version (`go version`)
 - What you expected vs what happened

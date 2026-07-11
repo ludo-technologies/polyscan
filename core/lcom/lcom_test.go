@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ludo-technologies/codescan-core/domain"
+	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
 func TestComputeLCOM4_EmptyMethods(t *testing.T) {
