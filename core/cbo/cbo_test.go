@@ -3,7 +3,7 @@ package cbo
 import (
 	"testing"
 
-	"github.com/ludo-technologies/codescan-core/domain"
+	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
 func TestComputeCBO_EmptyInput(t *testing.T) {

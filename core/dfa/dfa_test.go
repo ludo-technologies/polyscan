@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ludo-technologies/codescan-core/cfg"
+	"github.com/ludo-technologies/polyscan/core/cfg"
 )
 
 // ---------------------------------------------------------------------------

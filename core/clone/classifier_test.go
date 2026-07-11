@@ -3,7 +3,7 @@ package clone
 import (
 	"testing"
 
-	"github.com/ludo-technologies/codescan-core/domain"
+	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
 type mockAnalyzer struct {

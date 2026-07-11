@@ -142,7 +142,7 @@ type CFG struct {
 	Name   string
 
 	// FunctionNode is the original AST node for the function.
-	// This field is opaque to codescan-core; language adapters store their
+	// This field is opaque to polyscan core; language adapters store their
 	// own function node type here and recover it via type assertion:
 	//
 	//   fnNode := cfg.FunctionNode.(*parser.Node)

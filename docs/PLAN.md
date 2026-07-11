@@ -1,15 +1,15 @@
-# codescan-core Integration Plan
+# polyscan core Integration Plan
 
 ## Overview
 
-`codescan-core` is a shared Go module that extracts language-agnostic code analysis algorithms from [pyscn](https://github.com/ludo-technologies/pyscn) (Python analyzer) and [jscan](https://github.com/ludo-technologies/jscan) (JavaScript/TypeScript analyzer).
+`polyscan core` is a shared Go module that extracts language-agnostic code analysis algorithms from [pyscn](https://github.com/ludo-technologies/pyscn) (Python analyzer) and [jscan](https://github.com/ludo-technologies/jscan) (JavaScript/TypeScript analyzer).
 
-**Module path:** `github.com/ludo-technologies/codescan-core`
+**Module path:** `github.com/ludo-technologies/polyscan/core`
 
 ## Architecture
 
 ```
-codescan-core/
+polyscan core/
 ├── apted/       # APTED tree edit distance algorithm
 ├── cfg/         # Control Flow Graph data structures + reachability, complexity, dead code
 ├── clone/       # AST feature extraction + clone grouping strategies (5 algorithms)
@@ -78,14 +78,14 @@ Generic interfaces abstract over language-specific types.
 
 ## Migration Strategy
 
-### Phase 1: Publish codescan-core v0.1.0
-1. Extract Tier 1 code into codescan-core
+### Phase 1: Publish polyscan core v0.1.0
+1. Extract Tier 1 code into polyscan core
 2. Write tests for all extracted packages
 3. Tag v0.1.0
 
 ### Phase 2: Migrate pyscn
-1. `go get github.com/ludo-technologies/codescan-core@v0.1.0`
-2. Replace internal packages with codescan-core imports
+1. `go get github.com/ludo-technologies/polyscan/core@v0.1.0`
+2. Replace internal packages with polyscan core imports
 3. Keep `PythonCostModel`, `TreeConverter`, `cfg_builder` locally
 4. Verify all existing tests pass
 
@@ -101,13 +101,13 @@ Generic interfaces abstract over language-specific types.
 ## Versioning
 
 - Follow semver strictly
-- Breaking changes in codescan-core require major version bump
+- Breaking changes in polyscan core require major version bump
 - pyscn and jscan pin to specific minor versions
 - Coordinate releases across all three repos
 
 ## Impact on Contributors
 
 - pyscn's public API and CLI remain unchanged
-- Internal import paths change (e.g., `pyscn/internal/analyzer` -> `codescan-core/apted`)
-- PRs touching shared algorithms should go to codescan-core first
+- Internal import paths change (e.g., `pyscn/internal/analyzer` -> `polyscan core/apted`)
+- PRs touching shared algorithms should go to polyscan core first
 - Language-specific PRs continue to go to pyscn/jscan directly

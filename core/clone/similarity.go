@@ -1,7 +1,7 @@
 package clone
 
 import (
-	"github.com/ludo-technologies/codescan-core/apted"
+	"github.com/ludo-technologies/polyscan/core/apted"
 )
 
 // SimilarityAnalyzer computes similarity between two code fragments.

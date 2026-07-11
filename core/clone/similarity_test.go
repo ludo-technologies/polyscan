@@ -3,7 +3,7 @@ package clone
 import (
 	"testing"
 
-	"github.com/ludo-technologies/codescan-core/apted"
+	"github.com/ludo-technologies/polyscan/core/apted"
 )
 
 func TestStructuralAnalyzerNilFragments(t *testing.T) {

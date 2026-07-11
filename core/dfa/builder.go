@@ -3,7 +3,7 @@ package dfa
 import (
 	"errors"
 
-	"github.com/ludo-technologies/codescan-core/cfg"
+	"github.com/ludo-technologies/polyscan/core/cfg"
 )
 
 // RefExtractor is the language-specific interface for extracting variable references.

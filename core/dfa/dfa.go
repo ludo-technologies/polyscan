@@ -2,7 +2,7 @@ package dfa
 
 import (
 	"fmt"
-	"github.com/ludo-technologies/codescan-core/cfg"
+	"github.com/ludo-technologies/polyscan/core/cfg"
 )
 
 // DefUseKind represents the kind of definition or use of a variable.

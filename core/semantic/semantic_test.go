@@ -4,8 +4,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/ludo-technologies/codescan-core/cfg"
-	"github.com/ludo-technologies/codescan-core/dfa"
+	"github.com/ludo-technologies/polyscan/core/cfg"
+	"github.com/ludo-technologies/polyscan/core/dfa"
 )
 
 func TestExtractCFGFeatures_Nil(t *testing.T) {

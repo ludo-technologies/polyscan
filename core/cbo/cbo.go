@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ludo-technologies/codescan-core/domain"
+	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
 // DependencyKind represents the type of dependency between classes.
