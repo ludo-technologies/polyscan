@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-11
+
+### Added
+
+- Ship Agent Skills (health-check, cli-analysis, refactoring, architecture-review) and a Claude Code plugin marketplace entry so AI coding agents can run jscan analyses via `uvx add-skills` or `claude plugin install`
+
 ## [0.8.0] - 2026-07-10
 
 ### Changed
