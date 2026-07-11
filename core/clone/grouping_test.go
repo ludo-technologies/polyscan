@@ -1,439 +1,593 @@
 package clone
 
 import (
-	"fmt"
 	"testing"
+
+	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
-// testItem implements GroupableItem for testing.
+// testItem is a minimal GroupableItem implementation for tests.
 type testItem struct {
 	id  int
-	key string
+	loc ItemLocation
 }
 
-func (t *testItem) ItemID() int    { return t.id }
-func (t *testItem) ItemKey() string { return t.key }
+func (t *testItem) ItemID() int                { return t.id }
+func (t *testItem) ItemLocation() ItemLocation { return t.loc }
 
-func newItem(id int) *testItem {
-	return &testItem{id: id, key: fmt.Sprintf("file%d|%d|%d|0|0", id, id, id+10)}
+func ti(id int, file string, startLine, endLine int) *testItem {
+	return &testItem{id: id, loc: ItemLocation{FilePath: file, StartLine: startLine, EndLine: endLine}}
 }
 
-func makePair(a, b *testItem, sim float64, pairType int) *ItemPair[*testItem] {
-	return &ItemPair[*testItem]{
-		Item1:      a,
-		Item2:      b,
-		Similarity: sim,
-		PairType:   pairType,
-	}
+func pair(id1, id2 *testItem, sim float64, t domain.CloneType) *ItemPair[*testItem] {
+	return &ItemPair[*testItem]{Item1: id1, Item2: id2, Similarity: sim, PairType: t}
 }
-
-// --- GroupableItem interface test ---
-
-func TestGroupableItemInterface(t *testing.T) {
-	var _ GroupableItem = &testItem{id: 1, key: "a"}
-}
-
-// --- Factory test ---
 
 func TestNewGroupingStrategy(t *testing.T) {
-	tests := []struct {
-		mode GroupingMode
-		name string
+	testCases := []struct {
+		mode     GroupingMode
+		expected string
 	}{
 		{ModeConnected, "connected"},
 		{ModeKCore, "k_core"},
 		{ModeStarMedoid, "star_medoid"},
 		{ModeCompleteLinkage, "complete_linkage"},
 		{ModeCentroid, "centroid"},
-		{"", "connected"}, // default
+		{"unknown", "connected"}, // Default fallback
 	}
 
-	for _, tt := range tests {
-		s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: tt.mode})
-		if s.Name() != tt.name {
-			t.Errorf("mode %q: expected name %q, got %q", tt.mode, tt.name, s.Name())
-		}
-	}
-}
-
-// --- Empty input test ---
-
-func TestAllStrategiesEmptyInput(t *testing.T) {
-	modes := []GroupingMode{ModeConnected, ModeKCore, ModeStarMedoid, ModeCompleteLinkage, ModeCentroid}
-	for _, mode := range modes {
-		s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: mode, Threshold: 0.5})
-		result := s.GroupItems(nil)
-		if len(result) != 0 {
-			t.Errorf("%s: expected 0 groups for nil input, got %d", mode, len(result))
-		}
-		result = s.GroupItems([]*ItemPair[*testItem]{})
-		if len(result) != 0 {
-			t.Errorf("%s: expected 0 groups for empty input, got %d", mode, len(result))
-		}
+	for _, tc := range testCases {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			config := GroupingConfig{
+				Mode:      tc.mode,
+				Threshold: 0.8,
+				KCoreK:    2,
+			}
+			strategy := NewGroupingStrategy[*testItem](config)
+			if strategy.Name() != tc.expected {
+				t.Errorf("Expected strategy name %s, got %s", tc.expected, strategy.Name())
+			}
+		})
 	}
 }
 
-// --- ConnectedGrouping tests ---
+func TestConnectedGroupingEmpty(t *testing.T) {
+	grouping := NewConnectedGrouping[*testItem](0.8)
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{})
+
+	if len(groups) != 0 {
+		t.Errorf("Expected 0 groups for empty input, got %d", len(groups))
+	}
+}
 
 func TestConnectedGroupingSinglePair(t *testing.T) {
-	a, b := newItem(1), newItem(2)
-	pairs := []*ItemPair[*testItem]{makePair(a, b, 0.8, 1)}
+	grouping := NewConnectedGrouping[*testItem](0.8)
 
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeConnected, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+	})
 
 	if len(groups) != 1 {
-		t.Fatalf("expected 1 group, got %d", len(groups))
+		t.Fatalf("Expected 1 group, got %d", len(groups))
 	}
 	if len(groups[0].Items) != 2 {
-		t.Fatalf("expected 2 items in group, got %d", len(groups[0].Items))
-	}
-	if groups[0].ID != 1 {
-		t.Fatalf("expected group ID 1, got %d", groups[0].ID)
+		t.Errorf("Expected group size 2, got %d", len(groups[0].Items))
 	}
 }
 
-func TestConnectedGroupingTwoComponents(t *testing.T) {
-	a, b, c, d := newItem(1), newItem(2), newItem(3), newItem(4)
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.9, 1),
-		makePair(c, d, 0.8, 2),
-	}
+func TestConnectedGroupingBelowThreshold(t *testing.T) {
+	grouping := NewConnectedGrouping[*testItem](0.9)
 
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeConnected, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.8, domain.Type2Clone), // Below threshold
+	})
+
+	if len(groups) != 0 {
+		t.Errorf("Expected 0 groups (below threshold), got %d", len(groups))
+	}
+}
+
+func TestConnectedGroupingMultipleComponents(t *testing.T) {
+	grouping := NewConnectedGrouping[*testItem](0.8)
+
+	// First component: items 1 and 2. Second component: items 3 and 4.
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "a.js", 20, 30)
+	item3 := ti(3, "b.js", 1, 10)
+	item4 := ti(4, "b.js", 20, 30)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+		pair(item3, item4, 0.85, domain.Type2Clone),
+	})
 
 	if len(groups) != 2 {
-		t.Fatalf("expected 2 groups, got %d", len(groups))
+		t.Errorf("Expected 2 groups, got %d", len(groups))
 	}
 }
 
-func TestConnectedGroupingThreshold(t *testing.T) {
-	a, b := newItem(1), newItem(2)
-	pairs := []*ItemPair[*testItem]{makePair(a, b, 0.3, 1)}
+func TestConnectedGroupingSortsMembersDeterministically(t *testing.T) {
+	grouping := NewConnectedGrouping[*testItem](0.8)
 
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeConnected, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
+	item1 := ti(1, "b.js", 1, 10)
+	item2 := ti(2, "a.js", 1, 10)
 
-	// Pair below threshold, so no groups
-	if len(groups) != 0 {
-		t.Fatalf("expected 0 groups (below threshold), got %d", len(groups))
-	}
-}
-
-func TestConnectedGroupingChain(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.8, 1),
-		makePair(b, c, 0.7, 1),
-	}
-
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeConnected, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+	})
 
 	if len(groups) != 1 {
-		t.Fatalf("expected 1 connected group, got %d", len(groups))
+		t.Fatalf("Expected 1 group, got %d", len(groups))
 	}
-	if len(groups[0].Items) != 3 {
-		t.Fatalf("expected 3 items in chain group, got %d", len(groups[0].Items))
+	if groups[0].Items[0] != item2 {
+		t.Error("expected members sorted by location (a.js before b.js)")
 	}
 }
 
-// --- KCoreGrouping tests ---
+func TestNewKCoreGroupingMinK(t *testing.T) {
+	grouping := NewKCoreGrouping[*testItem](0.8, 1) // k=1 should be bumped to 2
+
+	if grouping.k != 2 {
+		t.Errorf("Expected k=2 (minimum), got %d", grouping.k)
+	}
+}
+
+func TestKCoreGroupingEmpty(t *testing.T) {
+	grouping := NewKCoreGrouping[*testItem](0.8, 2)
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{})
+
+	if len(groups) != 0 {
+		t.Errorf("Expected 0 groups for empty input, got %d", len(groups))
+	}
+}
 
 func TestKCoreGroupingTriangle(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.9, 1),
-		makePair(b, c, 0.8, 1),
-		makePair(a, c, 0.7, 1),
-	}
+	grouping := NewKCoreGrouping[*testItem](0.8, 2)
 
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeKCore, Threshold: 0.5, KCoreK: 2})
-	groups := s.GroupItems(pairs)
+	// Three items forming a triangle (each connected to 2 others)
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "c.js", 1, 10)
 
-	// Triangle: every node has degree 2, so all survive k=2 peeling.
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+		pair(item2, item3, 0.9, domain.Type1Clone),
+		pair(item1, item3, 0.9, domain.Type1Clone),
+	})
+
 	if len(groups) != 1 {
-		t.Fatalf("expected 1 group, got %d", len(groups))
+		t.Fatalf("Expected 1 group (triangle is 2-core), got %d", len(groups))
 	}
 	if len(groups[0].Items) != 3 {
-		t.Fatalf("expected 3 items, got %d", len(groups[0].Items))
+		t.Errorf("Expected group size 3, got %d", len(groups[0].Items))
 	}
 }
 
-func TestKCoreGroupingChainPeeled(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	// Chain: a-b-c, degrees: a=1, b=2, c=1 → peeling removes a and c, then b
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.9, 1),
-		makePair(b, c, 0.8, 1),
-	}
+func TestKCoreGroupingRemovesLowDegree(t *testing.T) {
+	grouping := NewKCoreGrouping[*testItem](0.8, 2)
 
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeKCore, Threshold: 0.5, KCoreK: 2})
-	groups := s.GroupItems(pairs)
+	// Item 1 only connected to item 2 (degree 1, will be removed).
+	// After removing item 1, we have a triangle: 2-3-4.
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "c.js", 1, 10)
+	item4 := ti(4, "d.js", 1, 10)
 
-	// No 2-core in a chain
-	if len(groups) != 0 {
-		t.Fatalf("expected 0 groups (no 2-core in chain), got %d", len(groups))
-	}
-}
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+		pair(item2, item3, 0.9, domain.Type1Clone),
+		pair(item2, item4, 0.9, domain.Type1Clone),
+		pair(item3, item4, 0.9, domain.Type1Clone),
+	})
 
-func TestKCoreGroupingDefaultK(t *testing.T) {
-	// Config with KCoreK=0 should default to 2.
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeKCore, Threshold: 0.5, KCoreK: 0})
-	if s.Name() != "k_core" {
-		t.Fatalf("expected k_core, got %s", s.Name())
-	}
-}
-
-// --- StarMedoidGrouping tests ---
-
-func TestStarMedoidGrouping(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.9, 1),
-		makePair(a, c, 0.8, 1),
-		makePair(b, c, 0.7, 1), // fully connected star
-	}
-
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeStarMedoid, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
-
-	// a has avg sim (0.9+0.8)/2=0.85, b has (0.9+0.7)/2=0.8, c has (0.8+0.7)/2=0.75
-	// Medoid is a (or b depending on tie-break). All connected → 1 star group.
 	if len(groups) != 1 {
-		t.Fatalf("expected 1 group, got %d", len(groups))
+		t.Fatalf("Expected 1 group, got %d", len(groups))
 	}
 	if len(groups[0].Items) != 3 {
-		t.Fatalf("expected 3 items in star, got %d", len(groups[0].Items))
+		t.Errorf("Expected group size 3 (item 1 should be removed), got %d", len(groups[0].Items))
 	}
 }
 
-func TestStarMedoidGroupingPartial(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.9, 1),
-		makePair(a, c, 0.8, 1),
-		// b and c not directly connected
-	}
+func TestPairKeyCanonical(t *testing.T) {
+	item1 := &testItem{id: 1, loc: ItemLocation{FilePath: "a.js", StartLine: 1, EndLine: 10, EndCol: 50}}
+	item2 := &testItem{id: 2, loc: ItemLocation{FilePath: "b.js", StartLine: 1, EndLine: 10, EndCol: 50}}
 
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeStarMedoid, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
+	key1 := PairKey(item1, item2)
+	key2 := PairKey(item2, item1)
 
-	// b has avg 0.9 (best medoid), star = {b, a}. Then c is singleton.
-	if len(groups) != 2 {
-		t.Fatalf("expected 2 groups, got %d", len(groups))
+	// Key should be canonical (same regardless of order)
+	if key1 != key2 {
+		t.Errorf("Keys should be identical regardless of order: %s vs %s", key1, key2)
 	}
 }
 
-func TestStarMedoidSingleton(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	// All below threshold — singletons
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.1, 1),
-		makePair(b, c, 0.2, 1),
-	}
+func TestItemKey(t *testing.T) {
+	item := &testItem{id: 1, loc: ItemLocation{FilePath: "test.js", StartLine: 1, EndLine: 10, StartCol: 0, EndCol: 50}}
 
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeStarMedoid, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
+	key := ItemKey(item)
 
-	if len(groups) != 0 {
-		t.Fatalf("expected 0 groups (all below threshold), got %d", len(groups))
-	}
-}
-
-// --- CompleteLinkageGrouping tests ---
-
-func TestCompleteLinkageTriangle(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.9, 1),
-		makePair(b, c, 0.8, 1),
-		makePair(a, c, 0.7, 1),
-	}
-
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeCompleteLinkage, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
-
-	// Complete triangle is one maximal clique.
-	if len(groups) != 1 {
-		t.Fatalf("expected 1 group (triangle clique), got %d", len(groups))
-	}
-	if len(groups[0].Items) != 3 {
-		t.Fatalf("expected 3 items in clique, got %d", len(groups[0].Items))
-	}
-}
-
-func TestCompleteLinkageMissingEdge(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	// a-b and a-c connected, but b-c not → no triangle clique
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.9, 1),
-		makePair(a, c, 0.8, 1),
-	}
-
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeCompleteLinkage, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
-
-	// Maximal cliques: {a,b} and {a,c}. a assigned to largest (or first).
-	// Both have size 2, so a goes to the first one.
-	if len(groups) < 1 {
-		t.Fatal("expected at least 1 group")
-	}
-}
-
-// --- CentroidGrouping tests ---
-
-func TestCentroidGroupingTriangle(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.9, 1),
-		makePair(b, c, 0.8, 1),
-		makePair(a, c, 0.7, 1),
-	}
-
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeCentroid, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
-
-	// All pairs above threshold, all can be expanded into one group.
-	if len(groups) != 1 {
-		t.Fatalf("expected 1 group, got %d", len(groups))
-	}
-	if len(groups[0].Items) != 3 {
-		t.Fatalf("expected 3 items, got %d", len(groups[0].Items))
-	}
-}
-
-func TestCentroidGroupingNoExpansion(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	// a-b high sim, a-c above threshold but b-c below → c can't expand into {a,b}
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.9, 1),
-		makePair(a, c, 0.6, 1), // above threshold
-		makePair(b, c, 0.3, 1), // below threshold
-	}
-
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeCentroid, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
-
-	// Seed pair = {a,b} (sim 0.9). c has sim 0.6 to a (ok) but 0.3 to b (below threshold).
-	// c can't join {a,b}, becomes separate group. {a,b} + {c} = 2 groups.
-	if len(groups) != 2 {
-		t.Fatalf("expected 2 groups, got %d", len(groups))
-	}
-}
-
-// --- Helper function tests ---
-
-func TestAlmostEqual(t *testing.T) {
-	if !almostEqual(1.0, 1.0) {
-		t.Fatal("expected 1.0 == 1.0")
-	}
-	if !almostEqual(0.1+0.2, 0.3) {
-		t.Fatal("expected 0.1+0.2 ≈ 0.3")
-	}
-	if almostEqual(1.0, 2.0) {
-		t.Fatal("expected 1.0 != 2.0")
-	}
-}
-
-func TestPairKey(t *testing.T) {
-	a := &testItem{id: 1, key: "b"}
-	b := &testItem{id: 2, key: "a"}
-
-	// Should normalize: smaller key first
-	k := pairKey(a, b)
-	if k != "a|b" {
-		t.Fatalf("expected 'a|b', got %s", k)
-	}
-	k2 := pairKey(b, a)
-	if k != k2 {
-		t.Fatal("pairKey should be symmetric")
+	expected := "test.js|1|10|0|50"
+	if key != expected {
+		t.Errorf("Expected key %s, got %s", expected, key)
 	}
 }
 
 func TestItemLess(t *testing.T) {
-	a := &testItem{id: 1, key: "alpha"}
-	b := &testItem{id: 2, key: "beta"}
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "a.js", 20, 30)
 
-	if !itemLess(a, b) {
-		t.Fatal("expected alpha < beta")
+	// a.js < b.js
+	if !itemLess(item1, item2) {
+		t.Error("item1 should be less than item2 (file path)")
 	}
-	if itemLess(b, a) {
-		t.Fatal("expected beta > alpha")
+
+	// Same file, different start line
+	if !itemLess(item1, item3) {
+		t.Error("item1 should be less than item3 (start line)")
+	}
+
+	// Same element
+	if itemLess(item1, item1) {
+		t.Error("item should not be less than itself")
+	}
+
+	// Equal locations fall back to ItemID
+	item4 := ti(4, "a.js", 1, 10)
+	if !itemLess(item1, item4) {
+		t.Error("equal locations should order by ItemID")
 	}
 }
 
-func TestGroupSimilarity(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.8, 1),
-		makePair(b, c, 0.6, 1),
-		makePair(a, c, 0.7, 1),
+func TestAlmostEqual(t *testing.T) {
+	if !almostEqual(1.0, 1.0) {
+		t.Error("1.0 should equal 1.0")
 	}
-	members := map[int]bool{1: true, 2: true, 3: true}
-	avg := averageGroupSimilarity(pairs, members)
-	expected := (0.8 + 0.6 + 0.7) / 3.0
+	if !almostEqual(1.0, 1.0+1e-10) {
+		t.Error("1.0 should be almost equal to 1.0+1e-10")
+	}
+	if almostEqual(1.0, 1.1) {
+		t.Error("1.0 should not be almost equal to 1.1")
+	}
+}
+
+func TestAverageGroupSimilarity(t *testing.T) {
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "c.js", 1, 10)
+
+	sims := map[string]float64{
+		PairKey(item1, item2): 0.9,
+		PairKey(item2, item3): 0.8,
+		PairKey(item1, item3): 0.85,
+	}
+
+	avg := averageGroupSimilarity(sims, []*testItem{item1, item2, item3})
+
+	expected := (0.9 + 0.8 + 0.85) / 3.0
 	if !almostEqual(avg, expected) {
-		t.Fatalf("expected avg %.4f, got %.4f", expected, avg)
+		t.Errorf("Expected average %f, got %f", expected, avg)
 	}
 }
 
-func TestMajorityType(t *testing.T) {
-	a, b, c := newItem(1), newItem(2), newItem(3)
-	pairs := []*ItemPair[*testItem]{
-		makePair(a, b, 0.8, 1),
-		makePair(b, c, 0.7, 2),
-		makePair(a, c, 0.6, 1),
-	}
-	members := map[int]bool{1: true, 2: true, 3: true}
-	mt := majorityType(pairs, members)
-	if mt != 1 {
-		t.Fatalf("expected majority type 1, got %d", mt)
+func TestAverageGroupSimilarityEmpty(t *testing.T) {
+	avg := averageGroupSimilarity(nil, []*testItem{})
+	if avg != 1.0 {
+		t.Errorf("Expected 1.0 for empty/single member, got %f", avg)
 	}
 }
 
-// --- Group ordering test ---
+func TestAverageGroupSimilaritySkipsMissingPairs(t *testing.T) {
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "c.js", 1, 10)
 
-func TestGroupIDsSequential(t *testing.T) {
-	items := make([]*testItem, 6)
-	for i := range items {
-		items[i] = newItem(i + 1)
+	// Only one of three member pairs has a cached similarity; missing pairs
+	// must be skipped rather than counted as 0.
+	sims := map[string]float64{
+		PairKey(item1, item2): 0.9,
 	}
 
-	pairs := []*ItemPair[*testItem]{
-		makePair(items[0], items[1], 0.9, 1),
-		makePair(items[2], items[3], 0.8, 1),
-		makePair(items[4], items[5], 0.7, 1),
+	avg := averageGroupSimilarity(sims, []*testItem{item1, item2, item3})
+	if !almostEqual(avg, 0.9) {
+		t.Errorf("Expected 0.9 (missing pairs skipped), got %f", avg)
+	}
+}
+
+func TestMajorityType_TieBreaksDeterministically(t *testing.T) {
+	item1 := ti(1, "a.js", 0, 0)
+	item2 := ti(2, "b.js", 0, 0)
+	item3 := ti(3, "c.js", 0, 0)
+
+	typeMap := map[string]domain.CloneType{
+		PairKey(item1, item2): domain.Type2Clone,
+		PairKey(item2, item3): domain.Type2Clone,
+		PairKey(item1, item3): domain.Type1Clone,
+	}
+	simMap := map[string]float64{
+		PairKey(item1, item2): 0.9,
+		PairKey(item2, item3): 0.9,
+		PairKey(item1, item3): 0.9,
 	}
 
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeConnected, Threshold: 0.5})
-	groups := s.GroupItems(pairs)
+	majority := majorityType(typeMap, simMap, []*testItem{item1, item2, item3})
 
-	if len(groups) != 3 {
-		t.Fatalf("expected 3 groups, got %d", len(groups))
+	// All pairs tie on similarity, so the strictest (lowest) type wins deterministically.
+	if majority != domain.Type1Clone {
+		t.Errorf("Expected Type1Clone deterministic tie break, got %v", majority)
 	}
-	for i, g := range groups {
-		if g.ID != i+1 {
-			t.Errorf("expected group ID %d, got %d", i+1, g.ID)
+}
+
+// TestMajorityType_PrefersHighSimilarityPair ensures a connected component
+// whose strongest edge is a high-similarity Type-2 pair is reported as Type-2
+// even when weaker Type-3 transitive edges outnumber it.
+func TestMajorityType_PrefersHighSimilarityPair(t *testing.T) {
+	item1 := ti(1, "a.js", 0, 0)
+	item2 := ti(2, "b.js", 0, 0)
+	item3 := ti(3, "c.js", 0, 0)
+	item4 := ti(4, "d.js", 0, 0)
+
+	members := []*testItem{item1, item2, item3, item4}
+	typeMap := map[string]domain.CloneType{
+		PairKey(item1, item2): domain.Type2Clone,
+		PairKey(item1, item3): domain.Type3Clone,
+		PairKey(item1, item4): domain.Type3Clone,
+		PairKey(item2, item3): domain.Type3Clone,
+		PairKey(item2, item4): domain.Type3Clone,
+		PairKey(item3, item4): domain.Type3Clone,
+	}
+	simMap := map[string]float64{
+		PairKey(item1, item2): 0.96, // high-sim Type-2 pair
+		PairKey(item1, item3): 0.85,
+		PairKey(item1, item4): 0.85,
+		PairKey(item2, item3): 0.85,
+		PairKey(item2, item4): 0.85,
+		PairKey(item3, item4): 0.85,
+	}
+
+	majority := majorityType(typeMap, simMap, members)
+	if majority != domain.Type2Clone {
+		t.Errorf("Expected Type2Clone from the highest-similarity edge, got %v", majority)
+	}
+}
+
+func TestMajorityTypeEmpty(t *testing.T) {
+	majority := majorityType(nil, nil, []*testItem{})
+
+	// Conservative default fallback: never report unknown as Type-1
+	if majority != domain.Type4Clone {
+		t.Errorf("Expected Type4Clone as fallback, got %v", majority)
+	}
+}
+
+// StarMedoidGrouping tests
+
+func TestStarMedoidGroupingEmpty(t *testing.T) {
+	grouping := NewStarMedoidGrouping[*testItem](0.8)
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{})
+
+	if len(groups) != 0 {
+		t.Errorf("Expected 0 groups for empty input, got %d", len(groups))
+	}
+}
+
+func TestStarMedoidGroupingSinglePair(t *testing.T) {
+	grouping := NewStarMedoidGrouping[*testItem](0.8)
+
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+	})
+
+	if len(groups) != 1 {
+		t.Fatalf("Expected 1 group, got %d", len(groups))
+	}
+	if len(groups[0].Items) != 2 {
+		t.Errorf("Expected group size 2, got %d", len(groups[0].Items))
+	}
+}
+
+func TestStarMedoidGroupingMedoidSelection(t *testing.T) {
+	grouping := NewStarMedoidGrouping[*testItem](0.7)
+
+	// Item 2 should be medoid as it has highest average similarity to others
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "c.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+		pair(item2, item3, 0.95, domain.Type1Clone),
+		pair(item1, item3, 0.75, domain.Type2Clone),
+	})
+
+	if len(groups) != 1 {
+		t.Fatalf("Expected 1 group, got %d", len(groups))
+	}
+	if len(groups[0].Items) != 3 {
+		t.Errorf("Expected group size 3, got %d", len(groups[0].Items))
+	}
+}
+
+func TestStarMedoidGroupingBelowThreshold(t *testing.T) {
+	grouping := NewStarMedoidGrouping[*testItem](0.9)
+
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.8, domain.Type2Clone),
+	})
+
+	if len(groups) != 0 {
+		t.Errorf("Expected 0 groups (below threshold), got %d", len(groups))
+	}
+}
+
+// CompleteLinkageGrouping tests
+
+func TestCompleteLinkageGroupingEmpty(t *testing.T) {
+	grouping := NewCompleteLinkageGrouping[*testItem](0.8)
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{})
+
+	if len(groups) != 0 {
+		t.Errorf("Expected 0 groups for empty input, got %d", len(groups))
+	}
+}
+
+func TestCompleteLinkageGroupingTriangle(t *testing.T) {
+	grouping := NewCompleteLinkageGrouping[*testItem](0.8)
+
+	// Three items forming a complete triangle (clique)
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "c.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+		pair(item2, item3, 0.9, domain.Type1Clone),
+		pair(item1, item3, 0.9, domain.Type1Clone),
+	})
+
+	if len(groups) != 1 {
+		t.Fatalf("Expected 1 group (triangle is a clique), got %d", len(groups))
+	}
+	if len(groups[0].Items) != 3 {
+		t.Errorf("Expected group size 3, got %d", len(groups[0].Items))
+	}
+}
+
+func TestCompleteLinkageGroupingNonClique(t *testing.T) {
+	grouping := NewCompleteLinkageGrouping[*testItem](0.8)
+
+	// Three items but only 2 edges: 1-2, 2-3 (not a complete clique)
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "c.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+		pair(item2, item3, 0.9, domain.Type1Clone),
+		// Missing item1-item3 edge
+	})
+
+	// Complete-linkage clustering merges one pair first; the chained item
+	// cannot join because it lacks an edge to every member. One group remains.
+	if len(groups) != 1 {
+		t.Fatalf("Expected 1 group (complete-linkage merges one pair), got %d", len(groups))
+	}
+	if len(groups[0].Items) != 2 {
+		t.Errorf("Expected group size 2, got %d", len(groups[0].Items))
+	}
+}
+
+func TestCompleteLinkageGroupingBelowThreshold(t *testing.T) {
+	grouping := NewCompleteLinkageGrouping[*testItem](0.9)
+
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.8, domain.Type2Clone),
+	})
+
+	if len(groups) != 0 {
+		t.Errorf("Expected 0 groups (below threshold), got %d", len(groups))
+	}
+}
+
+// CentroidGrouping tests
+
+func TestCentroidGroupingEmpty(t *testing.T) {
+	grouping := NewCentroidGrouping[*testItem](0.8)
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{})
+
+	if len(groups) != 0 {
+		t.Errorf("Expected 0 groups for empty input, got %d", len(groups))
+	}
+}
+
+func TestCentroidGroupingSinglePair(t *testing.T) {
+	grouping := NewCentroidGrouping[*testItem](0.8)
+
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+	})
+
+	if len(groups) != 1 {
+		t.Fatalf("Expected 1 group, got %d", len(groups))
+	}
+	if len(groups[0].Items) != 2 {
+		t.Errorf("Expected group size 2, got %d", len(groups[0].Items))
+	}
+}
+
+func TestCentroidGroupingTransitivityRejection(t *testing.T) {
+	grouping := NewCentroidGrouping[*testItem](0.8)
+
+	// A~B, B~C but A is NOT similar to C.
+	// Centroid should reject C from joining the group with A and B.
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "c.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+		pair(item2, item3, 0.9, domain.Type1Clone),
+		pair(item1, item3, 0.5, domain.Type3Clone), // Below threshold
+	})
+
+	for _, g := range groups {
+		if len(g.Items) == 3 {
+			t.Errorf("Expected no group of size 3 due to transitive rejection, but found one")
 		}
 	}
 }
 
-// --- Items sorted within groups ---
+func TestCentroidGroupingAllSimilar(t *testing.T) {
+	grouping := NewCentroidGrouping[*testItem](0.8)
 
-func TestItemsSortedWithinGroup(t *testing.T) {
-	a := &testItem{id: 1, key: "z_file|1|10|0|0"}
-	b := &testItem{id: 2, key: "a_file|1|10|0|0"}
-	pairs := []*ItemPair[*testItem]{makePair(a, b, 0.9, 1)}
+	// All items similar to each other (complete clique)
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+	item3 := ti(3, "c.js", 1, 10)
 
-	s := NewGroupingStrategy[*testItem](GroupingConfig{Mode: ModeConnected})
-	groups := s.GroupItems(pairs)
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.9, domain.Type1Clone),
+		pair(item2, item3, 0.9, domain.Type1Clone),
+		pair(item1, item3, 0.85, domain.Type2Clone),
+	})
 
-	if len(groups) != 1 || len(groups[0].Items) != 2 {
-		t.Fatal("expected 1 group with 2 items")
+	if len(groups) != 1 {
+		t.Fatalf("Expected 1 group, got %d", len(groups))
 	}
-	if groups[0].Items[0].ItemKey() > groups[0].Items[1].ItemKey() {
-		t.Fatal("items should be sorted by ItemKey within group")
+	if len(groups[0].Items) != 3 {
+		t.Errorf("Expected group size 3, got %d", len(groups[0].Items))
+	}
+}
+
+func TestCentroidGroupingBelowThreshold(t *testing.T) {
+	grouping := NewCentroidGrouping[*testItem](0.9)
+
+	item1 := ti(1, "a.js", 1, 10)
+	item2 := ti(2, "b.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(item1, item2, 0.8, domain.Type2Clone),
+	})
+
+	if len(groups) != 0 {
+		t.Errorf("Expected 0 groups (below threshold), got %d", len(groups))
 	}
 }
