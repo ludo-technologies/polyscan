@@ -47,8 +47,6 @@ const (
 	maxKeyRoots                = 100
 	earlyTermSizeFactor        = 0.8
 	optimizedMaxDistFactor     = 0.5
-	approxDepthWeight          = 2.0
-	approxSizeWeight           = 0.5
 	maxSameShapeAlignmentCells = 20000
 )
 
@@ -161,15 +159,9 @@ func (a *APTEDAnalyzer) computeApproximateDistanceWithSizes(tree1, tree2 *TreeNo
 	profile1 := collectTreeProfile(tree1)
 	profile2 := collectTreeProfile(tree2)
 
-	// Compute structural differences
-	depthDiff := math.Abs(float64(profile1.height - profile2.height))
-	sizeDiff := math.Abs(float64(size1 - size2))
-
-	structuralDistance := (depthDiff * approxDepthWeight) + (sizeDiff * approxSizeWeight)
 	labelDistance := a.computeLabelProfileDistance(profile1.labels, profile2.labels)
-	distance := math.Max(structuralDistance, labelDistance)
-	if distance > 0 {
-		return distance
+	if labelDistance > 0 {
+		return labelDistance
 	}
 
 	return computeShapeProfileDistance(tree1, tree2)
@@ -193,7 +185,6 @@ type labelProfile struct {
 
 type treeProfile struct {
 	labels map[string]*labelProfile
-	height int
 }
 
 func collectTreeProfile(root *TreeNode) treeProfile {
@@ -204,20 +195,11 @@ func collectTreeProfile(root *TreeNode) treeProfile {
 		return profile
 	}
 
-	type profileStackEntry struct {
-		node  *TreeNode
-		depth int
-	}
-	stack := []profileStackEntry{{node: root}}
+	stack := []*TreeNode{root}
 	for len(stack) > 0 {
 		last := len(stack) - 1
-		item := stack[last]
+		node := stack[last]
 		stack = stack[:last]
-
-		node := item.node
-		if item.depth > profile.height {
-			profile.height = item.depth
-		}
 
 		entry := profile.labels[node.Label]
 		if entry == nil {
@@ -227,7 +209,7 @@ func collectTreeProfile(root *TreeNode) treeProfile {
 		entry.count++
 		for _, child := range node.Children {
 			if child != nil {
-				stack = append(stack, profileStackEntry{node: child, depth: item.depth + 1})
+				stack = append(stack, child)
 			}
 		}
 	}
@@ -407,6 +389,9 @@ func (a *APTEDAnalyzer) computeBoundedSameShapeDistance(tree1, tree2 *TreeNode) 
 	if !sameTreeShape(tree1, tree2) {
 		return 0, false
 	}
+	if shiftDistance, ok := a.singleNodeChainShiftDistance(tree1, tree2); ok {
+		return shiftDistance, true
+	}
 
 	state := sameShapeDistanceState{
 		distances:               make(map[nodePair]float64),
@@ -415,6 +400,68 @@ func (a *APTEDAnalyzer) computeBoundedSameShapeDistance(tree1, tree2 *TreeNode) 
 		alignmentCellsRemaining: maxSameShapeAlignmentCells,
 	}
 	return a.sameShapeNodeDistance(tree1, tree2, &state), true
+}
+
+func (a *APTEDAnalyzer) singleNodeChainShiftDistance(tree1, tree2 *TreeNode) (float64, bool) {
+	left, leftIsChain := linearChainNodes(tree1)
+	right, rightIsChain := linearChainNodes(tree2)
+	if !leftIsChain || !rightIsChain || len(left) != len(right) || len(left) < 2 {
+		return 0, false
+	}
+
+	start := 0
+	for start < len(left) && a.nodeDistance(left[start], right[start]) == 0 {
+		start++
+	}
+	if start == len(left) {
+		return 0, true
+	}
+
+	end := len(left) - 1
+	for end > start && a.nodeDistance(left[end], right[end]) == 0 {
+		end--
+	}
+	if start == end {
+		return 0, false
+	}
+
+	forwardMatches := true
+	backwardMatches := true
+	for i := start; i < end; i++ {
+		forwardMatches = forwardMatches && a.nodeDistance(left[i+1], right[i]) == 0
+		backwardMatches = backwardMatches && a.nodeDistance(left[i], right[i+1]) == 0
+	}
+
+	best := math.Inf(1)
+	if forwardMatches {
+		best = a.costModel.Delete(left[start]) + a.costModel.Insert(right[end])
+	}
+	if backwardMatches {
+		best = math.Min(best, a.costModel.Delete(left[end])+a.costModel.Insert(right[start]))
+	}
+	return best, !math.IsInf(best, 1)
+}
+
+func linearChainNodes(root *TreeNode) ([]*TreeNode, bool) {
+	nodes := make([]*TreeNode, 0)
+	for root != nil {
+		nodes = append(nodes, root)
+		if len(root.Children) == 0 {
+			return nodes, true
+		}
+		if len(root.Children) != 1 || root.Children[0] == nil {
+			return nil, false
+		}
+		root = root.Children[0]
+	}
+	return nodes, true
+}
+
+func (a *APTEDAnalyzer) nodeDistance(left, right *TreeNode) float64 {
+	return math.Min(
+		a.costModel.Rename(left, right),
+		a.costModel.Delete(left)+a.costModel.Insert(right),
+	)
 }
 
 func sameTreeShape(tree1, tree2 *TreeNode) bool {

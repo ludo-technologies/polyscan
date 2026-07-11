@@ -603,6 +603,37 @@ func TestAPTEDAnalyzerSameShapeDistanceMatchesExactAPTED(t *testing.T) {
 	})
 }
 
+func TestAPTEDAnalyzerLargeChainShift(t *testing.T) {
+	const size = largeTreeThreshold + 1
+	tree1 := createShiftedChain(size, 0)
+	tree2 := createShiftedChain(size, 1)
+	analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+	distance := analyzer.ComputeDistance(tree1, tree2)
+
+	if distance != 2.0 {
+		t.Errorf("single-node chain shift should cost one delete and one insert: want 2.0, got %f", distance)
+	}
+}
+
+func TestAPTEDAnalyzerLargeDepthChangeUsesEditCost(t *testing.T) {
+	const size = largeTreeThreshold + 1
+	tree1 := createShiftedChain(size, 0)
+	tree2 := createShiftedChain(size, 0)
+	leaf := tree2
+	for len(leaf.Children) == 1 {
+		leaf = leaf.Children[0]
+	}
+	leaf.AddChild(NewTreeNode(size+1, fmt.Sprintf("node_%d", size)))
+	analyzer := NewAPTEDAnalyzer(NewDefaultCostModel())
+
+	distance := analyzer.ComputeDistance(tree1, tree2)
+
+	if distance != 1.0 {
+		t.Errorf("adding one leaf should cost one insert: want 1.0, got %f", distance)
+	}
+}
+
 func createWideTreeWithLabels(nodeCount int, labelPrefix string) *TreeNode {
 	root := NewTreeNode(1, labelPrefix+"_root")
 	for i := 2; i <= nodeCount; i++ {
@@ -652,6 +683,17 @@ func createTwoLevelTreeWithLabel(parentCount, childrenPerParent int, label strin
 			parent.AddChild(NewTreeNode(nextID, label))
 			nextID++
 		}
+	}
+	return root
+}
+
+func createShiftedChain(nodeCount, shift int) *TreeNode {
+	root := NewTreeNode(1, fmt.Sprintf("node_%d", shift))
+	current := root
+	for i := 1; i < nodeCount; i++ {
+		child := NewTreeNode(i+1, fmt.Sprintf("node_%d", i+shift))
+		current.AddChild(child)
+		current = child
 	}
 	return root
 }
