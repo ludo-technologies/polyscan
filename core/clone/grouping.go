@@ -112,6 +112,20 @@ func PairKey[T GroupableItem](a, b T) string {
 	return kb + "||" + ka
 }
 
+// metadataPairKey identifies a pair by item identity rather than location.
+// Distinct analysis items may legitimately refer to the same source range.
+func metadataPairKey[T GroupableItem](a, b T) string {
+	left, right := a.ItemID(), b.ItemID()
+	if left > right {
+		left, right = right, left
+	}
+	return fmt.Sprintf("%d||%d", left, right)
+}
+
+func suppressedMemberKey[T GroupableItem](item T) string {
+	return fmt.Sprintf("%s||id:%d", ItemKey(item), item.ItemID())
+}
+
 // itemLess provides deterministic ordering between two items by location.
 func itemLess[T GroupableItem](a, b T) bool {
 	al, bl := a.ItemLocation(), b.ItemLocation()
@@ -138,7 +152,7 @@ func itemSimilarity[T GroupableItem](sims map[string]float64, a, b T) float64 {
 	if a.ItemID() == b.ItemID() {
 		return 1.0
 	}
-	if s, ok := sims[PairKey(a, b)]; ok {
+	if s, ok := sims[metadataPairKey(a, b)]; ok {
 		return s
 	}
 	return 0.0
@@ -154,7 +168,7 @@ func averageGroupSimilarity[T GroupableItem](sims map[string]float64, members []
 	cnt := 0
 	for i := 0; i < len(members); i++ {
 		for j := i + 1; j < len(members); j++ {
-			key := PairKey(members[i], members[j])
+			key := metadataPairKey(members[i], members[j])
 			if sim, ok := sims[key]; ok {
 				sum += sim
 				cnt++
@@ -178,7 +192,7 @@ func majorityType[T GroupableItem](typeMap map[string]domain.CloneType, simMap m
 	found := false
 	for i := 0; i < len(members); i++ {
 		for j := i + 1; j < len(members); j++ {
-			key := PairKey(members[i], members[j])
+			key := metadataPairKey(members[i], members[j])
 			t, tok := typeMap[key]
 			s, sok := simMap[key]
 			if !tok || !sok || t == 0 {
@@ -206,8 +220,9 @@ func pairMetadata[T GroupableItem](pairs []*ItemPair[T]) (map[string]float64, ma
 		if pair == nil {
 			continue
 		}
-		key := PairKey(pair.Item1, pair.Item2)
-		if old, ok := similarities[key]; !ok || pair.Similarity > old {
+		key := metadataPairKey(pair.Item1, pair.Item2)
+		old, ok := similarities[key]
+		if !ok || pair.Similarity > old || (almostEqual(pair.Similarity, old) && pair.PairType < types[key]) {
 			similarities[key] = pair.Similarity
 			types[key] = pair.PairType
 		}
@@ -304,8 +319,9 @@ func collectItems[T GroupableItem](pairs []*ItemPair[T]) ([]T, map[string]float6
 			seen[p.Item2.ItemID()] = struct{}{}
 			items = append(items, p.Item2)
 		}
-		key := PairKey(p.Item1, p.Item2)
-		if old, ok := simMap[key]; !ok || p.Similarity > old {
+		key := metadataPairKey(p.Item1, p.Item2)
+		old, ok := simMap[key]
+		if !ok || p.Similarity > old || (almostEqual(p.Similarity, old) && p.PairType < typeMap[key]) {
 			simMap[key] = p.Similarity
 			typeMap[key] = p.PairType
 		}
@@ -586,7 +602,18 @@ func (s *StarMedoidGrouping[T]) GroupItems(pairs []*ItemPair[T]) []*ItemGroup[T]
 		hasMedoid bool
 	}
 	groups := make([]*groupData, 0)
-	for _, members := range comp {
+	componentRoots := make([]int, 0, len(comp))
+	for root := range comp {
+		componentRoots = append(componentRoots, root)
+	}
+	sort.Slice(componentRoots, func(i, j int) bool {
+		left, right := comp[componentRoots[i]], comp[componentRoots[j]]
+		sort.Slice(left, func(a, b int) bool { return itemLess(left[a], left[b]) })
+		sort.Slice(right, func(a, b int) bool { return itemLess(right[a], right[b]) })
+		return itemLess(left[0], right[0])
+	})
+	for _, root := range componentRoots {
+		members := comp[root]
 		if len(members) < 2 {
 			continue
 		}
@@ -650,8 +677,10 @@ func (s *StarMedoidGrouping[T]) GroupItems(pairs []*ItemPair[T]) []*ItemGroup[T]
 		for i := range newGroups {
 			newGroups[i] = &groupData{members: make([]T, 0)}
 		}
-		for itemID, gi := range newAssignment {
-			newGroups[gi].members = append(newGroups[gi].members, itemByID[itemID])
+		for _, item := range items {
+			if gi, ok := newAssignment[item.ItemID()]; ok {
+				newGroups[gi].members = append(newGroups[gi].members, itemByID[item.ItemID()])
+			}
 		}
 
 		// Filter empty groups
@@ -691,6 +720,9 @@ func (s *StarMedoidGrouping[T]) GroupItems(pairs []*ItemPair[T]) []*ItemGroup[T]
 	}
 
 	sortItemGroups(result)
+	for i, group := range result {
+		group.ID = i
+	}
 
 	return result
 }
@@ -797,9 +829,9 @@ func (c *CompleteLinkageGrouping[T]) collectInput(pairs []*ItemPair[T]) complete
 			input.items = append(input.items, pair.Item2)
 		}
 
-		key := PairKey(pair.Item1, pair.Item2)
+		key := metadataPairKey(pair.Item1, pair.Item2)
 		record, ok := pairRecords[key]
-		if !ok || pair.Similarity > record.similarity {
+		if !ok || pair.Similarity > record.similarity || (almostEqual(pair.Similarity, record.similarity) && pair.PairType < record.cloneType) {
 			pairRecords[key] = completeLinkagePairRecord[T]{
 				left:       pair.Item1,
 				right:      pair.Item2,
@@ -1281,10 +1313,10 @@ func (cg *CentroidGrouping[T]) isSimilarToAll(candidate T, members []T, simMap m
 // ---------------------------------------------------------------------------
 
 // GroupDedupeResult carries the surviving groups plus the keys of suppressed
-// members (by ItemKey) and suppressed pairs (by PairKey).
+// members (by location and ItemID) and suppressed pairs (by PairKey).
 type GroupDedupeResult[T GroupableItem] struct {
 	Groups          []*ItemGroup[T]
-	Suppressed      map[string]struct{} // keyed by ItemKey
+	Suppressed      map[string]struct{} // keyed by location and ItemID
 	SuppressedPairs map[string]struct{} // keyed by PairKey
 }
 
@@ -1382,29 +1414,36 @@ func DedupeCoveredGroups[T GroupableItem](groups []*ItemGroup[T]) GroupDedupeRes
 	}
 
 	suppressed := make([]bool, len(groups))
-	for i, gi := range groups {
-		if gi == nil {
-			continue
+	order := make([]int, 0, len(groups))
+	for i, group := range groups {
+		if group != nil {
+			order = append(order, i)
 		}
-		// Compare against every other group, including already-suppressed
-		// ones: coverage is transitive, so a chain g1 ⊂ g2 ⊂ g3 still
-		// resolves to keeping only g3.
-		for j, gj := range groups {
-			if i == j || gj == nil {
+	}
+	// Consider outer groups first. Only a surviving group can suppress another,
+	// because the similarity tolerance is intentionally not transitive.
+	sort.SliceStable(order, func(a, b int) bool {
+		i, j := order[a], order[b]
+		iCoveredByJ := groupCoveredBy(groups[i], groups[j])
+		jCoveredByI := groupCoveredBy(groups[j], groups[i])
+		if iCoveredByJ != jCoveredByI {
+			return jCoveredByI
+		}
+		return i < j
+	})
+	kept := make([]int, 0, len(order))
+	for _, i := range order {
+		for _, j := range kept {
+			if !groupCoveredBy(groups[i], groups[j]) {
 				continue
 			}
-			if !groupCoveredBy(gi, gj) {
-				continue
+			if groupCoveredBy(groups[j], groups[i]) || groups[i].Similarity <= groups[j].Similarity+coveredGroupSimilarityTolerance {
+				suppressed[i] = true
+				break
 			}
-			if groupCoveredBy(gj, gi) {
-				if j > i {
-					continue // mutual coverage: the earlier group survives
-				}
-			} else if gi.Similarity > gj.Similarity+coveredGroupSimilarityTolerance {
-				continue // gi is a distinctly stronger match than its cover
-			}
-			suppressed[i] = true
-			break
+		}
+		if !suppressed[i] {
+			kept = append(kept, i)
 		}
 	}
 
@@ -1550,7 +1589,7 @@ func filterMaximalPerFile[T GroupableItem](items []T) ([]T, map[string]struct{})
 	out := make([]T, 0, n)
 	for i, item := range items {
 		if suppressed[i] {
-			suppressedItems[ItemKey(item)] = struct{}{}
+			suppressedItems[suppressedMemberKey(item)] = struct{}{}
 			continue
 		}
 		out = append(out, item)
@@ -1572,7 +1611,9 @@ func covers(outer, inner ItemLocation, iOuter, iInner int) bool {
 }
 
 // FilterPairsWithSuppressedMembers removes pairs that reference a suppressed
-// member (keyed by ItemKey).
+// member. Identity keys returned by DedupeStrictSubsetGroupMembers distinguish
+// equal-location items; location-only ItemKey values remain accepted when a
+// caller intentionally wants to suppress every item at a location.
 func FilterPairsWithSuppressedMembers[T GroupableItem](pairs []*ItemPair[T], suppressed map[string]struct{}) []*ItemPair[T] {
 	if len(pairs) == 0 || len(suppressed) == 0 {
 		return pairs
@@ -1582,10 +1623,14 @@ func FilterPairsWithSuppressedMembers[T GroupableItem](pairs []*ItemPair[T], sup
 		if pair == nil {
 			continue
 		}
-		if _, ok := suppressed[ItemKey(pair.Item1)]; ok {
+		_, item1Suppressed := suppressed[suppressedMemberKey(pair.Item1)]
+		_, item1LocationSuppressed := suppressed[ItemKey(pair.Item1)]
+		if item1Suppressed || item1LocationSuppressed {
 			continue
 		}
-		if _, ok := suppressed[ItemKey(pair.Item2)]; ok {
+		_, item2Suppressed := suppressed[suppressedMemberKey(pair.Item2)]
+		_, item2LocationSuppressed := suppressed[ItemKey(pair.Item2)]
+		if item2Suppressed || item2LocationSuppressed {
 			continue
 		}
 		out = append(out, pair)

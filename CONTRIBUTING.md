@@ -3,8 +3,8 @@
 ## Getting Started
 
 ```bash
-git clone https://github.com/ludo-technologies/polyscan/core.git
-cd polyscan core
+git clone https://github.com/ludo-technologies/polyscan.git
+cd polyscan/core
 go test ./...
 ```
 
@@ -17,6 +17,7 @@ Requires Go 1.24+.
 3. Make your changes
 4. Run tests and vet:
    ```bash
+   cd core
    go test ./... -count=1
    go vet ./...
    ```
@@ -42,7 +43,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 ## Testing
 
 - All new functionality must include tests
-- Tests must pass before merging: `go test ./... -count=1`
+- Tests must pass before merging: `cd core && go test ./... -count=1`
 - Aim for table-driven tests where applicable
 
 ## Architecture Notes
@@ -55,7 +56,7 @@ polyscan core is a shared library used by [pyscn](https://github.com/ludo-techno
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/ludo-technologies/polyscan/core/issues). Include:
+Use [GitHub Issues](https://github.com/ludo-technologies/polyscan/issues). Include:
 
 - Go version (`go version`)
 - What you expected vs what happened

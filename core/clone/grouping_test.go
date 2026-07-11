@@ -130,6 +130,54 @@ func TestConnectedGroupingSortsMembersDeterministically(t *testing.T) {
 	}
 }
 
+func TestConnectedGroupingKeepsMetadataSeparateForEqualLocations(t *testing.T) {
+	grouping := NewConnectedGrouping[*testItem](0.3)
+	a := ti(1, "same.js", 1, 10)
+	b := ti(2, "same.js", 1, 10)
+	c := ti(3, "other.js", 1, 10)
+
+	groups := grouping.GroupItems([]*ItemPair[*testItem]{
+		pair(a, c, 0.95, domain.Type1Clone),
+		pair(b, c, 0.40, domain.Type3Clone),
+	})
+
+	if len(groups) != 1 {
+		t.Fatalf("expected one connected group, got %d", len(groups))
+	}
+	if !almostEqual(groups[0].Similarity, 0.675) {
+		t.Fatalf("expected distinct pair metadata to average to 0.675, got %.3f", groups[0].Similarity)
+	}
+}
+
+func TestPairMetadataEqualSimilarityUsesStrictestType(t *testing.T) {
+	a := ti(1, "a.js", 1, 10)
+	b := ti(2, "b.js", 1, 10)
+	pairs := []*ItemPair[*testItem]{
+		pair(a, b, 0.9, domain.Type3Clone),
+		pair(b, a, 0.9, domain.Type1Clone),
+	}
+
+	for _, input := range [][]*ItemPair[*testItem]{pairs, {pairs[1], pairs[0]}} {
+		groups := NewConnectedGrouping[*testItem](0.8).GroupItems(input)
+		if len(groups) != 1 || groups[0].GroupType != domain.Type1Clone {
+			t.Fatalf("expected strictest type regardless of pair order, got %+v", groups)
+		}
+	}
+}
+
+func TestStarMedoidGroupIDsFollowSortedOutput(t *testing.T) {
+	a, b := ti(1, "z1.js", 1, 10), ti(2, "z2.js", 1, 10)
+	c, d := ti(3, "a1.js", 1, 10), ti(4, "a2.js", 1, 10)
+	groups := NewStarMedoidGrouping[*testItem](0.8).GroupItems([]*ItemPair[*testItem]{
+		pair(a, b, 0.8, domain.Type2Clone),
+		pair(c, d, 0.9, domain.Type1Clone),
+	})
+
+	if len(groups) != 2 || groups[0].ID != 0 || groups[1].ID != 1 {
+		t.Fatalf("expected sequential IDs after output sorting, got %+v", groups)
+	}
+}
+
 func TestNewKCoreGroupingMinK(t *testing.T) {
 	grouping := NewKCoreGrouping[*testItem](0.8, 1) // k=1 should be bumped to 2
 
@@ -263,9 +311,9 @@ func TestAverageGroupSimilarity(t *testing.T) {
 	item3 := ti(3, "c.js", 1, 10)
 
 	sims := map[string]float64{
-		PairKey(item1, item2): 0.9,
-		PairKey(item2, item3): 0.8,
-		PairKey(item1, item3): 0.85,
+		metadataPairKey(item1, item2): 0.9,
+		metadataPairKey(item2, item3): 0.8,
+		metadataPairKey(item1, item3): 0.85,
 	}
 
 	avg := averageGroupSimilarity(sims, []*testItem{item1, item2, item3})
@@ -291,7 +339,7 @@ func TestAverageGroupSimilaritySkipsMissingPairs(t *testing.T) {
 	// Only one of three member pairs has a cached similarity; missing pairs
 	// must be skipped rather than counted as 0.
 	sims := map[string]float64{
-		PairKey(item1, item2): 0.9,
+		metadataPairKey(item1, item2): 0.9,
 	}
 
 	avg := averageGroupSimilarity(sims, []*testItem{item1, item2, item3})
@@ -306,14 +354,14 @@ func TestMajorityType_TieBreaksDeterministically(t *testing.T) {
 	item3 := ti(3, "c.js", 0, 0)
 
 	typeMap := map[string]domain.CloneType{
-		PairKey(item1, item2): domain.Type2Clone,
-		PairKey(item2, item3): domain.Type2Clone,
-		PairKey(item1, item3): domain.Type1Clone,
+		metadataPairKey(item1, item2): domain.Type2Clone,
+		metadataPairKey(item2, item3): domain.Type2Clone,
+		metadataPairKey(item1, item3): domain.Type1Clone,
 	}
 	simMap := map[string]float64{
-		PairKey(item1, item2): 0.9,
-		PairKey(item2, item3): 0.9,
-		PairKey(item1, item3): 0.9,
+		metadataPairKey(item1, item2): 0.9,
+		metadataPairKey(item2, item3): 0.9,
+		metadataPairKey(item1, item3): 0.9,
 	}
 
 	majority := majorityType(typeMap, simMap, []*testItem{item1, item2, item3})
@@ -335,20 +383,20 @@ func TestMajorityType_PrefersHighSimilarityPair(t *testing.T) {
 
 	members := []*testItem{item1, item2, item3, item4}
 	typeMap := map[string]domain.CloneType{
-		PairKey(item1, item2): domain.Type2Clone,
-		PairKey(item1, item3): domain.Type3Clone,
-		PairKey(item1, item4): domain.Type3Clone,
-		PairKey(item2, item3): domain.Type3Clone,
-		PairKey(item2, item4): domain.Type3Clone,
-		PairKey(item3, item4): domain.Type3Clone,
+		metadataPairKey(item1, item2): domain.Type2Clone,
+		metadataPairKey(item1, item3): domain.Type3Clone,
+		metadataPairKey(item1, item4): domain.Type3Clone,
+		metadataPairKey(item2, item3): domain.Type3Clone,
+		metadataPairKey(item2, item4): domain.Type3Clone,
+		metadataPairKey(item3, item4): domain.Type3Clone,
 	}
 	simMap := map[string]float64{
-		PairKey(item1, item2): 0.96, // high-sim Type-2 pair
-		PairKey(item1, item3): 0.85,
-		PairKey(item1, item4): 0.85,
-		PairKey(item2, item3): 0.85,
-		PairKey(item2, item4): 0.85,
-		PairKey(item3, item4): 0.85,
+		metadataPairKey(item1, item2): 0.96, // high-sim Type-2 pair
+		metadataPairKey(item1, item3): 0.85,
+		metadataPairKey(item1, item4): 0.85,
+		metadataPairKey(item2, item3): 0.85,
+		metadataPairKey(item2, item4): 0.85,
+		metadataPairKey(item3, item4): 0.85,
 	}
 
 	majority := majorityType(typeMap, simMap, members)

@@ -81,7 +81,7 @@ Generic interfaces abstract over language-specific types.
 ### Phase 1: Publish polyscan core v0.1.0
 1. Extract Tier 1 code into polyscan core
 2. Write tests for all extracted packages
-3. Tag v0.1.0
+3. Tag `core/v0.1.0` (submodules require a directory-prefixed tag)
 
 ### Phase 2: Migrate pyscn
 1. `go get github.com/ludo-technologies/polyscan/core@v0.1.0`

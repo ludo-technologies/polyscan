@@ -80,6 +80,21 @@ func TestCoveredGroups_ChainCollapsesToOutermost(t *testing.T) {
 	}
 }
 
+func TestCoveredGroups_SimilarityToleranceDoesNotChain(t *testing.T) {
+	inner := mkGroup(1, gi("x.js", 3, 8), gi("y.js", 3, 8))
+	inner.Similarity = 0.90
+	middle := mkGroup(2, gi("x.js", 2, 9), gi("y.js", 2, 9))
+	middle.Similarity = 0.86
+	outer := mkGroup(3, gi("x.js", 1, 10), gi("y.js", 1, 10))
+	outer.Similarity = 0.82
+
+	out := DedupeCoveredGroups([]*ItemGroup[*testItem]{inner, middle, outer})
+
+	if len(out.Groups) != 2 || out.Groups[0] != inner || out.Groups[1] != outer {
+		t.Fatalf("expected strong inner and outer groups to survive, got %+v", out.Groups)
+	}
+}
+
 // TestCoveredGroups_PartialCoverageKeptBoth verifies a group is kept when any
 // member falls outside the other group's windows: it carries information the
 // covering group does not.
@@ -209,7 +224,7 @@ func TestFilterMaximalPerFile_StrictSubsetSuppressed(t *testing.T) {
 	if len(kept) != 1 || kept[0] != outer {
 		t.Fatalf("expected only the covering fragment to survive, got %d kept", len(kept))
 	}
-	if _, ok := suppressed[ItemKey(inner)]; !ok {
+	if _, ok := suppressed[suppressedMemberKey(inner)]; !ok {
 		t.Fatalf("expected the covered fragment to be reported as suppressed")
 	}
 }
@@ -235,8 +250,32 @@ func TestDedupeStrictSubsetGroupMembers_CollapsesOverlappingWindows(t *testing.T
 	if len(out.Groups[0].Items) != 2 {
 		t.Fatalf("expected 2 members after collapsing overlap, got %d", len(out.Groups[0].Items))
 	}
-	if _, ok := out.Suppressed[ItemKey(b)]; !ok {
+	if _, ok := out.Suppressed[suppressedMemberKey(b)]; !ok {
 		t.Fatalf("expected the covered member to be reported as suppressed")
+	}
+}
+
+func TestDedupeStrictSubsetGroupMembers_EqualLocationKeepsRetainedPairs(t *testing.T) {
+	a := gi("x.js", 1, 10)
+	b := gi("x.js", 1, 10)
+	c := gi("y.js", 1, 10)
+	pairs := []*ItemPair[*testItem]{
+		pair(a, c, 0.9, domain.Type2Clone),
+		pair(b, c, 0.8, domain.Type3Clone),
+	}
+
+	deduped := DedupeStrictSubsetGroupMembers(
+		[]*ItemGroup[*testItem]{mkGroup(1, a, b, c)},
+		pairs,
+	)
+	filtered := FilterPairsWithSuppressedMembers(pairs, deduped.Suppressed)
+	backed := FilterGroupsWithoutBackingPairs(deduped.Groups, filtered)
+
+	if len(filtered) != 1 || filtered[0].Item1 != a {
+		t.Fatalf("expected retained equal-location member's pair to survive, got %+v", filtered)
+	}
+	if len(backed) != 1 {
+		t.Fatalf("expected deduplicated group to retain its backing pair")
 	}
 }
 
