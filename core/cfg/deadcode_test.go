@@ -299,3 +299,156 @@ func TestDeadCodeAlternatePathAroundReturn(t *testing.T) {
 		}
 	}
 }
+
+// testNoOpClassifier extends testClassifier with no-op detection (";").
+type testNoOpClassifier struct {
+	testClassifier
+}
+
+func (tc *testNoOpClassifier) IsNoOp(stmt any) bool {
+	s, ok := stmt.(string)
+	return ok && s == ";"
+}
+
+func TestDeadCodeSkipsNoOpOnlyBlocks(t *testing.T) {
+	c := NewCFG("noop")
+	b1 := c.CreateBlock("b1")
+	orphan := c.CreateBlock("orphan")
+	orphan.AddStatement(";")
+	orphan.AddStatement(";")
+	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
+	c.ConnectBlocks(b1, c.Exit, EdgeNormal)
+
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testNoOpClassifier{}})
+
+	if len(result.Findings) != 0 {
+		t.Fatalf("expected no findings for no-op-only unreachable block, got %d", len(result.Findings))
+	}
+}
+
+func TestDeadCodeReportsMixedNoOpBlocks(t *testing.T) {
+	c := NewCFG("mixed")
+	b1 := c.CreateBlock("b1")
+	orphan := c.CreateBlock("orphan")
+	orphan.AddStatement(";")
+	orphan.AddStatement("call()")
+	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
+	c.ConnectBlocks(b1, c.Exit, EdgeNormal)
+
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testNoOpClassifier{}})
+
+	if len(result.Findings) != 1 {
+		t.Fatalf("expected 1 finding for block with real statements, got %d", len(result.Findings))
+	}
+}
+
+func TestDeadCodeFindingsAreDeterministicallyOrdered(t *testing.T) {
+	c := NewCFG("order")
+	b1 := c.CreateBlock("b1")
+	c.ConnectBlocks(c.Entry, b1, EdgeNormal)
+	c.ConnectBlocks(b1, c.Exit, EdgeNormal)
+	// Multiple orphan blocks; findings must come back in sorted block-ID order.
+	for _, id := range []string{"orphan_c", "orphan_a", "orphan_b"} {
+		c.CreateBlock(id)
+	}
+
+	result := DetectDeadCode(c, DeadCodeConfig{Classifier: &testClassifier{}})
+
+	if len(result.Findings) != 3 {
+		t.Fatalf("expected 3 findings, got %d", len(result.Findings))
+	}
+	for i := 1; i < len(result.Findings); i++ {
+		if result.Findings[i-1].BlockID > result.Findings[i].BlockID {
+			t.Fatalf("findings not sorted by block ID: %s > %s", result.Findings[i-1].BlockID, result.Findings[i].BlockID)
+		}
+	}
+}
+
+// --- Line-level merge pass ---
+
+func lf(start, end int, reason string, sev DeadCodeSeverity) *LineFinding {
+	return &LineFinding{StartLine: start, EndLine: end, Reason: reason, Severity: sev, Code: "x"}
+}
+
+func TestMergeContiguousFindings(t *testing.T) {
+	t.Run("merges overlapping same-reason findings", func(t *testing.T) {
+		in := []*LineFinding{
+			lf(4, 6, "after_throw", SeverityWarning),
+			lf(6, 6, "after_throw", SeverityCritical),
+		}
+		out := MergeContiguousFindings(in)
+		if len(out) != 1 {
+			t.Fatalf("expected 1 finding, got %d", len(out))
+		}
+		if out[0].StartLine != 4 || out[0].EndLine != 6 {
+			t.Errorf("expected merged range 4-6, got %d-%d", out[0].StartLine, out[0].EndLine)
+		}
+		if out[0].Severity != SeverityCritical {
+			t.Errorf("expected highest severity to be kept, got %d", out[0].Severity)
+		}
+	})
+
+	t.Run("merges adjacent same-reason findings", func(t *testing.T) {
+		in := []*LineFinding{
+			lf(4, 6, "after_throw", SeverityCritical),
+			lf(7, 8, "after_throw", SeverityCritical),
+		}
+		out := MergeContiguousFindings(in)
+		if len(out) != 1 {
+			t.Fatalf("expected 1 finding, got %d", len(out))
+		}
+		if out[0].EndLine != 8 {
+			t.Errorf("expected merged end line 8, got %d", out[0].EndLine)
+		}
+	})
+
+	t.Run("does not merge across a gap", func(t *testing.T) {
+		in := []*LineFinding{
+			lf(4, 4, "after_throw", SeverityCritical),
+			lf(6, 6, "after_throw", SeverityCritical),
+		}
+		out := MergeContiguousFindings(in)
+		if len(out) != 2 {
+			t.Errorf("expected 2 findings, got %d", len(out))
+		}
+	})
+
+	t.Run("does not merge different reasons", func(t *testing.T) {
+		in := []*LineFinding{
+			lf(4, 6, "after_throw", SeverityCritical),
+			lf(6, 6, "unreachable", SeverityWarning),
+		}
+		out := MergeContiguousFindings(in)
+		if len(out) != 2 {
+			t.Errorf("expected 2 findings, got %d", len(out))
+		}
+	})
+}
+
+func TestSortLineFindings(t *testing.T) {
+	in := []*LineFinding{
+		lf(5, 9, "unreachable", SeverityCritical),
+		lf(2, 8, "unreachable", SeverityCritical),
+		lf(2, 3, "unreachable", SeverityCritical),
+	}
+	SortLineFindings(in)
+	if in[0].EndLine != 3 || in[1].EndLine != 8 || in[2].StartLine != 5 {
+		t.Errorf("expected sort by StartLine then EndLine, got %+v", in)
+	}
+}
+
+func TestMergeCodeLines(t *testing.T) {
+	if got := mergeCodeLines("", "b"); got != "b" {
+		t.Errorf("empty a: got %q", got)
+	}
+	if got := mergeCodeLines("a", ""); got != "a" {
+		t.Errorf("empty b: got %q", got)
+	}
+	// Duplicated boundary line is emitted once.
+	if got := mergeCodeLines("if (x) {\n  dead()", "  dead()\n}"); got != "if (x) {\n  dead()\n}" {
+		t.Errorf("boundary dedup failed: got %q", got)
+	}
+	if got := mergeCodeLines("a", "b"); got != "a\nb" {
+		t.Errorf("simple join: got %q", got)
+	}
+}
