@@ -6,10 +6,12 @@ import (
 	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
-// MethodAccess describes a method and which instance variables it accesses.
+// MethodAccess describes a method, which instance variables it accesses, and
+// which sibling methods it calls (intra-class calls, e.g. self.helper()).
 type MethodAccess struct {
 	MethodName   string
 	InstanceVars map[string]bool
+	Calls        map[string]bool
 }
 
 // Result holds the LCOM4 analysis result for a class.
@@ -41,8 +43,9 @@ func DefaultConfig() Config {
 }
 
 // ComputeLCOM4 computes the LCOM4 metric using the Union-Find algorithm.
-// LCOM4 counts the number of connected components among methods,
-// where two methods are connected if they share at least one instance variable.
+// LCOM4 counts the number of connected components among methods, where two
+// methods are connected if they share at least one instance variable or one
+// calls the other (intra-class method calls).
 func ComputeLCOM4(methods []MethodAccess, config Config) *Result {
 	result := &Result{
 		MethodGroups: [][]string{},
@@ -131,6 +134,19 @@ func ComputeLCOM4(methods []MethodAccess, config Config) *Result {
 		}
 	}
 
+	// Union methods connected by intra-class method calls
+	methodIndex := make(map[string]int, len(sortedMethods))
+	for i, m := range sortedMethods {
+		methodIndex[m.MethodName] = i
+	}
+	for i, m := range sortedMethods {
+		for callee := range m.Calls {
+			if j, exists := methodIndex[callee]; exists {
+				union(i, j)
+			}
+		}
+	}
+
 	// Count connected components and build method groups
 	components := make(map[int][]int) // root -> list of method indices
 	for i := range sortedMethods {
@@ -138,17 +154,9 @@ func ComputeLCOM4(methods []MethodAccess, config Config) *Result {
 		components[root] = append(components[root], i)
 	}
 
-	// Sort component roots for deterministic output
-	roots := make([]int, 0, len(components))
-	for r := range components {
-		roots = append(roots, r)
-	}
-	sort.Ints(roots)
-
 	result.LCOM4 = len(components)
 	result.MethodGroups = make([][]string, 0, len(components))
-	for _, root := range roots {
-		indices := components[root]
+	for _, indices := range components {
 		group := make([]string, len(indices))
 		for i, idx := range indices {
 			group[i] = sortedMethods[idx].MethodName
@@ -156,6 +164,10 @@ func ComputeLCOM4(methods []MethodAccess, config Config) *Result {
 		sort.Strings(group)
 		result.MethodGroups = append(result.MethodGroups, group)
 	}
+	// Sort groups by first method name for deterministic output
+	sort.Slice(result.MethodGroups, func(i, j int) bool {
+		return result.MethodGroups[i][0] < result.MethodGroups[j][0]
+	})
 
 	result.RiskLevel = AssessRisk(result.LCOM4, config)
 	return result

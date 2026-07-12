@@ -10,19 +10,20 @@ type DefUseKind int
 
 const (
 	DefKindAssign    DefUseKind = iota // Assignment (x = ...)
-	DefKindAugAssign                    // Augmented assignment (x += ...)
-	DefKindParam                        // Function parameter
-	DefKindImport                       // Import statement
-	DefKindFor                          // For-loop variable
-	DefKindWith                         // With-statement variable
-	DefKindExcept                       // Exception handler variable
-	DefKindGlobal                       // Global declaration
-	DefKindNonlocal                     // Nonlocal declaration
-	DefKindDelete                       // Delete statement
-	UseKindLoad                         // Simple name load
-	UseKindAttribute                    // Attribute access
-	UseKindCall                         // Function call
-	UseKindSubscript                    // Subscript access
+	DefKindAugAssign                   // Augmented assignment (x += ...)
+	DefKindParam                       // Function parameter
+	DefKindImport                      // Import statement
+	DefKindFor                         // For-loop variable
+	DefKindWith                        // With-statement variable
+	DefKindExcept                      // Exception handler variable
+	DefKindGlobal                      // Global declaration
+	DefKindNonlocal                    // Nonlocal declaration
+	DefKindDelete                      // Delete statement
+	DefKindPattern                     // Match/case capture pattern (case x:)
+	UseKindLoad                        // Simple name load
+	UseKindAttribute                   // Attribute access
+	UseKindCall                        // Function call
+	UseKindSubscript                   // Subscript access
 )
 
 // String returns the string representation of a DefUseKind.
@@ -48,6 +49,8 @@ func (k DefUseKind) String() string {
 		return "nonlocal"
 	case DefKindDelete:
 		return "delete"
+	case DefKindPattern:
+		return "pattern"
 	case UseKindLoad:
 		return "load"
 	case UseKindAttribute:
@@ -63,7 +66,7 @@ func (k DefUseKind) String() string {
 
 // IsDef returns true if this kind represents a definition.
 func (k DefUseKind) IsDef() bool {
-	return k >= DefKindAssign && k <= DefKindDelete
+	return k >= DefKindAssign && k <= DefKindPattern
 }
 
 // IsUse returns true if this kind represents a use.

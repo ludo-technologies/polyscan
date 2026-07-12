@@ -269,3 +269,99 @@ func TestCompareEdgeDistributions_Orthogonal(t *testing.T) {
 		t.Errorf("orthogonal distributions should have sim 0.0, got %f", sim)
 	}
 }
+
+// --- Semantic evidence ---
+
+func sigs(strong, returns, literals []string) SemanticSignals {
+	s := NewSemanticSignals()
+	for _, v := range strong {
+		s.StrongSignals[v] = struct{}{}
+	}
+	for _, v := range returns {
+		s.ReturnCategories[v] = struct{}{}
+	}
+	for _, v := range literals {
+		s.StringLiterals[v] = struct{}{}
+	}
+	return s
+}
+
+func TestApplySemanticEvidence(t *testing.T) {
+	tests := []struct {
+		name string
+		s1   SemanticSignals
+		s2   SemanticSignals
+		base float64
+		want float64
+	}{
+		{
+			"shared strong signal keeps score",
+			sigs([]string{"call:open"}, []string{"none"}, nil),
+			sigs([]string{"call:open"}, []string{"none"}, nil),
+			1.0, 1.0,
+		},
+		{
+			"no shared strong signal is discounted",
+			sigs([]string{"call:open"}, nil, nil),
+			sigs([]string{"call:close"}, nil, nil),
+			1.0, semanticMismatchPenalty,
+		},
+		{
+			"missing signals on one side get benefit of the doubt",
+			sigs(nil, nil, nil),
+			sigs([]string{"call:open"}, nil, nil),
+			0.9, 0.9,
+		},
+		{
+			"incompatible return categories are discounted",
+			sigs([]string{"call:open"}, []string{"none"}, nil),
+			sigs([]string{"call:open"}, []string{"collection"}, nil),
+			1.0, semanticMismatchPenalty,
+		},
+		{
+			"disjoint literal vocabularies are strongly discounted",
+			sigs([]string{"call:open"}, nil, []string{"alpha", "beta"}),
+			sigs([]string{"call:open"}, nil, []string{"gamma", "delta"}),
+			1.0, literalMismatchPenalty,
+		},
+		{
+			"insufficient literal evidence is not counted against",
+			sigs([]string{"call:open"}, nil, []string{"alpha"}),
+			sigs([]string{"call:open"}, nil, []string{"gamma", "delta"}),
+			1.0, 1.0,
+		},
+		{
+			"partial literal overlap keeps score",
+			sigs([]string{"call:open"}, nil, []string{"alpha", "beta"}),
+			sigs([]string{"call:open"}, nil, []string{"alpha", "delta"}),
+			1.0, 1.0,
+		},
+		{
+			"zero base stays zero",
+			sigs(nil, nil, nil),
+			sigs(nil, nil, nil),
+			0.0, 0.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ApplySemanticEvidence(tt.base, tt.s1, tt.s2)
+			if got != tt.want {
+				t.Errorf("ApplySemanticEvidence = %f, want %f", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestApplySemanticEvidenceLiteralCheckPrecedesSignals(t *testing.T) {
+	// Disjoint literals apply the stronger penalty even when strong signals
+	// also mismatch (checks are ordered: literals first).
+	s1 := sigs([]string{"call:open"}, nil, []string{"a", "b"})
+	s2 := sigs([]string{"call:close"}, nil, []string{"c", "d"})
+
+	got := ApplySemanticEvidence(1.0, s1, s2)
+	if got != literalMismatchPenalty {
+		t.Errorf("expected literal penalty %f to win, got %f", literalMismatchPenalty, got)
+	}
+}
