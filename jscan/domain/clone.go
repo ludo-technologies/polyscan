@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	coreclone "github.com/ludo-technologies/polyscan/core/clone"
 	"github.com/ludo-technologies/polyscan/jscan/internal/constants"
 )
 
@@ -76,6 +77,18 @@ type Clone struct {
 	Size       int            `json:"size" yaml:"size" csv:"size"` // Number of AST nodes
 	LineCount  int            `json:"line_count" yaml:"line_count" csv:"line_count"`
 	Complexity int            `json:"complexity" yaml:"complexity" csv:"complexity"`
+}
+
+func (c *Clone) ItemID() int { return c.ID }
+
+func (c *Clone) ItemLocation() coreclone.ItemLocation {
+	if c == nil || c.Location == nil {
+		return coreclone.ItemLocation{}
+	}
+	return coreclone.ItemLocation{
+		FilePath: c.Location.FilePath, StartLine: c.Location.StartLine,
+		EndLine: c.Location.EndLine, StartCol: c.Location.StartCol, EndCol: c.Location.EndCol,
+	}
 }
 
 // String returns string representation of Clone

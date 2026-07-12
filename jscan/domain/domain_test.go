@@ -5,6 +5,20 @@ import (
 	"testing"
 )
 
+func TestCloneGroupableItem(t *testing.T) {
+	clone := &Clone{ID: 7, Location: &CloneLocation{FilePath: "sample.js", StartLine: 2, EndLine: 8, StartCol: 3, EndCol: 12}}
+	if clone.ItemID() != 7 {
+		t.Fatalf("ItemID() = %d, want 7", clone.ItemID())
+	}
+	location := clone.ItemLocation()
+	if location.FilePath != "sample.js" || location.StartLine != 2 || location.EndLine != 8 || location.StartCol != 3 || location.EndCol != 12 {
+		t.Fatalf("ItemLocation() = %+v", location)
+	}
+	if location := (&Clone{ID: 8}).ItemLocation(); location.FilePath != "" || location.StartLine != 0 {
+		t.Fatalf("nil location should map to zero value, got %+v", location)
+	}
+}
+
 // Error tests
 
 func TestDomainError_Error(t *testing.T) {

@@ -8,6 +8,9 @@ import (
 	"runtime"
 	"sort"
 
+	"github.com/ludo-technologies/polyscan/core/apted"
+	coreclone "github.com/ludo-technologies/polyscan/core/clone"
+	coredomain "github.com/ludo-technologies/polyscan/core/domain"
 	"github.com/ludo-technologies/polyscan/jscan/domain"
 	"github.com/ludo-technologies/polyscan/jscan/internal/constants"
 	"github.com/ludo-technologies/polyscan/jscan/internal/parser"
@@ -46,7 +49,7 @@ func NewCodeFragment(location *CodeLocation, astNode *parser.Node, content strin
 		Location:  location,
 		ASTNode:   astNode,
 		Content:   content,
-		Hash:      hashFragmentContent(content),
+		Hash:      fragmentHashNormalizer.HashFragmentContent(content),
 		Size:      calculateASTSize(astNode),
 		LineCount: location.EndLine - location.StartLine + 1,
 	}
@@ -103,9 +106,9 @@ type CloneDetectorConfig struct {
 	LargeProjectSize   int // Fragment count threshold for large projects
 
 	// Grouping configuration
-	GroupingMode      GroupingMode // Default: GroupingModeConnected
-	GroupingThreshold float64      // Default: Type3Threshold
-	KCoreK            int          // Default: 2
+	GroupingMode      coreclone.GroupingMode // Default: coreclone.ModeConnected
+	GroupingThreshold float64                // Default: Type3Threshold
+	KCoreK            int                    // Default: 2
 
 	// LSH Configuration (optional, opt-in)
 	UseLSH                 bool    // Enable LSH acceleration
@@ -137,7 +140,7 @@ func DefaultCloneDetectorConfig() *CloneDetectorConfig {
 		LargeProjectSize:   500,
 
 		// Grouping defaults
-		GroupingMode:      GroupingModeConnected,
+		GroupingMode:      coreclone.ModeConnected,
 		GroupingThreshold: constants.DefaultType4CloneThreshold,
 		KCoreK:            2,
 
@@ -151,24 +154,19 @@ func DefaultCloneDetectorConfig() *CloneDetectorConfig {
 	}
 }
 
-// jaccardRejectionThreshold is the Jaccard similarity below which pairs are
-// rejected without running APTED. At 0.10, virtually no true Type-3/4 clones
-// are missed while the vast majority of non-clone pairs are skipped.
-const jaccardRejectionThreshold = 0.10
-
 // CloneDetector detects code clones using APTED algorithm
 type CloneDetector struct {
 	// Embed config fields (private to maintain encapsulation)
 	cloneDetectorConfig CloneDetectorConfig
 
-	analyzer          *APTEDAnalyzer
-	converter         *TreeConverter
-	textualAnalyzer   *TextualSimilarityAnalyzer
-	syntacticAnalyzer *SyntacticSimilarityAnalyzer
-	featureExtractor  *ASTFeatureExtractor // Source for CodeFragment.Features
-	fragments         []*CodeFragment
-	clonePairs        []*domain.ClonePair
-	cloneGroups       []*domain.CloneGroup
+	analyzer         *APTEDAnalyzer
+	converter        *TreeConverter
+	textualAnalyzer  *coreclone.TextualSimilarityAnalyzer
+	featureExtractor *coreclone.ASTFeatureExtractor
+	pairClassifier   *coreclone.PairClassifier
+	fragments        []*CodeFragment
+	clonePairs       []*domain.ClonePair
+	cloneGroups      []*domain.CloneGroup
 
 	// fragmentClones maps each fragment to its single domain.Clone so the
 	// same fragment shares one clone ID across all pairs (required for
@@ -194,14 +192,22 @@ func NewCloneDetector(config *CloneDetectorConfig) *CloneDetector {
 	}
 
 	analyzer := NewAPTEDAnalyzer(costModel)
+	textualAnalyzer := coreclone.NewTextualSimilarityAnalyzer(removeJSComments)
+	syntacticAnalyzer := coreclone.NewSyntacticSimilarityAnalyzer()
+	classifier := coreclone.NewPairClassifier(coreclone.ClassifierConfig{
+		Type1Threshold: config.Type1Threshold, Type2Threshold: config.Type2Threshold,
+		Type3Threshold: config.Type3Threshold, Type4Threshold: config.Type4Threshold,
+		EnableType1: true, EnableType2: true, EnableType3: true, EnableType4: true,
+		JaccardPreFilterThreshold: 0.10,
+	}, textualAnalyzer, syntacticAnalyzer)
 
 	return &CloneDetector{
 		cloneDetectorConfig: *config,
 		analyzer:            analyzer,
 		converter:           NewTreeConverter(),
-		textualAnalyzer:     NewTextualSimilarityAnalyzer(),
-		syntacticAnalyzer:   NewSyntacticSimilarityAnalyzer(),
-		featureExtractor:    NewASTFeatureExtractor(),
+		textualAnalyzer:     textualAnalyzer,
+		featureExtractor:    coreclone.NewASTFeatureExtractor(),
+		pairClassifier:      classifier,
 		fragments:           []*CodeFragment{},
 		clonePairs:          []*domain.ClonePair{},
 		cloneGroups:         []*domain.CloneGroup{},
@@ -455,16 +461,7 @@ func (cd *CloneDetector) DetectClonesWithContext(ctx context.Context, fragments 
 	if k < 2 {
 		k = 2
 	}
-	groupingConfig := GroupingConfig{
-		Mode:           cd.cloneDetectorConfig.GroupingMode,
-		Threshold:      thr,
-		KCoreK:         k,
-		Type1Threshold: cd.cloneDetectorConfig.Type1Threshold,
-		Type2Threshold: cd.cloneDetectorConfig.Type2Threshold,
-		Type3Threshold: cd.cloneDetectorConfig.Type3Threshold,
-		Type4Threshold: cd.cloneDetectorConfig.Type4Threshold,
-	}
-	strategy := CreateGroupingStrategy(groupingConfig)
+	strategy := coreclone.NewGroupingStrategy[*domain.Clone](coreclone.GroupingConfig{Mode: cd.cloneDetectorConfig.GroupingMode, Threshold: thr, KCoreK: k})
 	cd.groupClonesWithStrategy(strategy)
 
 	return cd.clonePairs, cd.cloneGroups
@@ -598,16 +595,7 @@ func (cd *CloneDetector) DetectClonesWithLSH(ctx context.Context, fragments []*C
 	if k < 2 {
 		k = 2
 	}
-	groupingConfig := GroupingConfig{
-		Mode:           cd.cloneDetectorConfig.GroupingMode,
-		Threshold:      thr,
-		KCoreK:         k,
-		Type1Threshold: cd.cloneDetectorConfig.Type1Threshold,
-		Type2Threshold: cd.cloneDetectorConfig.Type2Threshold,
-		Type3Threshold: cd.cloneDetectorConfig.Type3Threshold,
-		Type4Threshold: cd.cloneDetectorConfig.Type4Threshold,
-	}
-	strategy := CreateGroupingStrategy(groupingConfig)
+	strategy := coreclone.NewGroupingStrategy[*domain.Clone](coreclone.GroupingConfig{Mode: cd.cloneDetectorConfig.GroupingMode, Threshold: thr, KCoreK: k})
 	cd.groupClonesWithStrategy(strategy)
 
 	return cd.clonePairs, cd.cloneGroups
@@ -626,7 +614,7 @@ func (cd *CloneDetector) prepareFragments() {
 			continue
 		}
 		PrepareTreeForAPTED(fragment.TreeNode)
-		features, _ := cd.featureExtractor.ExtractFeatures(fragment.TreeNode)
+		features, _ := cd.featureExtractor.ExtractFeatures(toCoreTree(fragment.TreeNode))
 		fragment.Features = features
 	}
 }
@@ -764,24 +752,6 @@ func (cd *CloneDetector) detectClonePairsWithBatchingContext(ctx context.Context
 	cd.clonePairs = topPairs
 }
 
-// shouldCompareFragments performs early filtering to determine if two fragments should be compared
-func (cd *CloneDetector) shouldCompareFragments(fragment1, fragment2 *CodeFragment) bool {
-	// Early filtering: Skip if size difference is too large (>50%)
-	sizeDiff := math.Abs(float64(fragment1.Size - fragment2.Size))
-	avgSize := float64(fragment1.Size+fragment2.Size) / 2.0
-	if avgSize > 0 && sizeDiff/avgSize > 0.5 {
-		return false // Too different in size to be clones
-	}
-
-	// Early filtering: Skip if line count difference is too large
-	lineDiff := math.Abs(float64(fragment1.LineCount - fragment2.LineCount))
-	if lineDiff > float64(fragment1.LineCount)*0.5 && lineDiff > float64(fragment2.LineCount)*0.5 {
-		return false // Too different in line count
-	}
-
-	return true
-}
-
 // compareFragments compares two fragments and returns a clone pair if similar.
 // Uses a Jaccard pre-filter on pre-computed features to minimize expensive APTED calls.
 func (cd *CloneDetector) compareFragments(fragment1, fragment2 *CodeFragment, pairID int) *domain.ClonePair {
@@ -790,30 +760,30 @@ func (cd *CloneDetector) compareFragments(fragment1, fragment2 *CodeFragment, pa
 	}
 
 	// Early filtering check
-	if !cd.shouldCompareFragments(fragment1, fragment2) {
+	coreFragment1, coreFragment2 := toCoreFragment(fragment1, 0), toCoreFragment(fragment2, 1)
+	if !coreclone.ShouldCompareFragments(coreFragment1, coreFragment2) {
 		return nil
 	}
 
 	// Jaccard pre-filter: reject clear non-clones before expensive APTED work.
 	// Only used for rejection — all non-rejected pairs proceed to APTED-based
 	// classification for accurate clone typing and distance computation.
-	if len(fragment1.Features) > 0 && len(fragment2.Features) > 0 {
-		if jaccardSimilarity(fragment1.Features, fragment2.Features) < jaccardRejectionThreshold {
-			return nil
-		}
+	if !cd.pairClassifier.PassesJaccardPreFilter(coreFragment1, coreFragment2) {
+		return nil
 	}
 
 	// Compute edit distance and similarity using APTED algorithm
 	distance, similarity := cd.analyzer.ComputeDistanceAndSimilarity(fragment1.TreeNode, fragment2.TreeNode)
 
 	// Determine clone type with textual/syntactic gating
-	cloneType, similarity := cd.classifyClonePair(fragment1, fragment2, similarity)
+	coreType, similarity := cd.pairClassifier.ClassifyPair(coreFragment1, coreFragment2, similarity)
+	cloneType := domain.CloneType(coreType)
 	if cloneType == 0 {
 		return nil // Not a significant clone
 	}
 
 	// Calculate confidence based on fragment size and similarity
-	confidence := cd.calculateConfidence(fragment1, fragment2, similarity)
+	confidence := coreclone.CalculateConfidence(coreFragment1, coreFragment2, similarity)
 
 	// Create domain Clone objects (shared per fragment across pairs)
 	clone1 := cd.fragmentToClone(fragment1)
@@ -864,71 +834,6 @@ func (cd *CloneDetector) newCloneFromFragment(fragment *CodeFragment, id int) *d
 	}
 }
 
-// classifyClonePair classifies a clone pair, gating Type-1 on exact textual
-// match and Type-2 on syntactic (normalized AST) similarity. Returns the
-// (possibly capped) similarity actually used for classification.
-func (cd *CloneDetector) classifyClonePair(fragment1, fragment2 *CodeFragment, similarity float64) (domain.CloneType, float64) {
-	if similarity >= cd.cloneDetectorConfig.Type1Threshold && cd.textualAnalyzer.IsExactMatch(fragment1, fragment2) {
-		return domain.Type1Clone, similarity
-	}
-
-	structuralSimilarity := cd.capNonTextualSimilarity(similarity)
-	if structuralSimilarity >= cd.cloneDetectorConfig.Type2Threshold {
-		syntacticSimilarity := cd.syntacticAnalyzer.ComputeSimilarity(fragment1, fragment2)
-		if syntacticSimilarity >= cd.cloneDetectorConfig.Type2Threshold {
-			return domain.Type2Clone, math.Min(structuralSimilarity, syntacticSimilarity)
-		}
-	}
-	if structuralSimilarity >= cd.cloneDetectorConfig.Type3Threshold {
-		return domain.Type3Clone, structuralSimilarity
-	}
-	if structuralSimilarity >= cd.cloneDetectorConfig.Type4Threshold {
-		return domain.Type4Clone, structuralSimilarity
-	}
-
-	return 0, structuralSimilarity
-}
-
-// capNonTextualSimilarity caps structural similarity just below the Type-1
-// threshold so that pairs without an exact textual match never report a
-// Type-1-level similarity.
-func (cd *CloneDetector) capNonTextualSimilarity(similarity float64) float64 {
-	if similarity < cd.cloneDetectorConfig.Type1Threshold {
-		return similarity
-	}
-
-	capped := math.Nextafter(cd.cloneDetectorConfig.Type1Threshold, 0)
-	if capped < cd.cloneDetectorConfig.Type2Threshold {
-		return cd.cloneDetectorConfig.Type2Threshold
-	}
-	return capped
-}
-
-// calculateConfidence calculates confidence in clone detection
-func (cd *CloneDetector) calculateConfidence(fragment1, fragment2 *CodeFragment, similarity float64) float64 {
-	// Base confidence on similarity
-	confidence := similarity
-
-	// Increase confidence for larger fragments
-	avgSize := float64(fragment1.Size+fragment2.Size) / 2.0
-	sizeBonus := math.Min(avgSize/100.0, 0.2) // Up to 20% bonus for large fragments
-	confidence += sizeBonus
-
-	// Increase confidence if both fragments have similar complexity
-	if fragment1.Complexity > 0 && fragment2.Complexity > 0 {
-		complexityRatio := float64(minInt(fragment1.Complexity, fragment2.Complexity)) /
-			float64(maxInt(fragment1.Complexity, fragment2.Complexity))
-		confidence += complexityRatio * 0.1 // Up to 10% bonus for similar complexity
-	}
-
-	// Cap confidence at 1.0
-	if confidence > 1.0 {
-		confidence = 1.0
-	}
-
-	return confidence
-}
-
 // isSignificantClone determines if a clone pair is significant enough to report
 func (cd *CloneDetector) isSignificantClone(pair *domain.ClonePair) bool {
 	// Check minimum similarity threshold
@@ -952,19 +857,63 @@ func (cd *CloneDetector) isSignificantClone(pair *domain.ClonePair) bool {
 }
 
 // groupClonesWithStrategy groups clone pairs using a pluggable strategy.
-func (cd *CloneDetector) groupClonesWithStrategy(strategy GroupingStrategy) {
+func (cd *CloneDetector) groupClonesWithStrategy(strategy coreclone.GroupingStrategy[*domain.Clone]) {
 	if strategy == nil {
 		cd.cloneGroups = []*domain.CloneGroup{}
 		return
 	}
-	memberResult := dedupeStrictSubsetGroupMembers(strategy.GroupClones(cd.clonePairs), cd.clonePairs)
-	groupResult := dedupeCoveredGroups(memberResult.groups)
-	cd.cloneGroups = filterCloneGroupsWithoutBackingPairs(groupResult.groups, cd.clonePairs)
-	for key := range memberResult.suppressed {
-		groupResult.suppressed[key] = struct{}{}
+	corePairs := make([]*coreclone.ItemPair[*domain.Clone], 0, len(cd.clonePairs))
+	originals := make(map[*coreclone.ItemPair[*domain.Clone]]*domain.ClonePair, len(cd.clonePairs))
+	for _, pair := range cd.clonePairs {
+		if pair == nil || pair.Clone1 == nil || pair.Clone2 == nil {
+			continue
+		}
+		converted := &coreclone.ItemPair[*domain.Clone]{Item1: pair.Clone1, Item2: pair.Clone2, Similarity: pair.Similarity, PairType: coredomain.CloneType(pair.Type)}
+		corePairs = append(corePairs, converted)
+		originals[converted] = pair
 	}
-	cd.clonePairs = filterClonePairsWithSuppressedMembers(cd.clonePairs, groupResult.suppressed)
-	cd.clonePairs = filterSuppressedClonePairs(cd.clonePairs, groupResult.suppressedPairs)
+	memberResult := coreclone.DedupeStrictSubsetGroupMembers(strategy.GroupItems(corePairs), corePairs)
+	groupResult := coreclone.DedupeCoveredGroups(memberResult.Groups)
+	groups := coreclone.FilterGroupsWithoutBackingPairs(groupResult.Groups, corePairs)
+	for key := range memberResult.Suppressed {
+		groupResult.Suppressed[key] = struct{}{}
+	}
+	corePairs = coreclone.FilterPairsWithSuppressedMembers(corePairs, groupResult.Suppressed)
+	corePairs = coreclone.FilterSuppressedPairs(corePairs, groupResult.SuppressedPairs)
+	cd.clonePairs = cd.clonePairs[:0]
+	for _, pair := range corePairs {
+		cd.clonePairs = append(cd.clonePairs, originals[pair])
+	}
+	cd.cloneGroups = make([]*domain.CloneGroup, 0, len(groups))
+	for _, group := range groups {
+		cd.cloneGroups = append(cd.cloneGroups, &domain.CloneGroup{ID: group.ID, Clones: group.Items, Type: domain.CloneType(group.GroupType), Similarity: group.Similarity, Size: len(group.Items)})
+	}
+}
+
+func toCoreFragment(fragment *CodeFragment, id int) *coreclone.CodeFragment {
+	if fragment == nil {
+		return nil
+	}
+	result := &coreclone.CodeFragment{ID: id, Content: fragment.Content, Hash: fragment.Hash, ASTNode: toCoreTree(fragment.TreeNode), NodeCount: fragment.Size, LineCount: fragment.LineCount, Complexity: fragment.Complexity, Features: fragment.Features}
+	if fragment.Location != nil {
+		result.FilePath = fragment.Location.FilePath
+		result.StartLine = fragment.Location.StartLine
+		result.EndLine = fragment.Location.EndLine
+		result.StartCol = fragment.Location.StartCol
+		result.EndCol = fragment.Location.EndCol
+	}
+	return result
+}
+
+func toCoreTree(node *TreeNode) *apted.TreeNode {
+	if node == nil {
+		return nil
+	}
+	result := apted.NewTreeNode(node.ID, node.Label)
+	for _, child := range node.Children {
+		result.AddChild(toCoreTree(child))
+	}
+	return result
 }
 
 // isSameLocation checks if two locations refer to the same code

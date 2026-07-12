@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"testing"
 
+	coreclone "github.com/ludo-technologies/polyscan/core/clone"
 	"github.com/ludo-technologies/polyscan/jscan/domain"
 	"github.com/ludo-technologies/polyscan/jscan/internal/parser"
 )
@@ -22,7 +23,7 @@ func TestDefaultCloneDetectorConfig(t *testing.T) {
 	if config.CostModelType != "javascript" {
 		t.Errorf("Expected CostModelType 'javascript', got %s", config.CostModelType)
 	}
-	if config.GroupingMode != GroupingModeConnected {
+	if config.GroupingMode != coreclone.ModeConnected {
 		t.Errorf("Expected GroupingMode 'connected', got %s", config.GroupingMode)
 	}
 }
@@ -290,8 +291,8 @@ func TestClassifyClonePair(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, _ := detector.classifyClonePair(tc.fragment1, tc.fragment2, tc.similarity)
-			if result != tc.expected {
+			result, _ := detector.pairClassifier.ClassifyPair(toCoreFragment(tc.fragment1, 0), toCoreFragment(tc.fragment2, 1), tc.similarity)
+			if domain.CloneType(result) != tc.expected {
 				t.Errorf("For similarity %.2f, expected %v, got %v", tc.similarity, tc.expected, result)
 			}
 		})
@@ -301,7 +302,6 @@ func TestClassifyClonePair(t *testing.T) {
 func TestDetectClonesEmpty(t *testing.T) {
 	config := DefaultCloneDetectorConfig()
 	detector := NewCloneDetector(config)
-
 	pairs, groups := detector.DetectClones([]*CodeFragment{})
 
 	if len(pairs) != 0 {
@@ -379,9 +379,6 @@ func TestIsSameLocation(t *testing.T) {
 }
 
 func TestCalculateConfidence(t *testing.T) {
-	config := DefaultCloneDetectorConfig()
-	detector := NewCloneDetector(config)
-
 	fragment1 := &CodeFragment{
 		Size:       100,
 		Complexity: 10,
@@ -391,7 +388,7 @@ func TestCalculateConfidence(t *testing.T) {
 		Complexity: 10,
 	}
 
-	confidence := detector.calculateConfidence(fragment1, fragment2, 0.9)
+	confidence := coreclone.CalculateConfidence(toCoreFragment(fragment1, 0), toCoreFragment(fragment2, 1), 0.9)
 
 	// Base confidence (0.9) + size bonus + complexity bonus
 	if confidence < 0.9 || confidence > 1.0 {
@@ -402,7 +399,6 @@ func TestCalculateConfidence(t *testing.T) {
 func TestGetStatistics(t *testing.T) {
 	config := DefaultCloneDetectorConfig()
 	detector := NewCloneDetector(config)
-
 	stats := detector.GetStatistics()
 
 	if stats["total_fragments"] != 0 {
@@ -468,9 +464,6 @@ func TestCalculateBatchSize(t *testing.T) {
 }
 
 func TestShouldCompareFragments(t *testing.T) {
-	config := DefaultCloneDetectorConfig()
-	detector := NewCloneDetector(config)
-
 	testCases := []struct {
 		name     string
 		size1    int
@@ -488,7 +481,7 @@ func TestShouldCompareFragments(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f1 := &CodeFragment{Size: tc.size1, LineCount: tc.lines1}
 			f2 := &CodeFragment{Size: tc.size2, LineCount: tc.lines2}
-			result := detector.shouldCompareFragments(f1, f2)
+			result := coreclone.ShouldCompareFragments(toCoreFragment(f1, 0), toCoreFragment(f2, 1))
 			if result != tc.expected {
 				t.Errorf("Expected %v, got %v", tc.expected, result)
 			}
