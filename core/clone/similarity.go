@@ -166,7 +166,7 @@ func (t *TextualSimilarityAnalyzer) normalizeWhitespaceInContent(content string)
 	b.Grow(len(content))
 	var quote byte
 	escaped := false
-	inWhitespace := false
+	pendingWhitespace := false
 
 	for i := 0; i < len(content); i++ {
 		ch := content[i]
@@ -184,22 +184,36 @@ func (t *TextualSimilarityAnalyzer) normalizeWhitespaceInContent(content string)
 
 		if ch == '\'' || ch == '"' || ch == '`' {
 			quote = ch
-			inWhitespace = false
+			pendingWhitespace = false
 			b.WriteByte(ch)
 			continue
 		}
 		if isSourceWhitespace(ch) {
-			if !inWhitespace {
-				b.WriteByte(' ')
-				inWhitespace = true
-			}
+			pendingWhitespace = true
 			continue
 		}
-		inWhitespace = false
+		if pendingWhitespace && b.Len() > 0 && needsTokenSeparator(contentByteAtEnd(&b), ch) {
+			b.WriteByte(' ')
+		}
+		pendingWhitespace = false
 		b.WriteByte(ch)
 	}
 
-	return strings.TrimSpace(b.String())
+	return b.String()
+}
+
+func contentByteAtEnd(b *strings.Builder) byte {
+	content := b.String()
+	return content[len(content)-1]
+}
+
+func needsTokenSeparator(left, right byte) bool {
+	return isTokenWordByte(left) && isTokenWordByte(right)
+}
+
+func isTokenWordByte(ch byte) bool {
+	return ch >= 0x80 || ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' ||
+		ch >= '0' && ch <= '9' || ch == '_' || ch == '$'
 }
 
 func isSourceWhitespace(ch byte) bool {

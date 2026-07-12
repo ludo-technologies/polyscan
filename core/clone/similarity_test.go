@@ -119,6 +119,17 @@ func TestTextualSimilarityExactMatchAfterNormalization(t *testing.T) {
 	}
 }
 
+func TestTextualSimilarityIgnoresWhitespaceAroundPunctuation(t *testing.T) {
+	ta := NewTextualSimilarityAnalyzer(nil)
+
+	f1 := &CodeFragment{ID: 1, Content: "return a+b; foo(x);"}
+	f2 := &CodeFragment{ID: 2, Content: "return  a + b ; foo ( x ) ;"}
+
+	if !ta.IsExactMatch(f1, f2) {
+		t.Error("whitespace around punctuation must not prevent a Type-1 match")
+	}
+}
+
 func TestTextualSimilarityNearMatchIsNotExact(t *testing.T) {
 	ta := NewTextualSimilarityAnalyzer(nil)
 
