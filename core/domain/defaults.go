@@ -3,7 +3,7 @@ package domain
 // Clone type thresholds (similarity score 0.0-1.0).
 const (
 	DefaultType1CloneThreshold = 0.85
-	DefaultType2CloneThreshold = 0.80
+	DefaultType2CloneThreshold = 0.75
 	DefaultType3CloneThreshold = 0.70
 	DefaultType4CloneThreshold = 0.65
 )

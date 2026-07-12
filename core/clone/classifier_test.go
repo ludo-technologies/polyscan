@@ -1,247 +1,271 @@
 package clone
 
 import (
+	"math"
 	"testing"
 
 	"github.com/ludo-technologies/polyscan/core/domain"
 )
 
-type mockAnalyzer struct {
-	similarity float64
-	name       string
+func testClassifierConfig() ClassifierConfig {
+	config := DefaultClassifierConfig()
+	config.Type1Threshold = 0.95
+	config.Type2Threshold = 0.85
+	config.Type3Threshold = 0.80
+	config.Type4Threshold = 0.75
+	return config
 }
 
-func (m *mockAnalyzer) ComputeSimilarity(f1, f2 *CodeFragment) float64 { return m.similarity }
-func (m *mockAnalyzer) Name() string                                   { return m.name }
-
-func newTestClassifier(sim float64) *Classifier {
-	cfg := DefaultClassifierConfig()
-	c := NewClassifier(cfg)
-	mock := &mockAnalyzer{similarity: sim, name: "mock"}
-	c.RegisterAnalyzer(domain.Type1Clone, mock)
-	c.RegisterAnalyzer(domain.Type2Clone, mock)
-	c.RegisterAnalyzer(domain.Type3Clone, mock)
-	c.RegisterAnalyzer(domain.Type4Clone, mock)
-	return c
+func newTestPairClassifier() *PairClassifier {
+	return NewPairClassifier(
+		testClassifierConfig(),
+		NewTextualSimilarityAnalyzer(nil),
+		NewSyntacticSimilarityAnalyzer(),
+	)
 }
 
-func TestClassifyNilFragments(t *testing.T) {
-	c := newTestClassifier(0.9)
-	f := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
+func TestClassifyPairType1RequiresExactTextualMatch(t *testing.T) {
+	c := newTestPairClassifier()
 
-	if r := c.Classify(nil, f); r != nil {
-		t.Error("expected nil for nil f1")
-	}
-	if r := c.Classify(f, nil); r != nil {
-		t.Error("expected nil for nil f2")
-	}
-	if r := c.Classify(nil, nil); r != nil {
-		t.Error("expected nil for both nil")
-	}
-}
+	f1 := &CodeFragment{ID: 1, Content: "return a + b;"}
+	f2 := &CodeFragment{ID: 2, Content: "return  a +  b;"} // whitespace only
 
-func TestClassifyHighSimilarityReturnsType1(t *testing.T) {
-	c := newTestClassifier(0.95)
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
-
-	r := c.Classify(f1, f2)
-	if r == nil {
-		t.Fatal("expected non-nil result")
+	cloneType, similarity := c.ClassifyPair(f1, f2, 0.99)
+	if cloneType != domain.Type1Clone {
+		t.Fatalf("expected Type1, got %v", cloneType)
 	}
-	if r.CloneType != domain.Type1Clone {
-		t.Errorf("CloneType = %v, want Type1Clone", r.CloneType)
-	}
-	if r.Similarity != 0.95 {
-		t.Errorf("Similarity = %f, want 0.95", r.Similarity)
-	}
-	if r.AnalyzerName != "mock" {
-		t.Errorf("AnalyzerName = %q, want %q", r.AnalyzerName, "mock")
+	if similarity != 0.99 {
+		t.Errorf("Type-1 similarity must be uncapped, got %f", similarity)
 	}
 }
 
-func TestClassifyMediumSimilarityReturnsType2(t *testing.T) {
-	// 0.82 is above Type2 threshold (0.80) but below Type1 threshold (0.85)
-	c := newTestClassifier(0.82)
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
+func TestClassifyPairHighStructuralWithoutTextualMatchIsCapped(t *testing.T) {
+	c := newTestPairClassifier()
 
-	r := c.Classify(f1, f2)
-	if r == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if r.CloneType != domain.Type2Clone {
-		t.Errorf("CloneType = %v, want Type2Clone", r.CloneType)
-	}
-}
+	// Same structure, renamed identifier: structural similarity is high but
+	// there is no exact textual match, so Type-1 similarity must not be
+	// reported. Identical features satisfy the Type-2 syntactic gate.
+	f1 := &CodeFragment{ID: 1, Content: "return alpha;", Features: []string{"f1", "f2"}}
+	f2 := &CodeFragment{ID: 2, Content: "return beta;", Features: []string{"f1", "f2"}}
 
-func TestClassifyType3Similarity(t *testing.T) {
-	// 0.75 is above Type3 threshold (0.70) but below Type2 threshold (0.80)
-	c := newTestClassifier(0.75)
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
-
-	r := c.Classify(f1, f2)
-	if r == nil {
-		t.Fatal("expected non-nil result")
+	cloneType, similarity := c.ClassifyPair(f1, f2, 0.99)
+	if cloneType != domain.Type2Clone {
+		t.Fatalf("expected Type2, got %v", cloneType)
 	}
-	if r.CloneType != domain.Type3Clone {
-		t.Errorf("CloneType = %v, want Type3Clone", r.CloneType)
+	if similarity >= c.config.Type1Threshold {
+		t.Errorf("non-textual pair must report similarity below Type-1 threshold, got %f", similarity)
 	}
 }
 
-func TestClassifyType4Similarity(t *testing.T) {
-	// 0.67 is above Type4 threshold (0.65) but below Type3 threshold (0.70)
-	c := newTestClassifier(0.67)
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
+func TestClassifyPairType2RequiresSyntacticGate(t *testing.T) {
+	c := newTestPairClassifier()
 
-	r := c.Classify(f1, f2)
-	if r == nil {
-		t.Fatal("expected non-nil result")
-	}
-	if r.CloneType != domain.Type4Clone {
-		t.Errorf("CloneType = %v, want Type4Clone", r.CloneType)
-	}
-}
+	// High structural similarity but disjoint normalized features: the
+	// syntactic gate fails and classification falls through to Type-3.
+	f1 := &CodeFragment{ID: 1, Content: "if (a) { f(); }", Features: []string{"f1", "f2"}}
+	f2 := &CodeFragment{ID: 2, Content: "if (b) { g(); }", Features: []string{"g1", "g2"}}
 
-func TestClassifyBelowAllThresholds(t *testing.T) {
-	c := newTestClassifier(0.50)
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
-
-	r := c.Classify(f1, f2)
-	if r != nil {
-		t.Errorf("expected nil for similarity below all thresholds, got %+v", r)
+	cloneType, _ := c.ClassifyPair(f1, f2, 0.90)
+	if cloneType != domain.Type3Clone {
+		t.Fatalf("expected Type3 when syntactic gate fails, got %v", cloneType)
 	}
 }
 
-func TestClassifyDisabledType(t *testing.T) {
-	cfg := DefaultClassifierConfig()
-	cfg.EnableType1 = false
-	c := NewClassifier(cfg)
-	mock := &mockAnalyzer{similarity: 0.95, name: "mock"}
-	c.RegisterAnalyzer(domain.Type1Clone, mock)
-	c.RegisterAnalyzer(domain.Type2Clone, mock)
-	c.RegisterAnalyzer(domain.Type3Clone, mock)
-	c.RegisterAnalyzer(domain.Type4Clone, mock)
+func TestClassifyPairType2SimilarityIsMinOfGates(t *testing.T) {
+	config := testClassifierConfig()
+	c := NewPairClassifier(config, NewTextualSimilarityAnalyzer(nil), NewSyntacticSimilarityAnalyzer())
 
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
+	// Feature overlap of 6/7 ≈ 0.857 passes the 0.85 syntactic gate and is
+	// lower than the capped structural similarity, so it wins the min().
+	shared := []string{"a", "b", "c", "d", "e", "f"}
+	f1 := &CodeFragment{ID: 1, Content: "x", Features: append([]string{}, shared...)}
+	f2 := &CodeFragment{ID: 2, Content: "y", Features: append(append([]string{}, shared...), "g")}
 
-	r := c.Classify(f1, f2)
-	if r == nil {
-		t.Fatal("expected non-nil result")
+	cloneType, similarity := c.ClassifyPair(f1, f2, 0.99)
+	if cloneType != domain.Type2Clone {
+		t.Fatalf("expected Type2, got %v", cloneType)
 	}
-	// Type-1 is disabled, so it should fall through to Type-2
-	if r.CloneType != domain.Type2Clone {
-		t.Errorf("CloneType = %v, want Type2Clone (Type1 disabled)", r.CloneType)
+	want := 6.0 / 7.0
+	if math.Abs(similarity-want) > 1e-9 {
+		t.Errorf("expected min(structural, syntactic) = %f, got %f", want, similarity)
 	}
 }
 
-func TestClassifyBatch(t *testing.T) {
-	cfg := DefaultClassifierConfig()
-	c := NewClassifier(cfg)
+func TestClassifyPairType3AndType4(t *testing.T) {
+	c := newTestPairClassifier()
 
-	highMock := &mockAnalyzer{similarity: 0.90, name: "high"}
-	lowMock := &mockAnalyzer{similarity: 0.50, name: "low"}
+	f1 := &CodeFragment{ID: 1, Content: "a"}
+	f2 := &CodeFragment{ID: 2, Content: "b"}
 
-	// Register high analyzer for Type1, low for all others
-	c.RegisterAnalyzer(domain.Type1Clone, highMock)
-	c.RegisterAnalyzer(domain.Type2Clone, lowMock)
-	c.RegisterAnalyzer(domain.Type3Clone, lowMock)
-	c.RegisterAnalyzer(domain.Type4Clone, lowMock)
-
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
-	f3 := &CodeFragment{ID: 3, FilePath: "c.go", StartLine: 1, EndLine: 10}
-
-	pairs := [][2]*CodeFragment{
-		{f1, f2}, // high similarity -> Type1
-		{f2, f3}, // high similarity -> Type1
-		{f1, f3}, // high similarity -> Type1
+	if cloneType, _ := c.ClassifyPair(f1, f2, 0.82); cloneType != domain.Type3Clone {
+		t.Errorf("expected Type3 at 0.82, got %v", cloneType)
 	}
-
-	results := c.ClassifyBatch(pairs)
-	if len(results) != 3 {
-		t.Fatalf("expected 3 results, got %d", len(results))
-	}
-
-	for _, r := range results {
-		if r.CloneType != domain.Type1Clone {
-			t.Errorf("expected Type1Clone, got %v", r.CloneType)
-		}
+	if cloneType, _ := c.ClassifyPair(f1, f2, 0.76); cloneType != domain.Type4Clone {
+		t.Errorf("expected Type4 at 0.76, got %v", cloneType)
 	}
 }
 
-func TestClassifyBatchFiltersBelowThreshold(t *testing.T) {
-	cfg := DefaultClassifierConfig()
-	c := NewClassifier(cfg)
+func TestClassifyPairBelowAllThresholds(t *testing.T) {
+	c := newTestPairClassifier()
 
-	lowMock := &mockAnalyzer{similarity: 0.30, name: "low"}
-	c.RegisterAnalyzer(domain.Type1Clone, lowMock)
-	c.RegisterAnalyzer(domain.Type2Clone, lowMock)
-	c.RegisterAnalyzer(domain.Type3Clone, lowMock)
-	c.RegisterAnalyzer(domain.Type4Clone, lowMock)
+	f1 := &CodeFragment{ID: 1, Content: "a"}
+	f2 := &CodeFragment{ID: 2, Content: "b"}
 
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
-
-	pairs := [][2]*CodeFragment{{f1, f2}}
-	results := c.ClassifyBatch(pairs)
-	if len(results) != 0 {
-		t.Errorf("expected 0 results for below-threshold pairs, got %d", len(results))
+	cloneType, similarity := c.ClassifyPair(f1, f2, 0.5)
+	if cloneType != 0 {
+		t.Errorf("expected no clone type below all thresholds, got %v", cloneType)
+	}
+	if similarity != 0.5 {
+		t.Errorf("similarity below Type-1 threshold must pass through unchanged, got %f", similarity)
 	}
 }
 
-func TestDefaultClassifierConfig(t *testing.T) {
-	cfg := DefaultClassifierConfig()
+func TestClassifyPairDisabledTypesAreSkipped(t *testing.T) {
+	config := testClassifierConfig()
+	config.EnableType1 = false
+	config.EnableType2 = false
+	config.EnableType3 = false
+	c := NewPairClassifier(config, NewTextualSimilarityAnalyzer(nil), NewSyntacticSimilarityAnalyzer())
 
-	if cfg.Type1Threshold != domain.DefaultType1CloneThreshold {
-		t.Errorf("Type1Threshold = %f, want %f", cfg.Type1Threshold, domain.DefaultType1CloneThreshold)
-	}
-	if cfg.Type2Threshold != domain.DefaultType2CloneThreshold {
-		t.Errorf("Type2Threshold = %f, want %f", cfg.Type2Threshold, domain.DefaultType2CloneThreshold)
-	}
-	if cfg.Type3Threshold != domain.DefaultType3CloneThreshold {
-		t.Errorf("Type3Threshold = %f, want %f", cfg.Type3Threshold, domain.DefaultType3CloneThreshold)
-	}
-	if cfg.Type4Threshold != domain.DefaultType4CloneThreshold {
-		t.Errorf("Type4Threshold = %f, want %f", cfg.Type4Threshold, domain.DefaultType4CloneThreshold)
-	}
-	if !cfg.EnableType1 || !cfg.EnableType2 || !cfg.EnableType3 || !cfg.EnableType4 {
-		t.Error("all clone types should be enabled by default")
-	}
-	if cfg.JaccardPreFilterThreshold != 0.0 {
-		t.Errorf("JaccardPreFilterThreshold = %f, want 0.0", cfg.JaccardPreFilterThreshold)
+	f1 := &CodeFragment{ID: 1, Content: "same", Features: []string{"f"}}
+	f2 := &CodeFragment{ID: 2, Content: "same", Features: []string{"f"}}
+
+	cloneType, _ := c.ClassifyPair(f1, f2, 0.99)
+	if cloneType != domain.Type4Clone {
+		t.Errorf("expected Type4 with types 1-3 disabled, got %v", cloneType)
 	}
 }
 
-func TestClassifyConfidence(t *testing.T) {
-	// With similarity=1.0 and threshold=0.85, confidence should be 1.0
-	c := newTestClassifier(1.0)
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
+func TestCapNonTextualSimilarity(t *testing.T) {
+	c := newTestPairClassifier()
 
-	r := c.Classify(f1, f2)
-	if r == nil {
-		t.Fatal("expected non-nil result")
+	// Below the Type-1 threshold: unchanged.
+	if got := c.capNonTextualSimilarity(0.90); got != 0.90 {
+		t.Errorf("below-threshold similarity must pass through, got %f", got)
 	}
-	if r.Confidence != 1.0 {
-		t.Errorf("Confidence = %f, want 1.0", r.Confidence)
+
+	// At or above the Type-1 threshold: capped just below it.
+	got := c.capNonTextualSimilarity(1.0)
+	if got >= c.config.Type1Threshold {
+		t.Errorf("capped similarity %f must be below Type-1 threshold %f", got, c.config.Type1Threshold)
+	}
+	if got < c.config.Type2Threshold {
+		t.Errorf("capped similarity %f must not fall below Type-2 threshold %f", got, c.config.Type2Threshold)
 	}
 }
 
-func TestClassifyNoAnalyzerRegistered(t *testing.T) {
-	cfg := DefaultClassifierConfig()
-	c := NewClassifier(cfg)
-	// No analyzers registered
+func TestPassesJaccardPreFilter(t *testing.T) {
+	c := newTestPairClassifier()
 
-	f1 := &CodeFragment{ID: 1, FilePath: "a.go", StartLine: 1, EndLine: 10}
-	f2 := &CodeFragment{ID: 2, FilePath: "b.go", StartLine: 1, EndLine: 10}
+	sharedFeatures := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i"}
+	similar1 := &CodeFragment{ID: 1, Features: append([]string{}, sharedFeatures...)}
+	similar2 := &CodeFragment{ID: 2, Features: append(append([]string{}, sharedFeatures...), "j")}
+	if !c.PassesJaccardPreFilter(similar1, similar2) {
+		t.Error("highly similar features must pass the pre-filter")
+	}
 
-	r := c.Classify(f1, f2)
-	if r != nil {
-		t.Errorf("expected nil with no analyzers registered, got %+v", r)
+	disjoint := &CodeFragment{ID: 3, Features: []string{"x", "y", "z", "w", "v", "u", "t", "s", "r", "q"}}
+	if c.PassesJaccardPreFilter(similar1, disjoint) {
+		t.Error("disjoint features must be rejected by the pre-filter")
+	}
+
+	noFeatures := &CodeFragment{ID: 4}
+	if !c.PassesJaccardPreFilter(similar1, noFeatures) {
+		t.Error("fragments without features must always pass")
+	}
+
+	zeroConfig := testClassifierConfig()
+	zeroConfig.JaccardPreFilterThreshold = 0
+	czero := NewPairClassifier(zeroConfig, nil, nil)
+	if !czero.PassesJaccardPreFilter(similar1, disjoint) {
+		t.Error("zero threshold must disable the pre-filter")
+	}
+}
+
+func TestShouldCompareFragments(t *testing.T) {
+	base := &CodeFragment{ID: 1, NodeCount: 100, LineCount: 20}
+
+	similar := &CodeFragment{ID: 2, NodeCount: 110, LineCount: 22}
+	if !ShouldCompareFragments(base, similar) {
+		t.Error("similar-size fragments must be compared")
+	}
+
+	tooBig := &CodeFragment{ID: 3, NodeCount: 300, LineCount: 21}
+	if ShouldCompareFragments(base, tooBig) {
+		t.Error("fragments with >50% node-count difference must be skipped")
+	}
+
+	tooManyLines := &CodeFragment{ID: 4, NodeCount: 105, LineCount: 60}
+	if ShouldCompareFragments(base, tooManyLines) {
+		t.Error("fragments with large line-count difference must be skipped")
+	}
+}
+
+func TestCalculateConfidence(t *testing.T) {
+	f1 := &CodeFragment{ID: 1, NodeCount: 50, Complexity: 4}
+	f2 := &CodeFragment{ID: 2, NodeCount: 50, Complexity: 4}
+
+	confidence := CalculateConfidence(f1, f2, 0.8)
+	if confidence <= 0.8 {
+		t.Errorf("size and complexity bonuses should raise confidence above similarity, got %f", confidence)
+	}
+	if confidence > 1.0 {
+		t.Errorf("confidence must be capped at 1.0, got %f", confidence)
+	}
+
+	huge1 := &CodeFragment{ID: 3, NodeCount: 10000, Complexity: 10}
+	huge2 := &CodeFragment{ID: 4, NodeCount: 10000, Complexity: 10}
+	if confidence := CalculateConfidence(huge1, huge2, 0.99); confidence != 1.0 {
+		t.Errorf("confidence must be capped at 1.0, got %f", confidence)
+	}
+}
+
+func TestLocationsOverlap(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b ItemLocation
+		want bool
+	}{
+		{
+			"different files",
+			ItemLocation{FilePath: "a.js", StartLine: 1, EndLine: 10},
+			ItemLocation{FilePath: "b.js", StartLine: 1, EndLine: 10},
+			false,
+		},
+		{
+			"overlapping ranges",
+			ItemLocation{FilePath: "a.js", StartLine: 1, EndLine: 10},
+			ItemLocation{FilePath: "a.js", StartLine: 5, EndLine: 15},
+			true,
+		},
+		{
+			"containment",
+			ItemLocation{FilePath: "a.js", StartLine: 1, EndLine: 100},
+			ItemLocation{FilePath: "a.js", StartLine: 5, EndLine: 15},
+			true,
+		},
+		{
+			"adjacent but disjoint",
+			ItemLocation{FilePath: "a.js", StartLine: 1, EndLine: 10},
+			ItemLocation{FilePath: "a.js", StartLine: 11, EndLine: 20},
+			false,
+		},
+		{
+			"shared boundary line",
+			ItemLocation{FilePath: "a.js", StartLine: 1, EndLine: 10},
+			ItemLocation{FilePath: "a.js", StartLine: 10, EndLine: 20},
+			true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := LocationsOverlap(tt.a, tt.b); got != tt.want {
+				t.Errorf("LocationsOverlap = %v, want %v", got, tt.want)
+			}
+			if got := LocationsOverlap(tt.b, tt.a); got != tt.want {
+				t.Errorf("LocationsOverlap (reversed) = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
