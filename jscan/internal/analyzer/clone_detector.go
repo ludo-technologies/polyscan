@@ -1,0 +1,1083 @@
+package analyzer
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"math"
+	"runtime"
+	"sort"
+
+	"github.com/ludo-technologies/polyscan/jscan/domain"
+	"github.com/ludo-technologies/polyscan/jscan/internal/constants"
+	"github.com/ludo-technologies/polyscan/jscan/internal/parser"
+)
+
+// CodeLocation represents a location in source code
+type CodeLocation struct {
+	FilePath  string
+	StartLine int
+	EndLine   int
+	StartCol  int
+	EndCol    int
+}
+
+// String returns string representation of CodeLocation
+func (cl *CodeLocation) String() string {
+	return fmt.Sprintf("%s:%d:%d-%d:%d", cl.FilePath, cl.StartLine, cl.StartCol, cl.EndLine, cl.EndCol)
+}
+
+// CodeFragment represents a fragment of code
+type CodeFragment struct {
+	Location   *CodeLocation
+	ASTNode    *parser.Node
+	TreeNode   *TreeNode
+	Content    string   // Original source code content
+	Hash       string   // FNV-64a hex hash of Type-1 normalized content; "" when no source content
+	Size       int      // Number of AST nodes
+	LineCount  int      // Number of source lines
+	Complexity int      // Cyclomatic complexity (if applicable)
+	Features   []string // Detector-populated clone feature cache for this fragment's tree
+}
+
+// NewCodeFragment creates a new code fragment
+func NewCodeFragment(location *CodeLocation, astNode *parser.Node, content string) *CodeFragment {
+	return &CodeFragment{
+		Location:  location,
+		ASTNode:   astNode,
+		Content:   content,
+		Hash:      hashFragmentContent(content),
+		Size:      calculateASTSize(astNode),
+		LineCount: location.EndLine - location.StartLine + 1,
+	}
+}
+
+// calculateASTSize calculates the number of nodes in an AST
+func calculateASTSize(node *parser.Node) int {
+	if node == nil {
+		return 0
+	}
+
+	size := 1
+	for _, child := range parser.OrderedChildren(node) {
+		size += calculateASTSize(child)
+	}
+
+	return size
+}
+
+// CloneDetectorConfig holds configuration for clone detection
+type CloneDetectorConfig struct {
+	// Minimum number of lines for a code fragment to be considered
+	MinLines int
+
+	// Minimum number of AST nodes for a code fragment
+	MinNodes int
+
+	// Similarity thresholds for different clone types
+	Type1Threshold float64
+	Type2Threshold float64
+	Type3Threshold float64
+	Type4Threshold float64
+
+	// Minimum similarity threshold for clone reporting (user-configurable via --clone-threshold)
+	SimilarityThreshold float64
+
+	// Maximum edit distance allowed
+	MaxEditDistance float64
+
+	// Whether to ignore differences in literals
+	IgnoreLiterals bool
+
+	// Whether to ignore differences in identifiers
+	IgnoreIdentifiers bool
+
+	// Cost model to use for APTED
+	CostModelType string // "default", "javascript", "weighted"
+
+	// Performance tuning parameters
+	MaxClonePairs      int // Maximum pairs to keep in memory
+	BatchSizeThreshold int // Minimum fragments to trigger batching
+	BatchSizeLarge     int // Batch size for normal projects
+	BatchSizeSmall     int // Batch size for large projects
+	LargeProjectSize   int // Fragment count threshold for large projects
+
+	// Grouping configuration
+	GroupingMode      GroupingMode // Default: GroupingModeConnected
+	GroupingThreshold float64      // Default: Type3Threshold
+	KCoreK            int          // Default: 2
+
+	// LSH Configuration (optional, opt-in)
+	UseLSH                 bool    // Enable LSH acceleration
+	LSHSimilarityThreshold float64 // Candidate threshold using MinHash similarity
+	LSHBands               int     // Number of LSH bands (default: 32)
+	LSHRows                int     // Rows per band (default: 4)
+	LSHMinHashCount        int     // Number of MinHash functions (default: 128)
+	LSHMaxCandidates       int     // Maximum candidates returned per LSH query
+}
+
+// DefaultCloneDetectorConfig returns default configuration
+func DefaultCloneDetectorConfig() *CloneDetectorConfig {
+	return &CloneDetectorConfig{
+		MinLines:          5,
+		MinNodes:          10,
+		Type1Threshold:    constants.DefaultType1CloneThreshold,
+		Type2Threshold:    constants.DefaultType2CloneThreshold,
+		Type3Threshold:    constants.DefaultType3CloneThreshold,
+		Type4Threshold:    constants.DefaultType4CloneThreshold,
+		MaxEditDistance:   50.0,
+		IgnoreLiterals:    false,
+		IgnoreIdentifiers: false,
+		CostModelType:     "javascript",
+		// Performance parameters
+		MaxClonePairs:      10000,
+		BatchSizeThreshold: 50,
+		BatchSizeLarge:     100,
+		BatchSizeSmall:     50,
+		LargeProjectSize:   500,
+
+		// Grouping defaults
+		GroupingMode:      GroupingModeConnected,
+		GroupingThreshold: constants.DefaultType4CloneThreshold,
+		KCoreK:            2,
+
+		// LSH defaults (opt-in)
+		UseLSH:                 false,
+		LSHSimilarityThreshold: 0.50,
+		LSHBands:               32,
+		LSHRows:                4,
+		LSHMinHashCount:        128,
+		LSHMaxCandidates:       defaultLSHMaxCandidates,
+	}
+}
+
+// jaccardRejectionThreshold is the Jaccard similarity below which pairs are
+// rejected without running APTED. At 0.10, virtually no true Type-3/4 clones
+// are missed while the vast majority of non-clone pairs are skipped.
+const jaccardRejectionThreshold = 0.10
+
+// CloneDetector detects code clones using APTED algorithm
+type CloneDetector struct {
+	// Embed config fields (private to maintain encapsulation)
+	cloneDetectorConfig CloneDetectorConfig
+
+	analyzer          *APTEDAnalyzer
+	converter         *TreeConverter
+	textualAnalyzer   *TextualSimilarityAnalyzer
+	syntacticAnalyzer *SyntacticSimilarityAnalyzer
+	featureExtractor  *ASTFeatureExtractor // Source for CodeFragment.Features
+	fragments         []*CodeFragment
+	clonePairs        []*domain.ClonePair
+	cloneGroups       []*domain.CloneGroup
+
+	// fragmentClones maps each fragment to its single domain.Clone so the
+	// same fragment shares one clone ID across all pairs (required for
+	// grouping to recognize shared members).
+	fragmentClones map[*CodeFragment]*domain.Clone
+	nextCloneID    int
+}
+
+// NewCloneDetector creates a new clone detector with the given configuration
+func NewCloneDetector(config *CloneDetectorConfig) *CloneDetector {
+	// Create appropriate cost model based on configuration
+	var costModel CostModel
+	switch config.CostModelType {
+	case "default":
+		costModel = NewDefaultCostModel()
+	case "javascript":
+		costModel = NewJavaScriptCostModelWithConfig(config.IgnoreLiterals, config.IgnoreIdentifiers)
+	case "weighted":
+		baseCostModel := NewJavaScriptCostModelWithConfig(config.IgnoreLiterals, config.IgnoreIdentifiers)
+		costModel = NewWeightedCostModel(1.0, 1.0, 0.8, baseCostModel)
+	default:
+		costModel = NewJavaScriptCostModel()
+	}
+
+	analyzer := NewAPTEDAnalyzer(costModel)
+
+	return &CloneDetector{
+		cloneDetectorConfig: *config,
+		analyzer:            analyzer,
+		converter:           NewTreeConverter(),
+		textualAnalyzer:     NewTextualSimilarityAnalyzer(),
+		syntacticAnalyzer:   NewSyntacticSimilarityAnalyzer(),
+		featureExtractor:    NewASTFeatureExtractor(),
+		fragments:           []*CodeFragment{},
+		clonePairs:          []*domain.ClonePair{},
+		cloneGroups:         []*domain.CloneGroup{},
+	}
+}
+
+// SetUseLSH enables or disables LSH acceleration for clone detection
+func (cd *CloneDetector) SetUseLSH(enabled bool) {
+	cd.cloneDetectorConfig.UseLSH = enabled
+}
+
+// SetBatchSizeLarge sets the batch size for normal projects (used in testing)
+func (cd *CloneDetector) SetBatchSizeLarge(size int) {
+	cd.cloneDetectorConfig.BatchSizeLarge = size
+}
+
+// ExtractFragments extracts code fragments from AST nodes
+func (cd *CloneDetector) ExtractFragments(astNodes []*parser.Node, filePath string) []*CodeFragment {
+	var fragments []*CodeFragment
+
+	for _, node := range astNodes {
+		cd.extractFragmentsRecursive(node, filePath, &fragments)
+	}
+
+	return fragments
+}
+
+// ExtractFragmentsWithSource extracts code fragments from AST nodes with source content.
+// Source content is needed for Type-1 clone classification and optional report output.
+func (cd *CloneDetector) ExtractFragmentsWithSource(astNodes []*parser.Node, filePath string, sourceCode []byte) []*CodeFragment {
+	var fragments []*CodeFragment
+	lines := splitLines(sourceCode)
+
+	for _, node := range astNodes {
+		cd.extractFragmentsRecursiveWithSource(node, filePath, lines, &fragments)
+	}
+
+	return fragments
+}
+
+// extractFragmentsRecursiveWithSource recursively extracts fragments with source content
+func (cd *CloneDetector) extractFragmentsRecursiveWithSource(node *parser.Node, filePath string, lines [][]byte, fragments *[]*CodeFragment) {
+	if node == nil {
+		return
+	}
+
+	// Check if this node should be considered as a fragment
+	if cd.isFragmentCandidate(node) {
+		location := &CodeLocation{
+			FilePath:  filePath,
+			StartLine: node.Location.StartLine,
+			EndLine:   node.Location.EndLine,
+			StartCol:  node.Location.StartCol,
+			EndCol:    node.Location.EndCol,
+		}
+
+		// Extract content from source code for textual (Type-1) analysis
+		content := ""
+		if len(lines) > 0 {
+			content = cd.extractSourceContent(lines, &node.Location)
+		}
+
+		fragment := NewCodeFragment(location, node, content)
+
+		// Filter fragments based on configuration
+		if cd.shouldIncludeFragment(fragment) {
+			*fragments = append(*fragments, fragment)
+		}
+	}
+
+	// Recursively process children
+	for _, child := range parser.OrderedChildren(node) {
+		cd.extractFragmentsRecursiveWithSource(child, filePath, lines, fragments)
+	}
+}
+
+// extractSourceContent extracts source code content for a given location
+func (cd *CloneDetector) extractSourceContent(lines [][]byte, loc *parser.Location) string {
+	if loc == nil || len(lines) == 0 {
+		return ""
+	}
+
+	if loc.StartLine < 1 || loc.EndLine > len(lines) {
+		return ""
+	}
+
+	// Extract lines from StartLine to EndLine (1-indexed)
+	var result []byte
+	for i := loc.StartLine - 1; i < loc.EndLine && i < len(lines); i++ {
+		result = append(result, lines[i]...)
+		if i < loc.EndLine-1 {
+			result = append(result, '\n')
+		}
+	}
+
+	return string(result)
+}
+
+// splitLines splits source code into lines
+func splitLines(sourceCode []byte) [][]byte {
+	if len(sourceCode) == 0 {
+		return nil
+	}
+
+	lines := make([][]byte, 0, bytes.Count(sourceCode, []byte{'\n'})+1)
+	start := 0
+	for idx, b := range sourceCode {
+		if b == '\n' {
+			lines = append(lines, sourceCode[start:idx])
+			start = idx + 1
+		}
+	}
+	if start < len(sourceCode) {
+		lines = append(lines, sourceCode[start:])
+	}
+	return lines
+}
+
+// extractFragmentsRecursive recursively extracts fragments from AST
+func (cd *CloneDetector) extractFragmentsRecursive(node *parser.Node, filePath string, fragments *[]*CodeFragment) {
+	if node == nil {
+		return
+	}
+
+	// Check if this node should be considered as a fragment
+	if cd.isFragmentCandidate(node) {
+		location := &CodeLocation{
+			FilePath:  filePath,
+			StartLine: node.Location.StartLine,
+			EndLine:   node.Location.EndLine,
+			StartCol:  node.Location.StartCol,
+			EndCol:    node.Location.EndCol,
+		}
+
+		fragment := NewCodeFragment(location, node, "")
+
+		// Filter fragments based on configuration
+		if cd.shouldIncludeFragment(fragment) {
+			*fragments = append(*fragments, fragment)
+		}
+	}
+
+	// Recursively process children
+	for _, child := range parser.OrderedChildren(node) {
+		cd.extractFragmentsRecursive(child, filePath, fragments)
+	}
+}
+
+// isFragmentCandidate checks if a node should be considered as a fragment candidate
+func (cd *CloneDetector) isFragmentCandidate(node *parser.Node) bool {
+	// Consider functions, classes, and compound statements as fragment candidates
+	candidateTypes := []parser.NodeType{
+		// Function declarations
+		parser.NodeFunction,
+		parser.NodeFunctionExpression,
+		parser.NodeArrowFunction,
+		parser.NodeAsyncFunction,
+		parser.NodeGeneratorFunction,
+		parser.NodeMethodDefinition,
+		// Class declarations
+		parser.NodeClass,
+		parser.NodeClassExpression,
+		// Control flow statements
+		parser.NodeForStatement,
+		parser.NodeForInStatement,
+		parser.NodeForOfStatement,
+		parser.NodeWhileStatement,
+		parser.NodeDoWhileStatement,
+		parser.NodeIfStatement,
+		parser.NodeTryStatement,
+		parser.NodeSwitchStatement,
+		parser.NodeWithStatement,
+	}
+
+	for _, candidateType := range candidateTypes {
+		if node.Type == candidateType {
+			return true
+		}
+	}
+
+	return false
+}
+
+// shouldIncludeFragment determines if a fragment should be included in analysis
+func (cd *CloneDetector) shouldIncludeFragment(fragment *CodeFragment) bool {
+	// Check minimum size requirements
+	if fragment.Size < cd.cloneDetectorConfig.MinNodes {
+		return false
+	}
+
+	if fragment.LineCount < cd.cloneDetectorConfig.MinLines {
+		return false
+	}
+
+	return true
+}
+
+// isCancelled checks if the context is cancelled
+func isCancelled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
+}
+
+// DetectClones detects clones in the given code fragments
+func (cd *CloneDetector) DetectClones(fragments []*CodeFragment) ([]*domain.ClonePair, []*domain.CloneGroup) {
+	return cd.DetectClonesWithContext(context.Background(), fragments)
+}
+
+// DetectClonesWithContext detects clones with context support for cancellation
+func (cd *CloneDetector) DetectClonesWithContext(ctx context.Context, fragments []*CodeFragment) ([]*domain.ClonePair, []*domain.CloneGroup) {
+	cd.fragments = fragments
+	cd.clonePairs = []*domain.ClonePair{}
+	cd.cloneGroups = []*domain.CloneGroup{}
+	cd.fragmentClones = make(map[*CodeFragment]*domain.Clone)
+	cd.nextCloneID = 0
+
+	// Check for cancellation before starting
+	if isCancelled(ctx) {
+		return cd.clonePairs, cd.cloneGroups
+	}
+
+	// Convert AST fragments to tree nodes
+	cd.prepareFragments()
+
+	// Check for cancellation after preparation
+	if isCancelled(ctx) {
+		return cd.clonePairs, cd.cloneGroups
+	}
+
+	// Detect clone pairs with context
+	cd.detectClonePairsWithContext(ctx)
+
+	// Check for cancellation before grouping
+	if isCancelled(ctx) {
+		return cd.clonePairs, cd.cloneGroups
+	}
+
+	// Group related clones using configured strategy
+	// Clamp threshold to [0,1]
+	thr := cd.cloneDetectorConfig.GroupingThreshold
+	if thr < 0.0 {
+		thr = 0.0
+	} else if thr > 1.0 {
+		thr = 1.0
+	}
+	k := cd.cloneDetectorConfig.KCoreK
+	if k < 2 {
+		k = 2
+	}
+	groupingConfig := GroupingConfig{
+		Mode:           cd.cloneDetectorConfig.GroupingMode,
+		Threshold:      thr,
+		KCoreK:         k,
+		Type1Threshold: cd.cloneDetectorConfig.Type1Threshold,
+		Type2Threshold: cd.cloneDetectorConfig.Type2Threshold,
+		Type3Threshold: cd.cloneDetectorConfig.Type3Threshold,
+		Type4Threshold: cd.cloneDetectorConfig.Type4Threshold,
+	}
+	strategy := CreateGroupingStrategy(groupingConfig)
+	cd.groupClonesWithStrategy(strategy)
+
+	return cd.clonePairs, cd.cloneGroups
+}
+
+// DetectClonesWithLSH runs a two-stage pipeline using LSH for candidate generation,
+// followed by APTED verification on candidates only. Falls back to exhaustive if misconfigured.
+func (cd *CloneDetector) DetectClonesWithLSH(ctx context.Context, fragments []*CodeFragment) ([]*domain.ClonePair, []*domain.CloneGroup) {
+	// If not enabled, delegate to standard path
+	if cd == nil || !cd.cloneDetectorConfig.UseLSH {
+		return cd.DetectClonesWithContext(ctx, fragments)
+	}
+
+	cd.fragments = fragments
+	cd.clonePairs = []*domain.ClonePair{}
+	cd.cloneGroups = []*domain.CloneGroup{}
+	cd.fragmentClones = make(map[*CodeFragment]*domain.Clone)
+	cd.nextCloneID = 0
+
+	if isCancelled(ctx) {
+		return cd.clonePairs, cd.cloneGroups
+	}
+
+	// Prepare TreeNodes for APTED and feature extraction
+	cd.prepareFragments()
+
+	if isCancelled(ctx) {
+		return cd.clonePairs, cd.cloneGroups
+	}
+
+	// Stage 1: MinHash signatures from prepared clone features
+	hasher := NewMinHasher(cd.cloneDetectorConfig.LSHMinHashCount)
+
+	type fragRec struct {
+		idx int
+		sig *MinHashSignature
+	}
+	records := make([]fragRec, 0, len(cd.fragments))
+	sigByIndex := make(map[int]*MinHashSignature, len(cd.fragments))
+	for i, f := range cd.fragments {
+		if f == nil || f.TreeNode == nil {
+			continue
+		}
+		sig := hasher.ComputeSignature(f.Features)
+		records = append(records, fragRec{idx: i, sig: sig})
+		sigByIndex[i] = sig
+	}
+
+	// Edge case: if signatures cannot be built, fallback
+	if len(records) <= 1 {
+		return cd.DetectClonesWithContext(ctx, fragments)
+	}
+
+	// Stage 2: LSH indexing
+	lsh := NewLSHIndex(cd.cloneDetectorConfig.LSHBands, cd.cloneDetectorConfig.LSHRows).
+		WithMaxCandidates(cd.cloneDetectorConfig.LSHMaxCandidates)
+	for _, r := range records {
+		_ = lsh.AddFragment(r.idx, r.sig)
+	}
+	_ = lsh.BuildIndex()
+
+	// Stage 3: Candidate generation + APTED verification
+	// Use MinHash similarity to filter before expensive APTED
+	minhashThreshold := cd.cloneDetectorConfig.LSHSimilarityThreshold
+	if minhashThreshold < 0 {
+		minhashThreshold = 0
+	} else if minhashThreshold > 1 {
+		minhashThreshold = 1
+	}
+
+	seenPairs := make(map[[2]int]struct{})
+	pairID := 0
+	for _, r := range records {
+		if isCancelled(ctx) {
+			break
+		}
+		cands := lsh.FindCandidates(r.sig)
+		for _, j := range cands {
+			i := r.idx
+			if j == i || j < 0 || i < 0 {
+				continue
+			}
+			// Deduplicate unordered pair (i<j)
+			a, b := i, j
+			if a > b {
+				a, b = b, a
+			}
+			key := [2]int{a, b}
+			if _, ok := seenPairs[key]; ok {
+				continue
+			}
+			seenPairs[key] = struct{}{}
+
+			f1 := cd.fragments[a]
+			f2 := cd.fragments[b]
+			if cd.isOverlappingLocation(f1.Location, f2.Location) {
+				continue
+			}
+
+			// MinHash similarity pre-filter
+			sig1 := sigByIndex[a]
+			sig2 := sigByIndex[b]
+			est := hasher.EstimateJaccardSimilarity(sig1, sig2)
+			if est < minhashThreshold {
+				continue
+			}
+
+			// APTED verification
+			if f1.TreeNode == nil || f2.TreeNode == nil {
+				continue
+			}
+			pair := cd.compareFragments(f1, f2, pairID)
+			if pair != nil && cd.isSignificantClone(pair) {
+				cd.clonePairs = append(cd.clonePairs, pair)
+				pairID++
+			}
+		}
+	}
+
+	// Finalize results
+	cd.limitAndSortClonePairs(cd.cloneDetectorConfig.MaxClonePairs)
+
+	// Grouping
+	thr := cd.cloneDetectorConfig.GroupingThreshold
+	if thr < 0.0 {
+		thr = 0.0
+	} else if thr > 1.0 {
+		thr = 1.0
+	}
+	k := cd.cloneDetectorConfig.KCoreK
+	if k < 2 {
+		k = 2
+	}
+	groupingConfig := GroupingConfig{
+		Mode:           cd.cloneDetectorConfig.GroupingMode,
+		Threshold:      thr,
+		KCoreK:         k,
+		Type1Threshold: cd.cloneDetectorConfig.Type1Threshold,
+		Type2Threshold: cd.cloneDetectorConfig.Type2Threshold,
+		Type3Threshold: cd.cloneDetectorConfig.Type3Threshold,
+		Type4Threshold: cd.cloneDetectorConfig.Type4Threshold,
+	}
+	strategy := CreateGroupingStrategy(groupingConfig)
+	cd.groupClonesWithStrategy(strategy)
+
+	return cd.clonePairs, cd.cloneGroups
+}
+
+// prepareFragments converts AST fragments to tree nodes and populates clone features.
+func (cd *CloneDetector) prepareFragments() {
+	for _, fragment := range cd.fragments {
+		if fragment == nil {
+			continue
+		}
+		if fragment.TreeNode == nil && fragment.ASTNode != nil {
+			fragment.TreeNode = cd.converter.ConvertAST(fragment.ASTNode)
+		}
+		if fragment.TreeNode == nil {
+			continue
+		}
+		PrepareTreeForAPTED(fragment.TreeNode)
+		features, _ := cd.featureExtractor.ExtractFeatures(fragment.TreeNode)
+		fragment.Features = features
+	}
+}
+
+// calculateBatchSize determines the optimal batch size based on fragment count
+func (cd *CloneDetector) calculateBatchSize(fragmentCount int) int {
+	if fragmentCount < cd.cloneDetectorConfig.BatchSizeThreshold {
+		return fragmentCount // No batching needed
+	}
+	if fragmentCount > cd.cloneDetectorConfig.LargeProjectSize {
+		return cd.cloneDetectorConfig.BatchSizeSmall
+	}
+	return cd.cloneDetectorConfig.BatchSizeLarge
+}
+
+// detectClonePairsWithContext detects pairs with context support
+func (cd *CloneDetector) detectClonePairsWithContext(ctx context.Context) {
+	n := len(cd.fragments)
+
+	// Early return for small datasets
+	if n <= 1 {
+		return
+	}
+
+	// Determine if batching is needed based on fragment count and estimated pairs
+	estimatedPairs := (n * (n - 1)) / 2
+	needsBatching := n > cd.cloneDetectorConfig.BatchSizeThreshold || estimatedPairs > cd.cloneDetectorConfig.MaxClonePairs
+
+	if needsBatching {
+		batchSize := cd.calculateBatchSize(n)
+		cd.detectClonePairsWithBatchingContext(ctx, cd.cloneDetectorConfig.MaxClonePairs, batchSize)
+	} else {
+		cd.detectClonePairsStandardWithContext(ctx)
+	}
+
+	// Sort and limit final results
+	cd.limitAndSortClonePairs(cd.cloneDetectorConfig.MaxClonePairs)
+}
+
+// detectClonePairsStandardWithContext uses standard approach with context
+func (cd *CloneDetector) detectClonePairsStandardWithContext(ctx context.Context) {
+	n := len(cd.fragments)
+	const checkInterval = 10 // Check context every 10 comparisons
+
+	pairID := 0
+	for i := 0; i < n; i++ {
+		for j := i + 1; j < n; j++ {
+
+			// Check for cancellation periodically (every 10 comparisons)
+			if (i*n+j)%checkInterval == 0 && isCancelled(ctx) {
+				return
+			}
+			fragment1 := cd.fragments[i]
+			fragment2 := cd.fragments[j]
+
+			// Skip if both fragments are from the same location or overlap in the same file
+			if cd.isOverlappingLocation(fragment1.Location, fragment2.Location) {
+				continue
+			}
+
+			// Compute similarity
+			pair := cd.compareFragments(fragment1, fragment2, pairID)
+			if pair != nil && cd.isSignificantClone(pair) {
+				cd.clonePairs = append(cd.clonePairs, pair)
+				pairID++
+			}
+		}
+	}
+}
+
+// detectClonePairsWithBatchingContext processes batches with context support
+func (cd *CloneDetector) detectClonePairsWithBatchingContext(ctx context.Context, maxPairs, batchSize int) {
+	n := len(cd.fragments)
+
+	// Ensure maxPairs has a reasonable minimum value
+	if maxPairs <= 0 {
+		maxPairs = 10000
+	}
+	if batchSize <= 0 {
+		batchSize = 100
+	}
+
+	// Priority queue to keep only the best pairs
+	topPairs := make([]*domain.ClonePair, 0, maxPairs)
+	minSimilarity := cd.cloneDetectorConfig.Type4Threshold // Use the lowest threshold as minimum
+
+	pairID := 0
+	// Process in batches to limit memory usage
+	for batchStart := 0; batchStart < n; batchStart += batchSize {
+		// Check for cancellation at batch start
+		if isCancelled(ctx) {
+			cd.clonePairs = topPairs
+			return
+		}
+		batchEnd := batchStart + batchSize
+		if batchEnd > n {
+			batchEnd = n
+		}
+
+		// Process current batch against all previous and current fragments
+		for i := batchStart; i < batchEnd; i++ {
+			// Compare with fragments in current batch
+			for j := i + 1; j < batchEnd; j++ {
+				if pair := cd.tryCreateClonePair(i, j, minSimilarity, pairID); pair != nil {
+					topPairs = cd.addPairWithLimit(topPairs, pair, maxPairs)
+					pairID++
+					// Update minimum similarity threshold
+					if len(topPairs) >= maxPairs {
+						minSimilarity = topPairs[len(topPairs)-1].Similarity
+					}
+				}
+			}
+
+			// Compare with all previous fragments
+			for j := 0; j < batchStart; j++ {
+				if pair := cd.tryCreateClonePair(i, j, minSimilarity, pairID); pair != nil {
+					topPairs = cd.addPairWithLimit(topPairs, pair, maxPairs)
+					pairID++
+					// Update minimum similarity threshold
+					if len(topPairs) >= maxPairs {
+						minSimilarity = topPairs[len(topPairs)-1].Similarity
+					}
+				}
+			}
+		}
+
+		// Periodic garbage collection hint for large batches
+		if batchStart%5000 == 0 {
+			// Force garbage collection to prevent memory buildup
+			runtime.GC()
+		}
+	}
+
+	// Replace clone pairs with the best ones found
+	cd.clonePairs = topPairs
+}
+
+// shouldCompareFragments performs early filtering to determine if two fragments should be compared
+func (cd *CloneDetector) shouldCompareFragments(fragment1, fragment2 *CodeFragment) bool {
+	// Early filtering: Skip if size difference is too large (>50%)
+	sizeDiff := math.Abs(float64(fragment1.Size - fragment2.Size))
+	avgSize := float64(fragment1.Size+fragment2.Size) / 2.0
+	if avgSize > 0 && sizeDiff/avgSize > 0.5 {
+		return false // Too different in size to be clones
+	}
+
+	// Early filtering: Skip if line count difference is too large
+	lineDiff := math.Abs(float64(fragment1.LineCount - fragment2.LineCount))
+	if lineDiff > float64(fragment1.LineCount)*0.5 && lineDiff > float64(fragment2.LineCount)*0.5 {
+		return false // Too different in line count
+	}
+
+	return true
+}
+
+// compareFragments compares two fragments and returns a clone pair if similar.
+// Uses a Jaccard pre-filter on pre-computed features to minimize expensive APTED calls.
+func (cd *CloneDetector) compareFragments(fragment1, fragment2 *CodeFragment, pairID int) *domain.ClonePair {
+	if fragment1.TreeNode == nil || fragment2.TreeNode == nil {
+		return nil
+	}
+
+	// Early filtering check
+	if !cd.shouldCompareFragments(fragment1, fragment2) {
+		return nil
+	}
+
+	// Jaccard pre-filter: reject clear non-clones before expensive APTED work.
+	// Only used for rejection — all non-rejected pairs proceed to APTED-based
+	// classification for accurate clone typing and distance computation.
+	if len(fragment1.Features) > 0 && len(fragment2.Features) > 0 {
+		if jaccardSimilarity(fragment1.Features, fragment2.Features) < jaccardRejectionThreshold {
+			return nil
+		}
+	}
+
+	// Compute edit distance and similarity using APTED algorithm
+	distance, similarity := cd.analyzer.ComputeDistanceAndSimilarity(fragment1.TreeNode, fragment2.TreeNode)
+
+	// Determine clone type with textual/syntactic gating
+	cloneType, similarity := cd.classifyClonePair(fragment1, fragment2, similarity)
+	if cloneType == 0 {
+		return nil // Not a significant clone
+	}
+
+	// Calculate confidence based on fragment size and similarity
+	confidence := cd.calculateConfidence(fragment1, fragment2, similarity)
+
+	// Create domain Clone objects (shared per fragment across pairs)
+	clone1 := cd.fragmentToClone(fragment1)
+	clone2 := cd.fragmentToClone(fragment2)
+
+	return &domain.ClonePair{
+		ID:         pairID,
+		Clone1:     clone1,
+		Clone2:     clone2,
+		Similarity: similarity,
+		Distance:   distance,
+		Type:       cloneType,
+		Confidence: confidence,
+	}
+}
+
+// fragmentToClone converts a CodeFragment to a domain.Clone.
+// The same fragment always maps to the same clone instance and ID so that
+// grouping strategies can recognize shared members across pairs.
+func (cd *CloneDetector) fragmentToClone(fragment *CodeFragment) *domain.Clone {
+	if cd.fragmentClones == nil {
+		cd.fragmentClones = make(map[*CodeFragment]*domain.Clone)
+	}
+	if clone, ok := cd.fragmentClones[fragment]; ok {
+		return clone
+	}
+	clone := cd.newCloneFromFragment(fragment, cd.nextCloneID)
+	cd.nextCloneID++
+	cd.fragmentClones[fragment] = clone
+	return clone
+}
+
+func (cd *CloneDetector) newCloneFromFragment(fragment *CodeFragment, id int) *domain.Clone {
+	return &domain.Clone{
+		ID: id,
+		Location: &domain.CloneLocation{
+			FilePath:  fragment.Location.FilePath,
+			StartLine: fragment.Location.StartLine,
+			EndLine:   fragment.Location.EndLine,
+			StartCol:  fragment.Location.StartCol,
+			EndCol:    fragment.Location.EndCol,
+		},
+		Content:    fragment.Content,
+		Hash:       fragment.Hash,
+		Size:       fragment.Size,
+		LineCount:  fragment.LineCount,
+		Complexity: fragment.Complexity,
+	}
+}
+
+// classifyClonePair classifies a clone pair, gating Type-1 on exact textual
+// match and Type-2 on syntactic (normalized AST) similarity. Returns the
+// (possibly capped) similarity actually used for classification.
+func (cd *CloneDetector) classifyClonePair(fragment1, fragment2 *CodeFragment, similarity float64) (domain.CloneType, float64) {
+	if similarity >= cd.cloneDetectorConfig.Type1Threshold && cd.textualAnalyzer.IsExactMatch(fragment1, fragment2) {
+		return domain.Type1Clone, similarity
+	}
+
+	structuralSimilarity := cd.capNonTextualSimilarity(similarity)
+	if structuralSimilarity >= cd.cloneDetectorConfig.Type2Threshold {
+		syntacticSimilarity := cd.syntacticAnalyzer.ComputeSimilarity(fragment1, fragment2)
+		if syntacticSimilarity >= cd.cloneDetectorConfig.Type2Threshold {
+			return domain.Type2Clone, math.Min(structuralSimilarity, syntacticSimilarity)
+		}
+	}
+	if structuralSimilarity >= cd.cloneDetectorConfig.Type3Threshold {
+		return domain.Type3Clone, structuralSimilarity
+	}
+	if structuralSimilarity >= cd.cloneDetectorConfig.Type4Threshold {
+		return domain.Type4Clone, structuralSimilarity
+	}
+
+	return 0, structuralSimilarity
+}
+
+// capNonTextualSimilarity caps structural similarity just below the Type-1
+// threshold so that pairs without an exact textual match never report a
+// Type-1-level similarity.
+func (cd *CloneDetector) capNonTextualSimilarity(similarity float64) float64 {
+	if similarity < cd.cloneDetectorConfig.Type1Threshold {
+		return similarity
+	}
+
+	capped := math.Nextafter(cd.cloneDetectorConfig.Type1Threshold, 0)
+	if capped < cd.cloneDetectorConfig.Type2Threshold {
+		return cd.cloneDetectorConfig.Type2Threshold
+	}
+	return capped
+}
+
+// calculateConfidence calculates confidence in clone detection
+func (cd *CloneDetector) calculateConfidence(fragment1, fragment2 *CodeFragment, similarity float64) float64 {
+	// Base confidence on similarity
+	confidence := similarity
+
+	// Increase confidence for larger fragments
+	avgSize := float64(fragment1.Size+fragment2.Size) / 2.0
+	sizeBonus := math.Min(avgSize/100.0, 0.2) // Up to 20% bonus for large fragments
+	confidence += sizeBonus
+
+	// Increase confidence if both fragments have similar complexity
+	if fragment1.Complexity > 0 && fragment2.Complexity > 0 {
+		complexityRatio := float64(minInt(fragment1.Complexity, fragment2.Complexity)) /
+			float64(maxInt(fragment1.Complexity, fragment2.Complexity))
+		confidence += complexityRatio * 0.1 // Up to 10% bonus for similar complexity
+	}
+
+	// Cap confidence at 1.0
+	if confidence > 1.0 {
+		confidence = 1.0
+	}
+
+	return confidence
+}
+
+// isSignificantClone determines if a clone pair is significant enough to report
+func (cd *CloneDetector) isSignificantClone(pair *domain.ClonePair) bool {
+	// Check minimum similarity threshold
+	// Use SimilarityThreshold if set, otherwise fall back to Type4Threshold
+	minThreshold := cd.cloneDetectorConfig.SimilarityThreshold
+	if minThreshold <= 0 {
+		minThreshold = cd.cloneDetectorConfig.Type4Threshold
+	}
+	if pair.Similarity < minThreshold {
+		return false
+	}
+
+	// Check maximum distance threshold (0 means no limit)
+	if pair.Type != domain.Type4Clone && cd.cloneDetectorConfig.MaxEditDistance > 0 && pair.Distance > cd.cloneDetectorConfig.MaxEditDistance {
+		return false
+	}
+
+	// Additional filtering based on fragment characteristics
+	minSize := math.Min(float64(pair.Clone1.Size), float64(pair.Clone2.Size))
+	return minSize >= float64(cd.cloneDetectorConfig.MinNodes)
+}
+
+// groupClonesWithStrategy groups clone pairs using a pluggable strategy.
+func (cd *CloneDetector) groupClonesWithStrategy(strategy GroupingStrategy) {
+	if strategy == nil {
+		cd.cloneGroups = []*domain.CloneGroup{}
+		return
+	}
+	memberResult := dedupeStrictSubsetGroupMembers(strategy.GroupClones(cd.clonePairs), cd.clonePairs)
+	groupResult := dedupeCoveredGroups(memberResult.groups)
+	cd.cloneGroups = filterCloneGroupsWithoutBackingPairs(groupResult.groups, cd.clonePairs)
+	for key := range memberResult.suppressed {
+		groupResult.suppressed[key] = struct{}{}
+	}
+	cd.clonePairs = filterClonePairsWithSuppressedMembers(cd.clonePairs, groupResult.suppressed)
+	cd.clonePairs = filterSuppressedClonePairs(cd.clonePairs, groupResult.suppressedPairs)
+}
+
+// isSameLocation checks if two locations refer to the same code
+func (cd *CloneDetector) isSameLocation(loc1, loc2 *CodeLocation) bool {
+	return loc1.FilePath == loc2.FilePath &&
+		loc1.StartLine == loc2.StartLine &&
+		loc1.EndLine == loc2.EndLine
+}
+
+// isOverlappingLocation checks if two locations from the same file overlap
+// (one contains or partially contains the other)
+func (cd *CloneDetector) isOverlappingLocation(loc1, loc2 *CodeLocation) bool {
+	if loc1.FilePath != loc2.FilePath {
+		return false
+	}
+	// Check if ranges overlap: NOT (loc1 ends before loc2 starts OR loc2 ends before loc1 starts)
+	return !(loc1.EndLine < loc2.StartLine || loc2.EndLine < loc1.StartLine)
+}
+
+// GetStatistics returns clone detection statistics
+func (cd *CloneDetector) GetStatistics() map[string]interface{} {
+	stats := make(map[string]interface{})
+
+	stats["total_fragments"] = len(cd.fragments)
+	stats["total_clone_pairs"] = len(cd.clonePairs)
+	stats["total_clone_groups"] = len(cd.cloneGroups)
+
+	// Count by clone type
+	typeCounts := make(map[string]int)
+	for _, pair := range cd.clonePairs {
+		typeCounts[pair.Type.String()]++
+	}
+	stats["clone_types"] = typeCounts
+
+	// Average similarity
+	if len(cd.clonePairs) > 0 {
+		totalSim := 0.0
+		for _, pair := range cd.clonePairs {
+			totalSim += pair.Similarity
+		}
+		stats["average_similarity"] = totalSim / float64(len(cd.clonePairs))
+	}
+
+	return stats
+}
+
+// tryCreateClonePair attempts to create a clone pair if it meets similarity threshold
+func (cd *CloneDetector) tryCreateClonePair(i, j int, minSimilarity float64, pairID int) *domain.ClonePair {
+	fragment1 := cd.fragments[i]
+	fragment2 := cd.fragments[j]
+
+	// Skip if both fragments are from the same location or overlap in the same file
+	if cd.isOverlappingLocation(fragment1.Location, fragment2.Location) {
+		return nil
+	}
+
+	// Quick similarity check before expensive computation
+	if fragment1.TreeNode == nil || fragment2.TreeNode == nil {
+		return nil
+	}
+
+	// Full similarity computation (compareFragments already calls shouldCompareFragments)
+	pair := cd.compareFragments(fragment1, fragment2, pairID)
+	if pair != nil && cd.isSignificantClone(pair) && pair.Similarity >= minSimilarity {
+		return pair
+	}
+	return nil
+}
+
+// addPairWithLimit adds a pair to the collection while maintaining size limit
+func (cd *CloneDetector) addPairWithLimit(pairs []*domain.ClonePair, newPair *domain.ClonePair, maxPairs int) []*domain.ClonePair {
+	// If under limit, just add
+	if len(pairs) < maxPairs {
+		pairs = append(pairs, newPair)
+		// Keep sorted by similarity (descending)
+		sort.Slice(pairs, func(i, j int) bool {
+			return pairs[i].Similarity > pairs[j].Similarity
+		})
+		return pairs
+	}
+
+	// If at limit, check if new pair is better than the worst
+	if newPair.Similarity > pairs[len(pairs)-1].Similarity {
+		// Replace worst pair
+		pairs[len(pairs)-1] = newPair
+		// Re-sort to maintain order
+		sort.Slice(pairs, func(i, j int) bool {
+			return pairs[i].Similarity > pairs[j].Similarity
+		})
+	}
+
+	return pairs
+}
+
+// limitAndSortClonePairs ensures final results are sorted and limited
+func (cd *CloneDetector) limitAndSortClonePairs(maxPairs int) {
+	// Sort clone pairs by similarity (descending)
+	sort.Slice(cd.clonePairs, func(i, j int) bool {
+		return cd.clonePairs[i].Similarity > cd.clonePairs[j].Similarity
+	})
+
+	// Limit the number of pairs to prevent memory issues
+	if len(cd.clonePairs) > maxPairs {
+		cd.clonePairs = cd.clonePairs[:maxPairs]
+	}
+}
+
+// Helper functions
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// minInt is defined in minhash.go

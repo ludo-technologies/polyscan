@@ -1,0 +1,398 @@
+package analyzer
+
+import (
+	"math"
+	"sort"
+
+	"github.com/ludo-technologies/polyscan/jscan/domain"
+)
+
+const (
+	mainSequenceMaxDistance = 0.2
+	zoneMinDistance         = 0.5
+	lowAbstractness         = 0.3
+	highAbstractness        = 0.7
+)
+
+// CouplingMetricsConfig configures the CouplingMetricsCalculator
+type CouplingMetricsConfig struct {
+	// InstabilityHighThreshold defines the threshold for high instability (default: 0.7)
+	InstabilityHighThreshold float64
+
+	// InstabilityLowThreshold defines the threshold for low instability (default: 0.3)
+	InstabilityLowThreshold float64
+
+	// DistanceThreshold defines the threshold for main sequence deviation (default: 0.3)
+	DistanceThreshold float64
+
+	// CouplingHighThreshold defines the threshold for high coupling risk (default: 10)
+	CouplingHighThreshold int
+
+	// CouplingMediumThreshold defines the threshold for medium coupling risk (default: 5)
+	CouplingMediumThreshold int
+}
+
+// DefaultCouplingMetricsConfig returns a config with sensible defaults
+func DefaultCouplingMetricsConfig() *CouplingMetricsConfig {
+	return &CouplingMetricsConfig{
+		InstabilityHighThreshold: 0.7,
+		InstabilityLowThreshold:  0.3,
+		DistanceThreshold:        0.3,
+		CouplingHighThreshold:    10,
+		CouplingMediumThreshold:  5,
+	}
+}
+
+// CouplingMetricsCalculator calculates coupling metrics for modules
+type CouplingMetricsCalculator struct {
+	config *CouplingMetricsConfig
+}
+
+// NewCouplingMetricsCalculator creates a new CouplingMetricsCalculator
+func NewCouplingMetricsCalculator(config *CouplingMetricsConfig) *CouplingMetricsCalculator {
+	if config == nil {
+		config = DefaultCouplingMetricsConfig()
+	}
+	return &CouplingMetricsCalculator{config: config}
+}
+
+// CalculateMetrics computes coupling metrics for all modules in the graph
+func (c *CouplingMetricsCalculator) CalculateMetrics(graph *domain.DependencyGraph) map[string]*domain.ModuleDependencyMetrics {
+	if graph == nil || graph.NodeCount() == 0 {
+		return make(map[string]*domain.ModuleDependencyMetrics)
+	}
+
+	metrics := make(map[string]*domain.ModuleDependencyMetrics)
+
+	for nodeID, node := range graph.Nodes {
+		// Calculate afferent and efferent coupling
+		ca := c.calculateAfferentCoupling(nodeID, graph)
+		ce := c.calculateEfferentCoupling(nodeID, graph)
+
+		// Calculate instability
+		instability := c.calculateInstability(ca, ce)
+
+		// Calculate abstractness (simplified - based on export count)
+		abstractness := c.calculateAbstractness(node)
+
+		// Calculate distance from main sequence
+		distance := c.calculateDistance(instability, abstractness)
+
+		// Stability zone is calculated in CalculateCouplingAnalysis
+
+		// Assess risk level
+		riskLevel := c.assessRiskLevel(ca, ce, distance)
+
+		// Get direct dependencies and dependents
+		directDeps := c.getDirectDependencies(nodeID, graph)
+		dependents := c.getDependents(nodeID, graph)
+
+		metrics[nodeID] = &domain.ModuleDependencyMetrics{
+			ModuleName:             node.Name,
+			FilePath:               node.FilePath,
+			AfferentCoupling:       ca,
+			EfferentCoupling:       ce,
+			Instability:            instability,
+			Abstractness:           abstractness,
+			Distance:               distance,
+			RiskLevel:              riskLevel,
+			DirectDependencies:     directDeps,
+			Dependents:             dependents,
+			TransitiveDependencies: []string{}, // Can be computed separately if needed
+		}
+	}
+
+	return metrics
+}
+
+// CalculateCouplingAnalysis generates a comprehensive coupling analysis
+func (c *CouplingMetricsCalculator) CalculateCouplingAnalysis(graph *domain.DependencyGraph, metrics map[string]*domain.ModuleDependencyMetrics) *domain.CouplingAnalysis {
+	if len(metrics) == 0 {
+		return &domain.CouplingAnalysis{
+			CouplingDistribution: make(map[int]int),
+		}
+	}
+
+	var totalCoupling float64
+	var totalInstability float64
+	var totalDistance float64
+	couplingDist := make(map[int]int)
+	var highlyCoupled []string
+	var looselyCoupled []string
+	var stableModules []string
+	var unstableModules []string
+	var zoneOfPain []string
+	var zoneOfUselessness []string
+	var mainSequence []string
+
+	for nodeID, m := range metrics {
+		coupling := m.AfferentCoupling + m.EfferentCoupling
+		totalCoupling += float64(coupling)
+		totalInstability += m.Instability
+		totalDistance += m.Distance
+
+		// Distribution bucketing
+		bucket := c.getCouplingBucket(coupling)
+		couplingDist[bucket]++
+
+		// Classify by coupling level
+		if coupling >= c.config.CouplingHighThreshold {
+			highlyCoupled = append(highlyCoupled, nodeID)
+		} else if coupling <= 2 {
+			looselyCoupled = append(looselyCoupled, nodeID)
+		}
+
+		// Classify by instability
+		if m.Instability <= c.config.InstabilityLowThreshold {
+			stableModules = append(stableModules, nodeID)
+		} else if m.Instability >= c.config.InstabilityHighThreshold {
+			unstableModules = append(unstableModules, nodeID)
+		}
+
+		// Classify by zone
+		zone := c.classifyStabilityZone(m)
+		switch zone {
+		case "zone_of_pain":
+			zoneOfPain = append(zoneOfPain, nodeID)
+		case "zone_of_uselessness":
+			zoneOfUselessness = append(zoneOfUselessness, nodeID)
+		case "main_sequence":
+			mainSequence = append(mainSequence, nodeID)
+		}
+	}
+
+	count := float64(len(metrics))
+
+	// Sort for deterministic output
+	sort.Strings(highlyCoupled)
+	sort.Strings(looselyCoupled)
+	sort.Strings(stableModules)
+	sort.Strings(unstableModules)
+	sort.Strings(zoneOfPain)
+	sort.Strings(zoneOfUselessness)
+	sort.Strings(mainSequence)
+
+	return &domain.CouplingAnalysis{
+		AverageCoupling:       totalCoupling / count,
+		CouplingDistribution:  couplingDist,
+		HighlyCoupledModules:  highlyCoupled,
+		LooselyCoupledModules: looselyCoupled,
+		AverageInstability:    totalInstability / count,
+		StableModules:         stableModules,
+		InstableModules:       unstableModules,
+		MainSequenceDeviation: totalDistance / count,
+		ZoneOfPain:            zoneOfPain,
+		ZoneOfUselessness:     zoneOfUselessness,
+		MainSequence:          mainSequence,
+	}
+}
+
+// calculateAfferentCoupling calculates Ca (modules that depend on this one)
+func (c *CouplingMetricsCalculator) calculateAfferentCoupling(nodeID string, graph *domain.DependencyGraph) int {
+	incoming := graph.GetIncomingEdges(nodeID)
+	return len(incoming)
+}
+
+// calculateEfferentCoupling calculates Ce (modules this one depends on)
+func (c *CouplingMetricsCalculator) calculateEfferentCoupling(nodeID string, graph *domain.DependencyGraph) int {
+	outgoing := graph.GetOutgoingEdges(nodeID)
+	return len(outgoing)
+}
+
+// calculateInstability calculates I = Ce / (Ca + Ce)
+// Returns 0.5 for modules with no coupling (neither stable nor unstable)
+func (c *CouplingMetricsCalculator) calculateInstability(ca, ce int) float64 {
+	total := ca + ce
+	if total == 0 {
+		return 0.5 // Neutral - no dependencies either way
+	}
+	return float64(ce) / float64(total)
+}
+
+// calculateAbstractness calculates A = abstractions / total declarations
+// Simplified: based on the ratio of exports to a baseline
+// In a more complete implementation, this would analyze actual abstractions (interfaces, abstract classes)
+func (c *CouplingMetricsCalculator) calculateAbstractness(node *domain.ModuleNode) float64 {
+	if node == nil {
+		return 0.0
+	}
+
+	// Simplified abstractness calculation based on exports
+	// More exports generally indicate more abstraction
+	exports := len(node.Exports)
+	if exports == 0 {
+		return 0.0 // Concrete - no exports
+	}
+
+	// Cap at 1.0, with 10+ exports being fully abstract
+	abstractness := float64(exports) / 10.0
+	if abstractness > 1.0 {
+		abstractness = 1.0
+	}
+	return abstractness
+}
+
+// calculateDistance calculates D = |A + I - 1|
+// The main sequence is where A + I = 1
+func (c *CouplingMetricsCalculator) calculateDistance(instability, abstractness float64) float64 {
+	return math.Abs(abstractness + instability - 1.0)
+}
+
+// classifyStabilityZone classifies a module into a stability zone.
+// Modules between the main sequence band and the zones belong to no zone
+// and return an empty string.
+func (c *CouplingMetricsCalculator) classifyStabilityZone(m *domain.ModuleDependencyMetrics) string {
+	// Zone of Pain: stable concrete modules far from the main sequence that
+	// other modules actually depend on. Hard to change, lots depend on it.
+	if m.Distance >= zoneMinDistance &&
+		m.AfferentCoupling >= 2 &&
+		m.Instability <= c.config.InstabilityLowThreshold &&
+		m.Abstractness <= lowAbstractness {
+		return "zone_of_pain"
+	}
+
+	// Zone of Uselessness: unstable abstract modules far from the main
+	// sequence. Abstract but nothing uses it.
+	if m.Distance >= zoneMinDistance &&
+		m.Instability >= c.config.InstabilityHighThreshold &&
+		m.Abstractness >= highAbstractness {
+		return "zone_of_uselessness"
+	}
+
+	// Main Sequence: modules close to A + I = 1
+	if m.Distance <= mainSequenceMaxDistance {
+		return "main_sequence"
+	}
+
+	return ""
+}
+
+// assessRiskLevel assesses the risk level based on coupling and distance
+func (c *CouplingMetricsCalculator) assessRiskLevel(ca, ce int, distance float64) domain.RiskLevel {
+	totalCoupling := ca + ce
+
+	// High risk: high coupling or far from main sequence
+	if totalCoupling >= c.config.CouplingHighThreshold || distance > 0.5 {
+		return domain.RiskLevelHigh
+	}
+
+	// Medium risk: moderate coupling or moderate distance
+	if totalCoupling >= c.config.CouplingMediumThreshold || distance > c.config.DistanceThreshold {
+		return domain.RiskLevelMedium
+	}
+
+	return domain.RiskLevelLow
+}
+
+// getDirectDependencies returns the IDs of modules this module depends on
+func (c *CouplingMetricsCalculator) getDirectDependencies(nodeID string, graph *domain.DependencyGraph) []string {
+	edges := graph.GetOutgoingEdges(nodeID)
+	deps := make([]string, 0, len(edges))
+	for _, edge := range edges {
+		deps = append(deps, edge.To)
+	}
+	sort.Strings(deps)
+	return deps
+}
+
+// getDependents returns the IDs of modules that depend on this module
+func (c *CouplingMetricsCalculator) getDependents(nodeID string, graph *domain.DependencyGraph) []string {
+	edges := graph.GetIncomingEdges(nodeID)
+	deps := make([]string, 0, len(edges))
+	for _, edge := range edges {
+		deps = append(deps, edge.From)
+	}
+	sort.Strings(deps)
+	return deps
+}
+
+// getCouplingBucket returns the bucket for coupling distribution
+func (c *CouplingMetricsCalculator) getCouplingBucket(coupling int) int {
+	switch {
+	case coupling == 0:
+		return 0
+	case coupling <= 3:
+		return 3
+	case coupling <= 7:
+		return 7
+	case coupling <= 10:
+		return 10
+	default:
+		return 11 // 11+ bucket
+	}
+}
+
+// CalculateTransitiveDependencies calculates all transitive dependencies for a module
+func (c *CouplingMetricsCalculator) CalculateTransitiveDependencies(nodeID string, graph *domain.DependencyGraph) []string {
+	visited := make(map[string]bool)
+	var result []string
+
+	var dfs func(current string)
+	dfs = func(current string) {
+		edges := graph.GetOutgoingEdges(current)
+		for _, edge := range edges {
+			if !visited[edge.To] {
+				visited[edge.To] = true
+				result = append(result, edge.To)
+				dfs(edge.To)
+			}
+		}
+	}
+
+	dfs(nodeID)
+	sort.Strings(result)
+	return result
+}
+
+// CalculateMaxDepth calculates the maximum dependency depth in the graph
+func (c *CouplingMetricsCalculator) CalculateMaxDepth(graph *domain.DependencyGraph) int {
+	if graph == nil || graph.NodeCount() == 0 {
+		return 0
+	}
+
+	maxDepth := 0
+	memo := make(map[string]int)
+
+	var calculateDepth func(nodeID string, visited map[string]bool) int
+	calculateDepth = func(nodeID string, visited map[string]bool) int {
+		if depth, ok := memo[nodeID]; ok {
+			return depth
+		}
+
+		if visited[nodeID] {
+			return 0 // Cycle detected, don't count
+		}
+
+		visited[nodeID] = true
+		defer func() { visited[nodeID] = false }()
+
+		edges := graph.GetOutgoingEdges(nodeID)
+		if len(edges) == 0 {
+			memo[nodeID] = 0
+			return 0
+		}
+
+		maxChildDepth := 0
+		for _, edge := range edges {
+			if graph.GetNode(edge.To) != nil {
+				childDepth := calculateDepth(edge.To, visited)
+				if childDepth > maxChildDepth {
+					maxChildDepth = childDepth
+				}
+			}
+		}
+
+		depth := maxChildDepth + 1
+		memo[nodeID] = depth
+		return depth
+	}
+
+	for nodeID := range graph.Nodes {
+		depth := calculateDepth(nodeID, make(map[string]bool))
+		if depth > maxDepth {
+			maxDepth = depth
+		}
+	}
+
+	return maxDepth
+}

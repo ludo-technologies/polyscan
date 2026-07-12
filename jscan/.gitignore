@@ -1,0 +1,78 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.txt
+coverage.html
+*.prof
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# Build output
+/jscan
+/jscan.exe
+/dist/
+/build/
+
+# IDE specific files
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+*.iml
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Local Environment & config files
+.env
+.env.local
+jscan.config.json
+.jscanrc.json
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Project specific
+/testdata/temp/
+/testdata/output/
+
+# jscan output directory
+.jscan/
+/jscan-report.html
+/jscan-test
+
+# Claude Code setting (optional)
+.claude/
+
+# Project planning documents
+PLAN.md
+
+# Node modules (for testing JavaScript files)
+node_modules/
+
+# Test repositories
+test-repos/
+
+# JavaScript test artifacts
+*.bundle.js
+*.map
+
+# Demo video project
+video/

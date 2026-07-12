@@ -1,0 +1,42 @@
+{
+  "name": "jscan",
+  "version": "0.0.0",
+  "description": "Code quality analyzer for JavaScript/TypeScript projects",
+  "keywords": [
+    "javascript",
+    "typescript",
+    "code-quality",
+    "static-analysis",
+    "linter",
+    "analyzer",
+    "complexity",
+    "dead-code"
+  ],
+  "homepage": "https://github.com/ludo-technologies/polyscan",
+  "bugs": {
+    "url": "https://github.com/ludo-technologies/polyscan/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ludo-technologies/polyscan.git",
+    "directory": "jscan/npm"
+  },
+  "license": "MIT",
+  "author": "Ludo Technologies",
+  "files": [
+    "bin/",
+    "package.json"
+  ],
+  "bin": {
+    "jscan": "./bin/jscan"
+  },
+  "engines": {
+    "node": ">=14"
+  },
+  "optionalDependencies": {
+    "jscan-darwin-arm64": "0.0.0",
+    "jscan-linux-arm64": "0.0.0",
+    "jscan-linux-x64": "0.0.0",
+    "jscan-windows-x64": "0.0.0"
+  }
+}

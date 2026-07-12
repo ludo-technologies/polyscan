@@ -6,6 +6,23 @@ on:
   pull_request:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      jscan: ${{ steps.filter.outputs.jscan }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            jscan:
+              - 'jscan/**'
+              - '.github/workflows/ci.yml'
+
   core:
     runs-on: ubuntu-latest
     defaults:
@@ -16,6 +33,22 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: core/go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  jscan:
+    needs: changes
+    if: ${{ !startsWith(github.ref, 'refs/tags/') && needs.changes.outputs.jscan == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: jscan
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: jscan/go.mod
       - run: go build ./...
       - run: go vet ./...
       - run: go test -race ./...
