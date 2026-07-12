@@ -14,6 +14,13 @@ type RefExtractor interface {
 	ExtractUses(stmt any, block *cfg.BasicBlock, pos int) []*VarReference
 }
 
+// ParamExtractor is an optional RefExtractor extension that seeds function
+// parameter definitions from the CFG's FunctionNode into the entry block, so
+// parameter uses inside the body link back to a definition.
+type ParamExtractor interface {
+	ExtractParameterDefs(functionNode any, entry *cfg.BasicBlock) []*VarReference
+}
+
 // DFABuilder builds DFA information from a CFG using a language-specific RefExtractor.
 type DFABuilder struct {
 	extractor RefExtractor
@@ -35,6 +42,13 @@ func (b *DFABuilder) Build(c *cfg.CFG) (*DFAInfo, error) {
 	}
 
 	info := NewDFAInfo(c)
+
+	// Phase 0: Seed function parameter definitions into the entry block.
+	if pe, ok := b.extractor.(ParamExtractor); ok && c.FunctionNode != nil && c.Entry != nil {
+		for _, def := range pe.ExtractParameterDefs(c.FunctionNode, c.Entry) {
+			info.AddDef(def)
+		}
+	}
 
 	// Phase 1: Collect definitions from all blocks
 	b.collectDefinitions(c, info)
@@ -109,13 +123,21 @@ func (b *DFABuilder) findDefInBlockBefore(varName string, block *cfg.BasicBlock,
 	defs := info.BlockDefs[block.ID]
 	var latest *VarReference
 	for _, def := range defs {
-		if def.Name == varName && def.Position < beforePos {
+		if def.Name == varName && defReachesUseAtPosition(def, beforePos) {
 			if latest == nil || def.Position > latest.Position {
 				latest = def
 			}
 		}
 	}
 	return latest
+}
+
+// defReachesUseAtPosition reports whether a definition reaches a use at the
+// given statement position. Pattern captures (match/case bindings) define and
+// use the variable within the same statement, so a same-position pattern
+// definition reaches the use.
+func defReachesUseAtPosition(def *VarReference, usePos int) bool {
+	return def.Position < usePos || (def.Kind == DefKindPattern && def.Position == usePos)
 }
 
 // findDefInPredecessors searches predecessor blocks for the most recent definition using BFS.

@@ -11,12 +11,12 @@ import (
 
 // CFGFeatures holds structural features extracted from a CFG.
 type CFGFeatures struct {
-	BlockCount      int
-	EdgeCount       int
-	EdgeTypeCounts  map[cfg.EdgeType]int
+	BlockCount       int
+	EdgeCount        int
+	EdgeTypeCounts   map[cfg.EdgeType]int
 	CyclomaticNumber int
-	BranchingFactor float64
-	LoopEdgeCount   int
+	BranchingFactor  float64
+	LoopEdgeCount    int
 	ConditionalCount int
 }
 
@@ -240,4 +240,110 @@ func compareDefUseKindDistributions(d1, d2 map[dfa.DefUseKind]int) float64 {
 		return 0.0
 	}
 	return dotProduct / (math.Sqrt(norm1) * math.Sqrt(norm2))
+}
+
+// ---------------------------------------------------------------------------
+// Semantic evidence (AST-derived counter-evidence for Type-4 similarity)
+// ---------------------------------------------------------------------------
+
+// semanticMismatchPenalty is applied when two fragments share no strong
+// semantic signal, or when their return categories are incompatible. Matching
+// control flow alone is weak evidence of semantic equivalence.
+const semanticMismatchPenalty = 0.75
+
+// literalMismatchPenalty is applied when both fragments carry enough string
+// literals to compare and the sets are completely disjoint. Matching control
+// flow combined with a fully different literal vocabulary (dict keys, format
+// names, config values) is strong counter-evidence for semantic equivalence:
+// true Type-4 clones compute the same result, so the constants they emit
+// overlap. Calibrated to pull a saturated CFG score (1.0) below the default
+// Type-4 threshold.
+const literalMismatchPenalty = 0.5
+
+// minStringLiteralEvidence is the number of distinct meaningful string
+// literals each fragment must contain before disjoint literal sets are
+// treated as counter-evidence. Docstrings and other bare string statements
+// should be excluded from the count by the extractor.
+const minStringLiteralEvidence = 2
+
+// SemanticSignals holds the language-independent semantic evidence extracted
+// from a fragment's AST. Language adapters populate the sets: StrongSignals
+// with kind-prefixed identifiers (e.g. "call:open", "attr:write"),
+// ReturnCategories with return-shape categories (e.g. "none", "literal",
+// "collection"), and StringLiterals with meaningful string constants.
+type SemanticSignals struct {
+	StrongSignals    map[string]struct{}
+	ReturnCategories map[string]struct{}
+	StringLiterals   map[string]struct{}
+}
+
+// NewSemanticSignals returns an empty signal set ready to be populated.
+func NewSemanticSignals() SemanticSignals {
+	return SemanticSignals{
+		StrongSignals:    make(map[string]struct{}),
+		ReturnCategories: make(map[string]struct{}),
+		StringLiterals:   make(map[string]struct{}),
+	}
+}
+
+// ApplySemanticEvidence adjusts a base (CFG/DFA-derived) similarity with
+// AST-level counter-evidence: fully disjoint string-literal vocabularies,
+// absence of any shared strong signal, or incompatible return categories
+// each discount the score. Missing evidence on either side is given the
+// benefit of the doubt.
+func ApplySemanticEvidence(baseSimilarity float64, signals1, signals2 SemanticSignals) float64 {
+	if baseSimilarity == 0.0 {
+		return 0.0
+	}
+
+	if hasDisjointStringLiterals(signals1.StringLiterals, signals2.StringLiterals) {
+		return baseSimilarity * literalMismatchPenalty
+	}
+	if !hasSharedSemanticSignal(signals1.StrongSignals, signals2.StrongSignals) {
+		return baseSimilarity * semanticMismatchPenalty
+	}
+	if !hasCompatibleReturnCategories(signals1.ReturnCategories, signals2.ReturnCategories) {
+		return baseSimilarity * semanticMismatchPenalty
+	}
+	return baseSimilarity
+}
+
+func hasSharedSemanticSignal(signals1, signals2 map[string]struct{}) bool {
+	if len(signals1) == 0 || len(signals2) == 0 {
+		return true
+	}
+	for signal := range signals1 {
+		if _, ok := signals2[signal]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// hasDisjointStringLiterals reports whether both fragments contain enough
+// distinct string literals to compare (minStringLiteralEvidence each) while
+// sharing none of them. Partial overlap or insufficient evidence on either
+// side is given the benefit of the doubt.
+func hasDisjointStringLiterals(literals1, literals2 map[string]struct{}) bool {
+	if len(literals1) < minStringLiteralEvidence || len(literals2) < minStringLiteralEvidence {
+		return false
+	}
+	for literal := range literals1 {
+		if _, ok := literals2[literal]; ok {
+			return false
+		}
+	}
+	return true
+}
+
+func hasCompatibleReturnCategories(categories1, categories2 map[string]struct{}) bool {
+	if len(categories1) == 0 || len(categories2) == 0 {
+		return true
+	}
+	for category := range categories1 {
+		if _, ok := categories2[category]; ok {
+			return true
+		}
+	}
+	return false
 }

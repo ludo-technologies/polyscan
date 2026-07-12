@@ -225,3 +225,50 @@ func TestAssessRisk_CustomConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestComputeLCOM4MethodCallsConnect(t *testing.T) {
+	// Two methods share no instance variables but one calls the other:
+	// they belong to the same component.
+	methods := []MethodAccess{
+		{MethodName: "save", InstanceVars: map[string]bool{"db": true}},
+		{MethodName: "validate", InstanceVars: map[string]bool{}, Calls: map[string]bool{"save": true}},
+	}
+
+	result := ComputeLCOM4(methods, DefaultConfig())
+
+	if result.LCOM4 != 1 {
+		t.Errorf("expected LCOM4=1 (call edge connects methods), got %d", result.LCOM4)
+	}
+}
+
+func TestComputeLCOM4CallToNonMethodIgnored(t *testing.T) {
+	// Calls to names that are not sibling methods (e.g. free functions)
+	// must not affect grouping.
+	methods := []MethodAccess{
+		{MethodName: "a", InstanceVars: map[string]bool{"x": true}, Calls: map[string]bool{"print": true}},
+		{MethodName: "b", InstanceVars: map[string]bool{"y": true}, Calls: map[string]bool{"len": true}},
+	}
+
+	result := ComputeLCOM4(methods, DefaultConfig())
+
+	if result.LCOM4 != 2 {
+		t.Errorf("expected LCOM4=2 (external calls ignored), got %d", result.LCOM4)
+	}
+}
+
+func TestComputeLCOM4GroupsSortedByFirstMethod(t *testing.T) {
+	methods := []MethodAccess{
+		{MethodName: "zeta", InstanceVars: map[string]bool{"z": true}},
+		{MethodName: "alpha", InstanceVars: map[string]bool{"a": true}},
+		{MethodName: "mid", InstanceVars: map[string]bool{"m": true}},
+	}
+
+	result := ComputeLCOM4(methods, DefaultConfig())
+
+	if result.LCOM4 != 3 {
+		t.Fatalf("expected LCOM4=3, got %d", result.LCOM4)
+	}
+	if result.MethodGroups[0][0] != "alpha" || result.MethodGroups[1][0] != "mid" || result.MethodGroups[2][0] != "zeta" {
+		t.Errorf("expected groups sorted by first method name, got %v", result.MethodGroups)
+	}
+}
