@@ -83,11 +83,11 @@ The heart of jscan. Contains all static analysis algorithms:
 - **Cyclomatic complexity** (`complexity.go`) - McCabe cyclomatic complexity calculation
 - **Dead code detection** (`dead_code.go`, `unused_code.go`) - Detects unreachable code, unused imports/exports, and orphan files
 - **Clone detection** (`clone_detector.go`) - Identifies duplicate code using APTED tree edit distance combined with MinHash/LSH for candidate selection
-  - `apted.go` / `apted_tree.go` / `apted_cost.go` - APTED tree edit distance algorithm
+  - `apted.go` / `apted_tree.go` / `apted_cost.go` - APTED tree edit distance algorithm (language adapter; algorithm kernel lives in `core/apted` — Phase 2b)
   - `minhash.go` - MinHash fingerprinting for approximate similarity
   - `lsh_index.go` - Locality-sensitive hashing index for fast candidate retrieval
-  - `ast_features.go` - AST feature extraction for fingerprinting
-  - `grouping_strategy.go` - Strategies for grouping code fragments
+  - `javascript_comments.go` - JS/TS comment stripping injected into `core/clone` as `CommentStripper`
+  - Shared kernels from `core/clone`: AST feature extraction, grouping strategies, group dedup, Type-1/2 similarity gates, pair classifier
 - **Module analysis** (`module_analyzer.go`) - ESM and CommonJS import/export resolution
 - **Dependency graph** (`dependency_graph.go`) - Builds the full module dependency graph
 - **CBO metrics** (`cbo.go`, `coupling_metrics.go`) - Coupling Between Objects measurement
@@ -103,11 +103,11 @@ Reads and manages jscan configuration (thresholds, ignore patterns, output setti
 
 ### domain -- Domain Models
 
-Pure data structures with no external dependencies:
+Analysis result types and request/response models. Mostly pure data; `clone.go` implements `core/clone.GroupableItem` so grouping runs on domain clones without a parallel type layer.
 
 - `complexity.go` - Complexity measurement models
 - `dead_code.go` - Dead code finding types
-- `clone.go` - Clone detection result types
+- `clone.go` - Clone detection result types (`ItemID` / `ItemLocation` for `core/clone` grouping)
 - `cbo.go` - Coupling metric types
 - `dependency_graph.go` - Dependency graph types
 - `module.go` - Module/import/export types

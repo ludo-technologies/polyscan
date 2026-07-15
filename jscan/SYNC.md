@@ -22,14 +22,14 @@ The `/sync-pyscn` command reads this file to run a sync.
 
 | pyscn | jscan | Classification | Notes |
 |---|---|---|---|
-| `internal/analyzer/apted.go` | `internal/analyzer/apted.go` | sync | Core APTED algorithm |
+| `internal/analyzer/apted.go` | `internal/analyzer/apted.go` | sync | Core APTED algorithm (future: both adopt `core/apted`) |
 | `internal/analyzer/apted_tree.go` | `internal/analyzer/apted_tree.go` | sync | |
 | `internal/analyzer/apted_cost.go` | `internal/analyzer/apted_cost.go` | reference-only | Cost models are language-specific (Python AST vs JS/TS AST) |
-| `internal/analyzer/minhash.go` | `internal/analyzer/minhash.go` | sync | |
-| `internal/analyzer/lsh_index.go` | `internal/analyzer/lsh_index.go` | sync | |
-| `internal/analyzer/ast_features.go` | `internal/analyzer/ast_features.go` | case-by-case | Feature-extraction framework is shared; node-type handling is language-specific |
-| `internal/analyzer/clone_detector.go` | `internal/analyzer/clone_detector.go` | case-by-case | Pipeline structure is shared |
-| `internal/analyzer/grouping_strategy.go`<br>`internal/analyzer/connected_grouping.go`<br>`internal/analyzer/k_core_grouping.go`<br>`internal/analyzer/star_medoid_grouping.go`<br>`internal/analyzer/centroid_grouping.go`<br>`internal/analyzer/complete_linkage_grouping.go`<br>`internal/analyzer/complete_linkage_clusterer.go`<br>`internal/analyzer/complete_linkage_heap.go`<br>`internal/analyzer/group_dedup.go`<br>`internal/analyzer/grouping_mode.go` | `internal/analyzer/grouping_strategy.go` | sync | **Many-to-one**: pyscn splits one file per strategy, jscan keeps them in a single file |
+| `internal/analyzer/minhash.go` | `internal/analyzer/minhash.go` | sync | Future: both adopt `core/lsh` |
+| `internal/analyzer/lsh_index.go` | `internal/analyzer/lsh_index.go` | sync | Future: both adopt `core/lsh` |
+| `internal/analyzer/ast_features.go` | *(adopted `core/clone`)* | sync | jscan uses `core/clone.ASTFeatureExtractor` via `toCoreTree` adapter |
+| `internal/analyzer/clone_detector.go` | `internal/analyzer/clone_detector.go` | case-by-case | Pipeline orchestration + fragment extraction stay language-side; grouping/dedup/gates/classifier come from `core/clone` |
+| `internal/analyzer/grouping_strategy.go`<br>`internal/analyzer/*_grouping.go`<br>`internal/analyzer/group_dedup.go`<br>`internal/analyzer/grouping_mode.go` | *(adopted `core/clone`)* | sync | jscan uses `core/clone` generics (`GroupingStrategy[*domain.Clone]`) + exported dedup passes |
 | `internal/analyzer/cfg.go` | `internal/analyzer/cfg.go` | sync | BasicBlock/CFG data structures |
 | `internal/analyzer/cfg_builder.go` | `internal/analyzer/cfg_builder.go` | reference-only | Control-flow semantics are language-specific (try/except/match vs try/catch/switch/hoisting) |
 | `internal/analyzer/reachability.go` | `internal/analyzer/reachability.go` | sync | BFS reachability analysis |
@@ -39,8 +39,8 @@ The `/sync-pyscn` command reads this file to run a sync.
 | `internal/analyzer/coupling_metrics.go` | `internal/analyzer/coupling_metrics.go` | sync | Martin metrics (Ca/Ce/I/A) |
 | `internal/analyzer/circular_detector.go` | `internal/analyzer/circular_detector.go` | sync | DFS cycle detection |
 | `internal/analyzer/dependency_graph.go` | `internal/analyzer/dependency_graph.go` | case-by-case | Graph construction is shared; ModuleInfo contents are language-specific |
-| `internal/analyzer/textual_similarity.go` | `internal/analyzer/textual_similarity.go` | case-by-case | Type-1 gate. Comment removal is language-specific (`#` vs `//` / `/* */`) |
-| `internal/analyzer/syntactic_similarity.go` | `internal/analyzer/syntactic_similarity.go` | sync | Type-2 gate (Jaccard over normalized AST hashes). `jaccardSimilarity` lives here too |
+| `internal/analyzer/textual_similarity.go` | *(adopted `core/clone`)* | case-by-case | Type-1 gate in `core/clone.TextualSimilarityAnalyzer`; jscan injects `removeJSComments` as `CommentStripper` (`javascript_comments.go`) |
+| `internal/analyzer/syntactic_similarity.go` | *(adopted `core/clone`)* | sync | Type-2 gate in `core/clone.SyntacticSimilarityAnalyzer` / `PairClassifier` |
 | `internal/analyzer/module_analyzer.go` | `internal/analyzer/module_analyzer.go` | reference-only | Import resolution is language-specific (`__init__.py` vs ESM/CJS/Node builtins) |
 
 ### domain (scoring, type definitions)
@@ -76,7 +76,7 @@ Out of sync scope, but reference points when considering porting features to jsc
 - LCOM4: `lcom.go`, `domain/lcom.go`
 - DFA (unused-variable detection): `dfa.go`, `dfa_builder.go`
 - DI anti-pattern detection: `di_antipattern_detector.go` plus `di_*.go`, `*_detector.go`, `framework_patterns.go`
-- Split similarity-analysis structure (remaining): `structural_similarity.go`, `semantic_similarity.go`, `similarity_analyzer.go`, `clone_classifier` (multi-dimensional classification) — `textual_similarity.go` and `syntactic_similarity.go` are already ported (see the file mapping)
+- Split similarity-analysis structure (remaining): `structural_similarity.go`, `semantic_similarity.go`, `similarity_analyzer.go`, multi-dimensional `clone_classifier` — Type-1/2 gates are in `core/clone` (jscan adopted); structural/semantic still unported
 - Re-export resolution: `reexport_resolver.go`
 - Improvement suggestions: `domain/suggestion.go`
 - MCP server: `mcp/`, `cmd/pyscn-mcp/`
@@ -134,3 +134,4 @@ Skipped during the 2026-07-08 sync (`fb3fe92`..`249b121`):
 | 2026-06-12 | `fb3fe92` | Initial catch-up: misc area done (catch-up complete; baseline moved to `fb3fe92`). LSH index switched to int fragment IDs with `WithMaxCandidates` cap (default 1024) and sorted deterministic candidates, reachability `allSuccessorsReturn` memoized (removed `copyVisited`), lazy-import cycle exclusion ported as dynamic-`import()` edge skipping in circular detection (#460), coupling zone classification aligned (Zone of Pain requires D≥0.5/Ca≥2/I≤0.3/A≤0.3, main sequence D≤0.2, instability defaults 0.3/0.7), dead-code findings merged per contiguous same-reason region with EndLine sort tiebreak, bare-`;` (empty statement) dead-code noise filtered (`empty_statement` now maps to `NodeEmptyStatement`), domain error codes TIMEOUT/CANCELLED/NOT_IMPLEMENTED/INTERNAL added |
 | 2026-07-11 | `3c6f8a8` (targeted) | Targeted port of the Agent Skills mechanism (`.claude-plugin/`): marketplace + skills-only plugin manifest and the 4 CLI-first skills (health-check, cli-analysis, refactoring, architecture-review) adapted to jscan's CLI; README gains an "AI Agent Integration" section (`uvx add-skills ludo-technologies/jscan`, Claude Code plugin install). Baseline SHA intentionally left at `249b121` — mapped algorithm files were not re-synced |
 | 2026-07-08 | `249b121` | Normal sync (`fb3fe92`..`249b121`, 18 commits touching mapped files). Fragment hash now computed (FNV-64a hex of Type-1 normalized content) and forwarded to clone output (`012cd15`, issue #488); clone-group classification now prefers the highest-similarity pair's type over majority vote, fixing high-similarity pairs being hidden behind Type-3 transitive edges and dropped by the default type filter (`d9dcada`, issue #525); added `dedupeCoveredGroups` post-grouping pass to suppress whole groups covered by another group's larger overlapping windows (`e2a0b1b`, issue #518) and `filterCloneGroupsWithoutBackingPairs` to drop groups left with no positive-similarity backing pair (`10d116d`); duplication metric switched from K-Core group density to fragment ratio (clonedFragments/totalFragments × 100, 0–30% scale replacing 0–10%) (`4faf98f`, `b58cfbd`). Skipped: internal detector-result-type refactor (no behavior change), 4 CBO commits (Python-scoping/import-specific, `cbo.go` is reference-only), cognitive-metrics risk scoring (depends on unported CognitiveComplexity), and the new module-community-detection feature (6 commits, entirely new subsystem) — see "Pending changes" |
+| 2026-07-12 | *(monorepo `core/`)* | Phase 2b clone adoption (#9 / `c57f3b4`): jscan deleted local `grouping_strategy.go`, `textual_similarity.go`, `syntactic_similarity.go`, `ast_features.go` and wired `core/clone` (grouping strategies, dedup passes, similarity gates, `PairClassifier`). Language-side keeps fragment extraction, TreeConverter, JS cost model, LSH orchestration, and `removeJSComments` as `CommentStripper`. Further algorithm changes for clone grouping/gates go to `core/clone`, not jscan copies |
