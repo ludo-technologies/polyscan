@@ -83,7 +83,7 @@ The heart of jscan. Contains all static analysis algorithms:
 - **Cyclomatic complexity** (`complexity.go`) - McCabe cyclomatic complexity calculation
 - **Dead code detection** (`dead_code.go`, `unused_code.go`) - Detects unreachable code, unused imports/exports, and orphan files
 - **Clone detection** (`clone_detector.go`) - Identifies duplicate code using APTED tree edit distance combined with MinHash/LSH for candidate selection
-  - `apted.go` / `apted_tree.go` / `apted_cost.go` - APTED tree edit distance (still local; `core/apted` adoption is Phase 2b / issue #10)
+  - Shared APTED algorithm, tree representation, and generic cost models from `core/apted`; `apted_tree.go` and `apted_cost.go` retain the JS/TS parser converter and JavaScript cost model
   - `minhash.go` - MinHash fingerprinting for approximate similarity
   - `lsh_index.go` - Locality-sensitive hashing index for fast candidate retrieval
   - `javascript_comments.go` - JS/TS comment stripping injected into `core/clone` as `CommentStripper`
