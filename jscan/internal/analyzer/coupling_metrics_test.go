@@ -31,97 +31,36 @@ func TestNewCouplingMetricsCalculator(t *testing.T) {
 	}
 }
 
-func TestCalculateAfferentCoupling(t *testing.T) {
-	// B -> A, C -> A (A has 2 dependents)
+func TestCalculateMetricsUsesCoreCouplingAndPreservesDuplicateEdges(t *testing.T) {
 	graph := domain.NewDependencyGraph()
 	graph.AddNode(&domain.ModuleNode{ID: "a"})
 	graph.AddNode(&domain.ModuleNode{ID: "b"})
 	graph.AddNode(&domain.ModuleNode{ID: "c"})
-	graph.AddEdge(&domain.DependencyEdge{From: "b", To: "a", Weight: 1})
+	graph.AddNode(&domain.ModuleNode{ID: "isolated"})
+	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b", Weight: 1})
+	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b", Weight: 1})
 	graph.AddEdge(&domain.DependencyEdge{From: "c", To: "a", Weight: 1})
 
 	calc := NewCouplingMetricsCalculator(nil)
-	ca := calc.calculateAfferentCoupling("a", graph)
+	metrics := calc.CalculateMetrics(graph)
 
-	if ca != 2 {
-		t.Errorf("Expected Ca=2 for A, got %d", ca)
+	if got := metrics["a"].AfferentCoupling; got != 1 {
+		t.Errorf("A Ca = %d, want 1", got)
 	}
-
-	// B has no dependents
-	caB := calc.calculateAfferentCoupling("b", graph)
-	if caB != 0 {
-		t.Errorf("Expected Ca=0 for B, got %d", caB)
+	if got := metrics["a"].EfferentCoupling; got != 2 {
+		t.Errorf("A Ce = %d, want 2", got)
 	}
-}
-
-func TestCalculateEfferentCoupling(t *testing.T) {
-	// A -> B, A -> C (A depends on 2 modules)
-	graph := domain.NewDependencyGraph()
-	graph.AddNode(&domain.ModuleNode{ID: "a"})
-	graph.AddNode(&domain.ModuleNode{ID: "b"})
-	graph.AddNode(&domain.ModuleNode{ID: "c"})
-	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b", Weight: 1})
-	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "c", Weight: 1})
-
-	calc := NewCouplingMetricsCalculator(nil)
-	ce := calc.calculateEfferentCoupling("a", graph)
-
-	if ce != 2 {
-		t.Errorf("Expected Ce=2 for A, got %d", ce)
+	if got := metrics["b"].AfferentCoupling; got != 2 {
+		t.Errorf("B Ca = %d, want 2", got)
 	}
-
-	// B has no dependencies
-	ceB := calc.calculateEfferentCoupling("b", graph)
-	if ceB != 0 {
-		t.Errorf("Expected Ce=0 for B, got %d", ceB)
+	if got := metrics["a"].Instability; math.Abs(got-2.0/3.0) > 0.001 {
+		t.Errorf("A instability = %f, want %f", got, 2.0/3.0)
 	}
-}
-
-func TestCalculateInstability(t *testing.T) {
-	calc := NewCouplingMetricsCalculator(nil)
-
-	testCases := []struct {
-		ca       int
-		ce       int
-		expected float64
-	}{
-		{0, 0, 0.5}, // No coupling - neutral
-		{5, 0, 0.0}, // Only incoming - completely stable
-		{0, 5, 1.0}, // Only outgoing - completely unstable
-		{5, 5, 0.5}, // Equal - neutral
-		{8, 2, 0.2}, // More incoming - stable
-		{2, 8, 0.8}, // More outgoing - unstable
+	if got := metrics["isolated"].Instability; got != 0 {
+		t.Errorf("isolated instability = %f, want core semantics 0", got)
 	}
-
-	for _, tc := range testCases {
-		result := calc.calculateInstability(tc.ca, tc.ce)
-		if math.Abs(result-tc.expected) > 0.001 {
-			t.Errorf("Instability(Ca=%d, Ce=%d) = %f, expected %f", tc.ca, tc.ce, result, tc.expected)
-		}
-	}
-}
-
-func TestCalculateDistance(t *testing.T) {
-	calc := NewCouplingMetricsCalculator(nil)
-
-	testCases := []struct {
-		instability  float64
-		abstractness float64
-		expected     float64
-	}{
-		{0.5, 0.5, 0.0}, // On main sequence
-		{1.0, 0.0, 0.0}, // On main sequence
-		{0.0, 1.0, 0.0}, // On main sequence
-		{0.0, 0.0, 1.0}, // Zone of pain - max distance
-		{1.0, 1.0, 1.0}, // Zone of uselessness - max distance
-		{0.5, 0.0, 0.5}, // Halfway
-	}
-
-	for _, tc := range testCases {
-		result := calc.calculateDistance(tc.instability, tc.abstractness)
-		if math.Abs(result-tc.expected) > 0.001 {
-			t.Errorf("Distance(I=%f, A=%f) = %f, expected %f", tc.instability, tc.abstractness, result, tc.expected)
-		}
+	if got := metrics["isolated"].Distance; got != 1 {
+		t.Errorf("isolated distance = %f, want 1", got)
 	}
 }
 

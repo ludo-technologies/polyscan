@@ -3,6 +3,7 @@ package analyzer
 import (
 	"fmt"
 
+	corecfg "github.com/ludo-technologies/polyscan/core/cfg"
 	"github.com/ludo-technologies/polyscan/jscan/internal/config"
 	"github.com/ludo-technologies/polyscan/jscan/internal/parser"
 )
@@ -71,41 +72,6 @@ func (cr *ComplexityResult) String() string {
 		cr.FunctionName, cr.Complexity, cr.RiskLevel)
 }
 
-// complexityVisitor implements CFGVisitor to count edges and nodes
-type complexityVisitor struct {
-	edgeCount         int
-	nodeCount         int
-	decisionPoints    map[*BasicBlock]int // Track decision points per block
-	loopStatements    int
-	exceptionHandlers int
-	logicalOperators  int
-	ternaryOperators  int
-}
-
-// VisitBlock counts nodes and analyzes decision points
-func (cv *complexityVisitor) VisitBlock(block *BasicBlock) bool {
-	if block == nil {
-		return true
-	}
-
-	// Count all blocks except entry/exit for accurate complexity
-	if !block.IsEntry && !block.IsExit {
-		cv.nodeCount++
-	}
-
-	// Count logical operators and ternary expressions in statements
-	// Skip statements that are nested function nodes — their complexity
-	// is calculated in their own separate CFG.
-	for _, stmt := range block.Statements {
-		if isFunctionNode(stmt) {
-			continue
-		}
-		cv.countJavaScriptComplexity(stmt)
-	}
-
-	return true
-}
-
 // isFunctionNode returns true if the node represents a function boundary
 func isFunctionNode(n *parser.Node) bool {
 	switch n.Type {
@@ -114,71 +80,6 @@ func isFunctionNode(n *parser.Node) bool {
 		return true
 	}
 	return false
-}
-
-// countJavaScriptComplexity counts JavaScript-specific complexity contributors
-func (cv *complexityVisitor) countJavaScriptComplexity(node *parser.Node) {
-	if node == nil {
-		return
-	}
-
-	// Count logical operators (&&, ||, ??)
-	if node.Type == parser.NodeLogicalExpression {
-		cv.logicalOperators++
-	}
-
-	// Count ternary operators (? :)
-	if node.Type == parser.NodeConditionalExpression {
-		cv.ternaryOperators++
-	}
-
-	// Recursively check child nodes, but stop at nested function boundaries
-	// to avoid counting inner functions' operators toward the parent's complexity
-	node.Walk(func(n *parser.Node) bool {
-		if n != node {
-			// Don't descend into nested function scopes
-			if isFunctionNode(n) {
-				return false
-			}
-			if n.Type == parser.NodeLogicalExpression {
-				cv.logicalOperators++
-			}
-			if n.Type == parser.NodeConditionalExpression {
-				cv.ternaryOperators++
-			}
-		}
-		return true
-	})
-}
-
-// VisitEdge counts edges and categorizes decision points
-func (cv *complexityVisitor) VisitEdge(edge *Edge) bool {
-	if edge == nil {
-		return true
-	}
-
-	cv.edgeCount++
-
-	// Count decision points accurately by source block
-	// A decision point is a block with multiple outgoing edges
-	if edge.From != nil {
-		if cv.decisionPoints == nil {
-			cv.decisionPoints = make(map[*BasicBlock]int)
-		}
-
-		switch edge.Type {
-		case EdgeCondTrue, EdgeCondFalse:
-			// Mark this block as having conditional edges
-			// We only count the block once, regardless of number of edges
-			cv.decisionPoints[edge.From] = 1
-		case EdgeLoop:
-			cv.loopStatements++
-		case EdgeException:
-			cv.exceptionHandlers++
-		}
-	}
-
-	return true
 }
 
 // CalculateComplexity computes McCabe cyclomatic complexity for a CFG using default thresholds
@@ -196,58 +97,57 @@ func CalculateComplexityWithConfig(cfg *CFG, complexityConfig *config.Complexity
 		}
 	}
 
-	visitor := &complexityVisitor{
-		decisionPoints: make(map[*BasicBlock]int),
+	coreResult, err := corecfg.ComputeComplexity(cfg, corecfg.ComplexityConfig{
+		Contributor: javaScriptComplexityContributor{},
+	})
+	if err != nil {
+		return &ComplexityResult{RiskLevel: "low"}
 	}
-	cfg.Walk(visitor)
 
-	// Primary method: count decision points + 1
-	// This is more reliable for CFGs with entry/exit nodes
-	decisionPoints := countDecisionPoints(visitor)
-	complexity := decisionPoints + 1
-
-	// JavaScript-specific: Add logical operators and ternary expressions
-	// These add to complexity as they create decision points
-	complexity += visitor.logicalOperators
-	complexity += visitor.ternaryOperators
-
-	// Ensure minimum complexity of 1 for any function
-	if complexity < 1 {
-		complexity = 1
+	edges := 0
+	for _, count := range coreResult.EdgeBreakdown {
+		edges += count
+	}
+	logicalOperators := 0
+	ternaryOperators := 0
+	for _, contribution := range coreResult.Contributions {
+		switch contribution.Description {
+		case "logical_operator":
+			logicalOperators += contribution.Count
+		case "ternary":
+			ternaryOperators += contribution.Count
+		}
+	}
+	nodes := 0
+	for _, block := range cfg.Blocks {
+		if !block.IsEntry && !block.IsExit {
+			nodes++
+		}
 	}
 
 	// Determine risk level based on thresholds
-	riskLevel := determineRiskLevel(complexity, complexityConfig)
+	riskLevel := determineRiskLevel(coreResult.McCabe, complexityConfig)
 
 	result := &ComplexityResult{
-		Complexity:        complexity,
-		Edges:             visitor.edgeCount,
-		Nodes:             visitor.nodeCount,
-		IfStatements:      len(visitor.decisionPoints), // Approximation
-		LoopStatements:    visitor.loopStatements,
-		ExceptionHandlers: visitor.exceptionHandlers,
-		LogicalOperators:  visitor.logicalOperators,
-		TernaryOperators:  visitor.ternaryOperators,
+		Complexity:        coreResult.McCabe,
+		Edges:             edges,
+		Nodes:             nodes,
+		IfStatements:      coreResult.DecisionPoints,
+		LoopStatements:    coreResult.EdgeBreakdown[corecfg.EdgeLoop],
+		ExceptionHandlers: coreResult.EdgeBreakdown[corecfg.EdgeException],
+		LogicalOperators:  logicalOperators,
+		TernaryOperators:  ternaryOperators,
 		RiskLevel:         riskLevel,
 		FunctionName:      cfg.Name,
 	}
 
-	if cfg.FunctionNode != nil {
-		result.StartLine = cfg.FunctionNode.Location.StartLine
-		result.StartCol = cfg.FunctionNode.Location.StartCol
-		result.EndLine = cfg.FunctionNode.Location.EndLine
+	if functionNode, ok := jsNode(cfg.FunctionNode); ok {
+		result.StartLine = functionNode.Location.StartLine
+		result.StartCol = functionNode.Location.StartCol
+		result.EndLine = functionNode.Location.EndLine
 	}
 
 	return result
-}
-
-// countDecisionPoints counts the total number of decision points
-func countDecisionPoints(visitor *complexityVisitor) int {
-	total := 0
-	for _, count := range visitor.decisionPoints {
-		total += count
-	}
-	return total
 }
 
 // determineRiskLevel determines the risk level based on complexity thresholds

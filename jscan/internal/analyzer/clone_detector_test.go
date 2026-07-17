@@ -496,12 +496,4 @@ func TestHelperFunctions(t *testing.T) {
 	if maxInt(5, 3) != 5 {
 		t.Error("maxInt(5, 3) should be 5")
 	}
-
-	// Test minInt
-	if minInt(3, 5) != 3 {
-		t.Error("minInt(3, 5) should be 3")
-	}
-	if minInt(5, 3) != 3 {
-		t.Error("minInt(5, 3) should be 3")
-	}
 }

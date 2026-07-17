@@ -1,11 +1,15 @@
 package analyzer
 
 import (
+	"reflect"
 	"testing"
 
+	coregraph "github.com/ludo-technologies/polyscan/core/graph"
 	"github.com/ludo-technologies/polyscan/jscan/domain"
 	"github.com/ludo-technologies/polyscan/jscan/internal/parser"
 )
+
+var _ coregraph.DirectedGraph = (*domain.DependencyGraph)(nil)
 
 func TestDefaultDependencyGraphBuilderConfig(t *testing.T) {
 	config := DefaultDependencyGraphBuilderConfig()
@@ -363,6 +367,29 @@ func TestDependencyGraphReverseEdges(t *testing.T) {
 	incoming := graph.GetIncomingEdges("b")
 	if len(incoming) != 1 || incoming[0].From != "a" {
 		t.Error("Expected incoming edge to b from a")
+	}
+}
+
+func TestDependencyGraphDirectedGraphMethodsAreDeterministicAndPreserveDuplicates(t *testing.T) {
+	graph := domain.NewDependencyGraph()
+	graph.AddNode(&domain.ModuleNode{ID: "c"})
+	graph.AddNode(&domain.ModuleNode{ID: "a"})
+	graph.AddNode(&domain.ModuleNode{ID: "b"})
+	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "c"})
+	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b"})
+	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b"})
+
+	if got, want := graph.NodeIDs(), []string{"a", "b", "c"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("NodeIDs() = %v, want %v", got, want)
+	}
+	if got, want := graph.Successors("a"), []string{"b", "b", "c"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Successors(a) = %v, want %v", got, want)
+	}
+	if got, want := graph.Predecessors("b"), []string{"a", "a"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Predecessors(b) = %v, want %v", got, want)
+	}
+	if !graph.HasNode("a") || graph.HasNode("missing") {
+		t.Errorf("HasNode returned unexpected result")
 	}
 }
 

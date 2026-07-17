@@ -3,7 +3,20 @@ package domain
 import (
 	"math"
 	"testing"
+
+	coredomain "github.com/ludo-technologies/polyscan/core/domain"
 )
+
+func TestScoringConstantsAndPublicGradeWrapperUseCoreDomain(t *testing.T) {
+	if MaxScoreBase != coredomain.MaxScoreBase || GradeAThreshold != coredomain.GradeAThreshold {
+		t.Fatal("jscan scoring constants differ from core/domain")
+	}
+	for _, score := range []int{0, 44, 45, 59, 60, 74, 75, 89, 90, 100} {
+		if got, want := GetGradeFromScore(score), coredomain.GradeFromScore(score); got != want {
+			t.Errorf("GetGradeFromScore(%d) = %q, want %q", score, got, want)
+		}
+	}
+}
 
 func TestCalculateHealthScore_CyclePenaltyLogFloor(t *testing.T) {
 	tests := []struct {

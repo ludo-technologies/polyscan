@@ -78,20 +78,17 @@ Wraps [go-tree-sitter](https://github.com/smacker/go-tree-sitter) to parse JavaS
 
 The heart of jscan. Contains all static analysis algorithms:
 
-- **CFG construction** (`cfg.go`, `cfg_builder.go`) - Builds control flow graphs from parsed ASTs
-- **Reachability analysis** (`reachability.go`) - Determines reachable/unreachable code paths from CFG
-- **Cyclomatic complexity** (`complexity.go`) - McCabe cyclomatic complexity calculation
-- **Dead code detection** (`dead_code.go`, `unused_code.go`) - Detects unreachable code, unused imports/exports, and orphan files
+- **CFG construction** (`cfg_builder.go`) - Builds `core/cfg.CFG` graphs from parsed ASTs; JavaScript control-flow semantics and classifiers remain language-side
+- **CFG analyses** (`complexity.go`, `dead_code.go`, `reachability.go`) - Enriches shared `core/cfg` reachability, McCabe complexity, and dead-code results with JavaScript source details
 - **Clone detection** (`clone_detector.go`) - Identifies duplicate code using APTED tree edit distance combined with MinHash/LSH for candidate selection
   - Shared APTED algorithm, tree representation, and generic cost models from `core/apted`; `apted_tree.go` and `apted_cost.go` retain the JS/TS parser converter and JavaScript cost model
-  - `minhash.go` - MinHash fingerprinting for approximate similarity
-  - `lsh_index.go` - Locality-sensitive hashing index for fast candidate retrieval
+  - Shared MinHash and locality-sensitive hashing kernels from `core/lsh`; `lsh_index.go` adapts fragment IDs and preserves deterministic candidate caps
   - `javascript_comments.go` - JS/TS comment stripping injected into `core/clone` as `CommentStripper`
   - Shared kernels from `core/clone`: AST feature extraction, grouping strategies, group dedup, Type-1/2 similarity gates, pair classifier
 - **Module analysis** (`module_analyzer.go`) - ESM and CommonJS import/export resolution
 - **Dependency graph** (`dependency_graph.go`) - Builds the full module dependency graph
-- **CBO metrics** (`cbo.go`, `coupling_metrics.go`) - Coupling Between Objects measurement
-- **Circular dependency detection** (`circular_detector.go`) - Finds circular dependencies using Tarjan's strongly connected components algorithm
+- **CBO and dependency metrics** (`cbo.go`, `coupling_metrics.go`) - Language-specific CBO analysis plus shared `core/graph` Martin metrics
+- **Circular dependency detection** (`circular_detector.go`) - Enriches `core/graph` Tarjan SCC results while excluding dynamic imports from load-time cycles
 
 ### internal/reporter -- Output Formatting
 
@@ -103,7 +100,7 @@ Reads and manages jscan configuration (thresholds, ignore patterns, output setti
 
 ### domain -- Domain Models
 
-Analysis result types and request/response models. Mostly pure data; `clone.go` implements `core/clone.GroupableItem` so grouping runs on domain clones without a parallel type layer.
+Analysis result types and request/response models. `clone.go` implements `core/clone.GroupableItem`, `dependency_graph.go` implements `core/graph.DirectedGraph`, and health scoring composes shared calculators from `core/domain`.
 
 - `complexity.go` - Complexity measurement models
 - `dead_code.go` - Dead code finding types
