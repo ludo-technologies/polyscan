@@ -5,10 +5,13 @@ import "testing"
 // testClassifier is a StatementClassifier for testing.
 type testClassifier struct{}
 
-func (tc *testClassifier) IsReturn(stmt any) bool   { s, ok := stmt.(string); return ok && s == "return" }
-func (tc *testClassifier) IsBreak(stmt any) bool     { s, ok := stmt.(string); return ok && s == "break" }
-func (tc *testClassifier) IsContinue(stmt any) bool  { s, ok := stmt.(string); return ok && s == "continue" }
-func (tc *testClassifier) IsThrow(stmt any) bool     { s, ok := stmt.(string); return ok && s == "throw" }
+func (tc *testClassifier) IsReturn(stmt any) bool { s, ok := stmt.(string); return ok && s == "return" }
+func (tc *testClassifier) IsBreak(stmt any) bool  { s, ok := stmt.(string); return ok && s == "break" }
+func (tc *testClassifier) IsContinue(stmt any) bool {
+	s, ok := stmt.(string)
+	return ok && s == "continue"
+}
+func (tc *testClassifier) IsThrow(stmt any) bool { s, ok := stmt.(string); return ok && s == "throw" }
 
 func TestReachabilityLinearCFG(t *testing.T) {
 	c := NewCFG("linear")
@@ -99,9 +102,38 @@ func TestReachabilityWithClassifier(t *testing.T) {
 	if result.Reachable[b2.ID] {
 		t.Fatal("b2 should be unreachable after return block")
 	}
-	// entry + b1 reachable, exit and b2 unreachable
+	// entry + b1 reachable, exit and b2 unreachable because this fixture has
+	// only a normal fallthrough edge after the return.
 	if result.ReachableCount != 2 {
 		t.Fatalf("expected 2 reachable, got %d", result.ReachableCount)
+	}
+}
+
+func TestReachabilityTerminatorPreservesControlTransferEdges(t *testing.T) {
+	c := NewCFG("terminator_edges")
+	terminator := c.CreateBlock("terminator")
+	terminator.AddStatement("return")
+	fallthroughBlock := c.CreateBlock("fallthrough")
+	catchBlock := c.CreateBlock("catch")
+	breakTarget := c.CreateBlock("break_target")
+	continueTarget := c.CreateBlock("continue_target")
+
+	c.ConnectBlocks(c.Entry, terminator, EdgeNormal)
+	c.ConnectBlocks(terminator, fallthroughBlock, EdgeNormal)
+	c.ConnectBlocks(terminator, catchBlock, EdgeException)
+	c.ConnectBlocks(terminator, breakTarget, EdgeBreak)
+	c.ConnectBlocks(terminator, continueTarget, EdgeContinue)
+	c.ConnectBlocks(terminator, c.Exit, EdgeReturn)
+
+	result := AnalyzeReachability(c, ReachabilityConfig{Classifier: &testClassifier{}})
+
+	if result.Reachable[fallthroughBlock.ID] {
+		t.Fatal("normal fallthrough should be unreachable after a terminator")
+	}
+	for _, block := range []*BasicBlock{catchBlock, breakTarget, continueTarget, c.Exit} {
+		if !result.Reachable[block.ID] {
+			t.Errorf("control-transfer target %q should remain reachable", block.Label)
+		}
 	}
 }
 

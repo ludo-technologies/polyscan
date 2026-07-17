@@ -211,7 +211,7 @@ func (s *AnalyzeSummary) calculateComplexityPenalty() int {
 // Weights: Critical=1.0, Warning=0.5, Info=0.2
 // The rate (weightedFindings / totalFiles) is mapped linearly to 0–20,
 // reaching the maximum penalty at a rate of 3.0 findings per file.
-func (s *AnalyzeSummary) calculateDeadCodePenalty(_ float64) int {
+func (s *AnalyzeSummary) calculateDeadCodePenalty() int {
 	weightedDeadCode := float64(s.CriticalDeadCode)*1.0 +
 		float64(s.WarningDeadCode)*0.5 +
 		float64(s.InfoDeadCode)*0.2
@@ -298,7 +298,7 @@ func (s *AnalyzeSummary) CalculateHealthScore() error {
 	complexityPenalty := s.calculateComplexityPenalty()
 	s.ComplexityScore = penaltyToScore(complexityPenalty, MaxScoreBase)
 
-	deadCodePenalty := s.calculateDeadCodePenalty(1)
+	deadCodePenalty := s.calculateDeadCodePenalty()
 	s.DeadCodeScore = penaltyToScore(deadCodePenalty, MaxScoreBase)
 
 	duplicationPenalty := s.calculateDuplicationPenalty()
