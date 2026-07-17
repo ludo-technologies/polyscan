@@ -2,51 +2,9 @@ package analyzer
 
 import (
 	"strings"
+
+	"github.com/ludo-technologies/polyscan/core/apted"
 )
-
-// CostModel defines the interface for calculating edit operation costs
-type CostModel interface {
-	// Insert returns the cost of inserting a node
-	Insert(node *TreeNode) float64
-
-	// Delete returns the cost of deleting a node
-	Delete(node *TreeNode) float64
-
-	// Rename returns the cost of renaming node1 to node2
-	Rename(node1, node2 *TreeNode) float64
-}
-
-// DefaultCostModel implements a uniform cost model where all operations cost 1.0
-type DefaultCostModel struct{}
-
-// NewDefaultCostModel creates a new default cost model
-func NewDefaultCostModel() *DefaultCostModel {
-	return &DefaultCostModel{}
-}
-
-// Insert returns the cost of inserting a node (always 1.0)
-func (c *DefaultCostModel) Insert(node *TreeNode) float64 {
-	return 1.0
-}
-
-// Delete returns the cost of deleting a node (always 1.0)
-func (c *DefaultCostModel) Delete(node *TreeNode) float64 {
-	return 1.0
-}
-
-// Rename returns the cost of renaming node1 to node2
-func (c *DefaultCostModel) Rename(node1, node2 *TreeNode) float64 {
-	if node1 == nil || node2 == nil {
-		return 1.0
-	}
-
-	// If labels are identical, no cost for rename
-	if node1.Label == node2.Label {
-		return 0.0
-	}
-
-	return 1.0
-}
 
 // JavaScriptCostModel implements a JavaScript-aware cost model with different costs for different node types
 type JavaScriptCostModel struct {
@@ -61,6 +19,8 @@ type JavaScriptCostModel struct {
 	// Whether to ignore differences in identifier names
 	IgnoreIdentifiers bool
 }
+
+var _ apted.CostModel = (*JavaScriptCostModel)(nil)
 
 // NewJavaScriptCostModel creates a new JavaScript-aware cost model with default settings
 func NewJavaScriptCostModel() *JavaScriptCostModel {
@@ -85,7 +45,7 @@ func NewJavaScriptCostModelWithConfig(ignoreLiterals, ignoreIdentifiers bool) *J
 }
 
 // Insert returns the cost of inserting a node
-func (c *JavaScriptCostModel) Insert(node *TreeNode) float64 {
+func (c *JavaScriptCostModel) Insert(node *apted.TreeNode) float64 {
 	if node == nil {
 		return c.BaseInsertCost
 	}
@@ -96,7 +56,7 @@ func (c *JavaScriptCostModel) Insert(node *TreeNode) float64 {
 }
 
 // Delete returns the cost of deleting a node
-func (c *JavaScriptCostModel) Delete(node *TreeNode) float64 {
+func (c *JavaScriptCostModel) Delete(node *apted.TreeNode) float64 {
 	if node == nil {
 		return c.BaseDeleteCost
 	}
@@ -107,7 +67,7 @@ func (c *JavaScriptCostModel) Delete(node *TreeNode) float64 {
 }
 
 // Rename returns the cost of renaming node1 to node2
-func (c *JavaScriptCostModel) Rename(node1, node2 *TreeNode) float64 {
+func (c *JavaScriptCostModel) Rename(node1, node2 *apted.TreeNode) float64 {
 	if node1 == nil || node2 == nil {
 		return c.BaseRenameCost
 	}
@@ -319,37 +279,4 @@ func (c *JavaScriptCostModel) areSameCategory(type1, type2 string) bool {
 	}
 
 	return false
-}
-
-// WeightedCostModel allows custom weights for different operation types
-type WeightedCostModel struct {
-	InsertWeight  float64
-	DeleteWeight  float64
-	RenameWeight  float64
-	BaseCostModel CostModel
-}
-
-// NewWeightedCostModel creates a new weighted cost model
-func NewWeightedCostModel(insertWeight, deleteWeight, renameWeight float64, baseCostModel CostModel) *WeightedCostModel {
-	return &WeightedCostModel{
-		InsertWeight:  insertWeight,
-		DeleteWeight:  deleteWeight,
-		RenameWeight:  renameWeight,
-		BaseCostModel: baseCostModel,
-	}
-}
-
-// Insert returns the weighted cost of inserting a node
-func (c *WeightedCostModel) Insert(node *TreeNode) float64 {
-	return c.InsertWeight * c.BaseCostModel.Insert(node)
-}
-
-// Delete returns the weighted cost of deleting a node
-func (c *WeightedCostModel) Delete(node *TreeNode) float64 {
-	return c.DeleteWeight * c.BaseCostModel.Delete(node)
-}
-
-// Rename returns the weighted cost of renaming node1 to node2
-func (c *WeightedCostModel) Rename(node1, node2 *TreeNode) float64 {
-	return c.RenameWeight * c.BaseCostModel.Rename(node1, node2)
 }

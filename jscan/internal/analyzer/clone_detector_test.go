@@ -2,7 +2,6 @@ package analyzer
 
 import (
 	"context"
-	"math"
 	"regexp"
 	"testing"
 
@@ -490,14 +489,6 @@ func TestShouldCompareFragments(t *testing.T) {
 }
 
 func TestHelperFunctions(t *testing.T) {
-	// Test absInt
-	if absInt(-5) != 5 {
-		t.Error("absInt(-5) should be 5")
-	}
-	if absInt(5) != 5 {
-		t.Error("absInt(5) should be 5")
-	}
-
 	// Test maxInt
 	if maxInt(3, 5) != 5 {
 		t.Error("maxInt(3, 5) should be 5")
@@ -512,47 +503,5 @@ func TestHelperFunctions(t *testing.T) {
 	}
 	if minInt(5, 3) != 3 {
 		t.Error("minInt(5, 3) should be 3")
-	}
-}
-
-func TestComputeDistanceAndSimilarity_MatchesAnalyzerFormula(t *testing.T) {
-	analyzer := NewAPTEDAnalyzer(NewJavaScriptCostModel())
-
-	treeA := &TreeNode{
-		Label: "FunctionDeclaration",
-		Children: []*TreeNode{
-			{Label: "Identifier"},
-			{
-				Label: "BlockStatement",
-				Children: []*TreeNode{
-					{Label: "ReturnStatement"},
-				},
-			},
-		},
-	}
-	treeB := &TreeNode{
-		Label: "FunctionDeclaration",
-		Children: []*TreeNode{
-			{Label: "Identifier"},
-			{
-				Label: "BlockStatement",
-				Children: []*TreeNode{
-					{Label: "ExpressionStatement"},
-				},
-			},
-		},
-	}
-	PrepareTreeForAPTED(treeA)
-	PrepareTreeForAPTED(treeB)
-
-	wantDistance := analyzer.ComputeDistance(treeA, treeB)
-	gotDistance, gotSimilarity := analyzer.ComputeDistanceAndSimilarity(treeA, treeB)
-	wantSimilarity := analyzer.ComputeSimilarity(treeA, treeB)
-
-	if math.Abs(gotDistance-wantDistance) > 1e-12 {
-		t.Fatalf("distance mismatch: got %.12f, want %.12f", gotDistance, wantDistance)
-	}
-	if math.Abs(gotSimilarity-wantSimilarity) > 1e-12 {
-		t.Fatalf("similarity mismatch: got %.12f, want %.12f", gotSimilarity, wantSimilarity)
 	}
 }

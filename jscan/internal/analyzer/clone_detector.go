@@ -34,7 +34,7 @@ func (cl *CodeLocation) String() string {
 type CodeFragment struct {
 	Location   *CodeLocation
 	ASTNode    *parser.Node
-	TreeNode   *TreeNode
+	TreeNode   *apted.TreeNode
 	Content    string   // Original source code content
 	Hash       string   // FNV-64a hex hash of Type-1 normalized content; "" when no source content
 	Size       int      // Number of AST nodes
@@ -159,7 +159,7 @@ type CloneDetector struct {
 	// Embed config fields (private to maintain encapsulation)
 	cloneDetectorConfig CloneDetectorConfig
 
-	analyzer         *APTEDAnalyzer
+	analyzer         *apted.APTEDAnalyzer
 	converter        *TreeConverter
 	textualAnalyzer  *coreclone.TextualSimilarityAnalyzer
 	featureExtractor *coreclone.ASTFeatureExtractor
@@ -178,20 +178,20 @@ type CloneDetector struct {
 // NewCloneDetector creates a new clone detector with the given configuration
 func NewCloneDetector(config *CloneDetectorConfig) *CloneDetector {
 	// Create appropriate cost model based on configuration
-	var costModel CostModel
+	var costModel apted.CostModel
 	switch config.CostModelType {
 	case "default":
-		costModel = NewDefaultCostModel()
+		costModel = apted.NewDefaultCostModel()
 	case "javascript":
 		costModel = NewJavaScriptCostModelWithConfig(config.IgnoreLiterals, config.IgnoreIdentifiers)
 	case "weighted":
 		baseCostModel := NewJavaScriptCostModelWithConfig(config.IgnoreLiterals, config.IgnoreIdentifiers)
-		costModel = NewWeightedCostModel(1.0, 1.0, 0.8, baseCostModel)
+		costModel = apted.NewWeightedCostModel(1.0, 1.0, 0.8, baseCostModel)
 	default:
 		costModel = NewJavaScriptCostModel()
 	}
 
-	analyzer := NewAPTEDAnalyzer(costModel)
+	analyzer := apted.NewAPTEDAnalyzerWithNormalization(costModel, apted.NormalizeByMax)
 	textualAnalyzer := coreclone.NewTextualSimilarityAnalyzer(removeJSComments)
 	syntacticAnalyzer := coreclone.NewSyntacticSimilarityAnalyzer()
 	classifier := coreclone.NewPairClassifier(coreclone.ClassifierConfig{
@@ -613,8 +613,8 @@ func (cd *CloneDetector) prepareFragments() {
 		if fragment.TreeNode == nil {
 			continue
 		}
-		PrepareTreeForAPTED(fragment.TreeNode)
-		features, _ := cd.featureExtractor.ExtractFeatures(toCoreTree(fragment.TreeNode))
+		apted.PrepareTreeForAPTED(fragment.TreeNode)
+		features, _ := cd.featureExtractor.ExtractFeatures(fragment.TreeNode)
 		fragment.Features = features
 	}
 }
@@ -894,24 +894,13 @@ func toCoreFragment(fragment *CodeFragment, id int) *coreclone.CodeFragment {
 	if fragment == nil {
 		return nil
 	}
-	result := &coreclone.CodeFragment{ID: id, Content: fragment.Content, Hash: fragment.Hash, ASTNode: toCoreTree(fragment.TreeNode), NodeCount: fragment.Size, LineCount: fragment.LineCount, Complexity: fragment.Complexity, Features: fragment.Features}
+	result := &coreclone.CodeFragment{ID: id, Content: fragment.Content, Hash: fragment.Hash, ASTNode: fragment.TreeNode, NodeCount: fragment.Size, LineCount: fragment.LineCount, Complexity: fragment.Complexity, Features: fragment.Features}
 	if fragment.Location != nil {
 		result.FilePath = fragment.Location.FilePath
 		result.StartLine = fragment.Location.StartLine
 		result.EndLine = fragment.Location.EndLine
 		result.StartCol = fragment.Location.StartCol
 		result.EndCol = fragment.Location.EndCol
-	}
-	return result
-}
-
-func toCoreTree(node *TreeNode) *apted.TreeNode {
-	if node == nil {
-		return nil
-	}
-	result := apted.NewTreeNode(node.ID, node.Label)
-	for _, child := range node.Children {
-		result.AddChild(toCoreTree(child))
 	}
 	return result
 }
