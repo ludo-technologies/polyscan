@@ -358,3 +358,72 @@ func BenchmarkExtractFeatures(b *testing.B) {
 		ext.ExtractFeatures(root)
 	}
 }
+
+func TestWithLiteralNames_FiltersLabelFeatures(t *testing.T) {
+	// def f(x): return x  — shaped tree with identifier/literal payloads
+	build := func(argName, constant string) *apted.TreeNode {
+		root := apted.NewTreeNode(0, "FunctionDef(f)")
+		arg := apted.NewTreeNode(1, "Arg("+argName+")")
+		ret := apted.NewTreeNode(2, "Return")
+		ret.AddChild(apted.NewTreeNode(3, "Name("+argName+")"))
+		ret.AddChild(apted.NewTreeNode(4, "Constant("+constant+")"))
+		root.AddChild(arg)
+		root.AddChild(ret)
+		return root
+	}
+	literalNames := []string{"Name", "Constant", "Arg", "Keyword"}
+
+	t.Run("renamed identifiers produce identical features when filtered", func(t *testing.T) {
+		ext := NewASTFeatureExtractor().WithLiteralNames(literalNames)
+		f1, err := ext.ExtractFeatures(build("x", "1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		f2, err := ext.ExtractFeatures(build("y", "2"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if JaccardSimilarity(f1, f2) != 1.0 {
+			t.Errorf("filtered features should be identical for renamed identifiers, got %v vs %v", f1, f2)
+		}
+		for _, f := range f1 {
+			if f == "type:Name" || f == "type:Constant" || f == "type:Arg" {
+				t.Errorf("literal-like type feature %q should not be emitted", f)
+			}
+		}
+	})
+
+	t.Run("includeLiterals bypasses the filter", func(t *testing.T) {
+		ext := NewASTFeatureExtractor().WithOptions(3, 4, true, true).WithLiteralNames(literalNames)
+		f1, err := ext.ExtractFeatures(build("x", "1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		f2, err := ext.ExtractFeatures(build("y", "2"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if JaccardSimilarity(f1, f2) == 1.0 {
+			t.Errorf("with literals included, renamed identifiers should differ")
+		}
+	})
+
+	t.Run("no configured names filters nothing", func(t *testing.T) {
+		plain, err := NewASTFeatureExtractor().ExtractFeatures(build("x", "1"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(plain) == 0 {
+			t.Fatal("expected features")
+		}
+		found := false
+		for _, f := range plain {
+			if f == "type:Name" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("unfiltered extractor should emit type:Name, got %v", plain)
+		}
+	})
+}

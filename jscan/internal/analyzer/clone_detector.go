@@ -194,7 +194,11 @@ func NewCloneDetector(config *CloneDetectorConfig) *CloneDetector {
 
 	analyzer := apted.NewAPTEDAnalyzerWithNormalization(costModel, apted.NormalizeByMax)
 	textualAnalyzer := coreclone.NewTextualSimilarityAnalyzer(removeJSComments)
-	syntacticAnalyzer := coreclone.NewSyntacticSimilarityAnalyzer()
+	syntacticAnalyzer := coreclone.NewSyntacticSimilarityAnalyzerWithExtractor(
+		coreclone.NewASTFeatureExtractor().
+			WithOptions(3, 4, true, false).
+			WithPatterns(jsClonePatternNames).
+			WithLiteralNames(jsLiteralLikeNames))
 	classifier := coreclone.NewPairClassifier(coreclone.ClassifierConfig{
 		Type1Threshold: config.Type1Threshold, Type2Threshold: config.Type2Threshold,
 		Type3Threshold: config.Type3Threshold, Type4Threshold: config.Type4Threshold,
@@ -207,11 +211,13 @@ func NewCloneDetector(config *CloneDetectorConfig) *CloneDetector {
 		analyzer:            analyzer,
 		converter:           NewTreeConverter(),
 		textualAnalyzer:     textualAnalyzer,
-		featureExtractor:    coreclone.NewASTFeatureExtractor(),
-		pairClassifier:      classifier,
-		fragments:           []*CodeFragment{},
-		clonePairs:          []*domain.ClonePair{},
-		cloneGroups:         []*domain.CloneGroup{},
+		featureExtractor: coreclone.NewASTFeatureExtractor().
+			WithPatterns(jsClonePatternNames).
+			WithLiteralNames(jsLiteralLikeNames),
+		pairClassifier: classifier,
+		fragments:      []*CodeFragment{},
+		clonePairs:     []*domain.ClonePair{},
+		cloneGroups:    []*domain.CloneGroup{},
 	}
 }
 
