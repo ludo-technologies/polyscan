@@ -11,6 +11,7 @@ import (
 	"github.com/ludo-technologies/polyscan/core/apted"
 	coreclone "github.com/ludo-technologies/polyscan/core/clone"
 	coredomain "github.com/ludo-technologies/polyscan/core/domain"
+	corelsh "github.com/ludo-technologies/polyscan/core/lsh"
 	"github.com/ludo-technologies/polyscan/jscan/domain"
 	"github.com/ludo-technologies/polyscan/jscan/internal/constants"
 	"github.com/ludo-technologies/polyscan/jscan/internal/parser"
@@ -493,14 +494,14 @@ func (cd *CloneDetector) DetectClonesWithLSH(ctx context.Context, fragments []*C
 	}
 
 	// Stage 1: MinHash signatures from prepared clone features
-	hasher := NewMinHasher(cd.cloneDetectorConfig.LSHMinHashCount)
+	hasher := corelsh.NewMinHasher(cd.cloneDetectorConfig.LSHMinHashCount)
 
 	type fragRec struct {
 		idx int
-		sig *MinHashSignature
+		sig *corelsh.MinHashSignature
 	}
 	records := make([]fragRec, 0, len(cd.fragments))
-	sigByIndex := make(map[int]*MinHashSignature, len(cd.fragments))
+	sigByIndex := make(map[int]*corelsh.MinHashSignature, len(cd.fragments))
 	for i, f := range cd.fragments {
 		if f == nil || f.TreeNode == nil {
 			continue
@@ -516,12 +517,10 @@ func (cd *CloneDetector) DetectClonesWithLSH(ctx context.Context, fragments []*C
 	}
 
 	// Stage 2: LSH indexing
-	lsh := NewLSHIndex(cd.cloneDetectorConfig.LSHBands, cd.cloneDetectorConfig.LSHRows).
-		WithMaxCandidates(cd.cloneDetectorConfig.LSHMaxCandidates)
+	lsh := newLSHCandidateIndex(cd.cloneDetectorConfig.LSHBands, cd.cloneDetectorConfig.LSHRows, cd.cloneDetectorConfig.LSHMaxCandidates)
 	for _, r := range records {
 		_ = lsh.AddFragment(r.idx, r.sig)
 	}
-	_ = lsh.BuildIndex()
 
 	// Stage 3: Candidate generation + APTED verification
 	// Use MinHash similarity to filter before expensive APTED
@@ -1017,5 +1016,3 @@ func maxInt(a, b int) int {
 	}
 	return b
 }
-
-// minInt is defined in minhash.go

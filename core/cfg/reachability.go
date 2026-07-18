@@ -26,10 +26,11 @@ type ReachabilityResult struct {
 
 // AnalyzeReachability performs reachability analysis on a CFG.
 // If config.Classifier is nil, only structural reachability (DFS from entry) is
-// computed, following all edges. If config.Classifier is non-nil, blocks whose
-// last statement is a terminator (return/break/continue/throw) will not have
-// their successors visited via normal DFS traversal. Successors are still
-// reachable if another non-terminating path leads to them.
+// computed, following all edges. If config.Classifier is non-nil, normal
+// fallthrough edges from blocks containing a terminator
+// (return/break/continue/throw) are not followed. Explicit control-transfer
+// edges such as exception, return, break, and continue remain traversable.
+// Pruned successors are still reachable if another path leads to them.
 func AnalyzeReachability(c *CFG, config ReachabilityConfig) *ReachabilityResult {
 	result := &ReachabilityResult{
 		Reachable: make(map[string]bool),
@@ -54,12 +55,10 @@ func AnalyzeReachability(c *CFG, config ReachabilityConfig) *ReachabilityResult 
 			terminates = blockHasTerminator(block, config.Classifier)
 		}
 
-		if terminates {
-			// Don't follow successors -- they are unreachable from this path.
-			return
-		}
-
 		for _, edge := range block.Successors {
+			if terminates && edge.Type == EdgeNormal {
+				continue
+			}
 			dfs(edge.To)
 		}
 	}

@@ -1,9 +1,9 @@
 package analyzer
 
 import (
-	"math"
 	"sort"
 
+	coregraph "github.com/ludo-technologies/polyscan/core/graph"
 	"github.com/ludo-technologies/polyscan/jscan/domain"
 )
 
@@ -62,26 +62,24 @@ func (c *CouplingMetricsCalculator) CalculateMetrics(graph *domain.DependencyGra
 		return make(map[string]*domain.ModuleDependencyMetrics)
 	}
 
-	metrics := make(map[string]*domain.ModuleDependencyMetrics)
+	coreMetrics, err := coregraph.ComputeCouplingMetrics(graph, coregraph.CouplingConfig{
+		AbstractnessFunc: func(nodeID string) (float64, error) {
+			return c.calculateAbstractness(graph.GetNode(nodeID)), nil
+		},
+	})
+	if err != nil {
+		return make(map[string]*domain.ModuleDependencyMetrics)
+	}
 
-	for nodeID, node := range graph.Nodes {
-		// Calculate afferent and efferent coupling
-		ca := c.calculateAfferentCoupling(nodeID, graph)
-		ce := c.calculateEfferentCoupling(nodeID, graph)
-
-		// Calculate instability
-		instability := c.calculateInstability(ca, ce)
-
-		// Calculate abstractness (simplified - based on export count)
-		abstractness := c.calculateAbstractness(node)
-
-		// Calculate distance from main sequence
-		distance := c.calculateDistance(instability, abstractness)
+	metrics := make(map[string]*domain.ModuleDependencyMetrics, len(coreMetrics))
+	for _, nodeID := range graph.NodeIDs() {
+		node := graph.GetNode(nodeID)
+		m := coreMetrics[nodeID]
 
 		// Stability zone is calculated in CalculateCouplingAnalysis
 
 		// Assess risk level
-		riskLevel := c.assessRiskLevel(ca, ce, distance)
+		riskLevel := c.assessRiskLevel(m.Ca, m.Ce, m.Distance)
 
 		// Get direct dependencies and dependents
 		directDeps := c.getDirectDependencies(nodeID, graph)
@@ -90,11 +88,11 @@ func (c *CouplingMetricsCalculator) CalculateMetrics(graph *domain.DependencyGra
 		metrics[nodeID] = &domain.ModuleDependencyMetrics{
 			ModuleName:             node.Name,
 			FilePath:               node.FilePath,
-			AfferentCoupling:       ca,
-			EfferentCoupling:       ce,
-			Instability:            instability,
-			Abstractness:           abstractness,
-			Distance:               distance,
+			AfferentCoupling:       m.Ca,
+			EfferentCoupling:       m.Ce,
+			Instability:            m.Instability,
+			Abstractness:           m.Abstractness,
+			Distance:               m.Distance,
 			RiskLevel:              riskLevel,
 			DirectDependencies:     directDeps,
 			Dependents:             dependents,
@@ -187,28 +185,6 @@ func (c *CouplingMetricsCalculator) CalculateCouplingAnalysis(graph *domain.Depe
 	}
 }
 
-// calculateAfferentCoupling calculates Ca (modules that depend on this one)
-func (c *CouplingMetricsCalculator) calculateAfferentCoupling(nodeID string, graph *domain.DependencyGraph) int {
-	incoming := graph.GetIncomingEdges(nodeID)
-	return len(incoming)
-}
-
-// calculateEfferentCoupling calculates Ce (modules this one depends on)
-func (c *CouplingMetricsCalculator) calculateEfferentCoupling(nodeID string, graph *domain.DependencyGraph) int {
-	outgoing := graph.GetOutgoingEdges(nodeID)
-	return len(outgoing)
-}
-
-// calculateInstability calculates I = Ce / (Ca + Ce)
-// Returns 0.5 for modules with no coupling (neither stable nor unstable)
-func (c *CouplingMetricsCalculator) calculateInstability(ca, ce int) float64 {
-	total := ca + ce
-	if total == 0 {
-		return 0.5 // Neutral - no dependencies either way
-	}
-	return float64(ce) / float64(total)
-}
-
 // calculateAbstractness calculates A = abstractions / total declarations
 // Simplified: based on the ratio of exports to a baseline
 // In a more complete implementation, this would analyze actual abstractions (interfaces, abstract classes)
@@ -230,12 +206,6 @@ func (c *CouplingMetricsCalculator) calculateAbstractness(node *domain.ModuleNod
 		abstractness = 1.0
 	}
 	return abstractness
-}
-
-// calculateDistance calculates D = |A + I - 1|
-// The main sequence is where A + I = 1
-func (c *CouplingMetricsCalculator) calculateDistance(instability, abstractness float64) float64 {
-	return math.Abs(abstractness + instability - 1.0)
 }
 
 // classifyStabilityZone classifies a module into a stability zone.
@@ -286,24 +256,12 @@ func (c *CouplingMetricsCalculator) assessRiskLevel(ca, ce int, distance float64
 
 // getDirectDependencies returns the IDs of modules this module depends on
 func (c *CouplingMetricsCalculator) getDirectDependencies(nodeID string, graph *domain.DependencyGraph) []string {
-	edges := graph.GetOutgoingEdges(nodeID)
-	deps := make([]string, 0, len(edges))
-	for _, edge := range edges {
-		deps = append(deps, edge.To)
-	}
-	sort.Strings(deps)
-	return deps
+	return graph.Successors(nodeID)
 }
 
 // getDependents returns the IDs of modules that depend on this module
 func (c *CouplingMetricsCalculator) getDependents(nodeID string, graph *domain.DependencyGraph) []string {
-	edges := graph.GetIncomingEdges(nodeID)
-	deps := make([]string, 0, len(edges))
-	for _, edge := range edges {
-		deps = append(deps, edge.From)
-	}
-	sort.Strings(deps)
-	return deps
+	return graph.Predecessors(nodeID)
 }
 
 // getCouplingBucket returns the bucket for coupling distribution

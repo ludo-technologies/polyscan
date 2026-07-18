@@ -1,10 +1,10 @@
 package analyzer
 
 import (
-	"sort"
 	"strings"
 	"time"
 
+	corecfg "github.com/ludo-technologies/polyscan/core/cfg"
 	"github.com/ludo-technologies/polyscan/jscan/internal/parser"
 )
 
@@ -136,28 +136,22 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 
 	result.TotalBlocks = len(dcd.cfg.Blocks)
 
-	// Use reachability analyzer to find unreachable blocks
-	analyzer := NewReachabilityAnalyzer(dcd.cfg)
-	reachResult := analyzer.AnalyzeReachability()
+	classifier := javaScriptCFGClassifier{}
+	reachResult := corecfg.AnalyzeReachability(dcd.cfg, corecfg.ReachabilityConfig{Classifier: classifier})
+	if result.TotalBlocks > 0 {
+		result.ReachableRatio = float64(reachResult.ReachableCount) / float64(result.TotalBlocks)
+	}
+	coreResult := corecfg.DetectDeadCode(dcd.cfg, corecfg.DeadCodeConfig{Classifier: classifier})
 
-	result.ReachableRatio = reachResult.GetReachabilityRatio()
-
-	// Convert unreachable blocks to dead code findings
-	unreachableWithStatements := reachResult.GetUnreachableBlocksWithStatements()
-	result.DeadBlocks = len(unreachableWithStatements)
-
-	for _, block := range unreachableWithStatements {
+	for _, coreFinding := range coreResult.Findings {
+		block := dcd.cfg.GetBlock(coreFinding.BlockID)
+		if block == nil || len(block.Statements) == 0 {
+			continue
+		}
 		findings := dcd.analyzeDeadBlock(block)
 		result.Findings = append(result.Findings, findings...)
 	}
-
-	// Sort findings by line number for consistent output
-	sort.Slice(result.Findings, func(i, j int) bool {
-		if result.Findings[i].StartLine != result.Findings[j].StartLine {
-			return result.Findings[i].StartLine < result.Findings[j].StartLine
-		}
-		return result.Findings[i].EndLine < result.Findings[j].EndLine
-	})
+	result.DeadBlocks = len(result.Findings)
 
 	// Merge overlapping/contiguous findings that share a reason. A compound
 	// statement (e.g. `if`) spans its body, so the body's own block produces a
@@ -198,9 +192,14 @@ func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock) []*DeadCodeFind
 
 	// Extract location from first statement in block
 	if len(block.Statements) > 0 {
-		firstStmt := block.Statements[0]
-		finding.StartLine = firstStmt.Location.StartLine
-		finding.EndLine = block.Statements[len(block.Statements)-1].Location.EndLine
+		firstStmt, firstOK := jsNode(block.Statements[0])
+		lastStmt, lastOK := jsNode(block.Statements[len(block.Statements)-1])
+		if firstOK {
+			finding.StartLine = firstStmt.Location.StartLine
+		}
+		if lastOK {
+			finding.EndLine = lastStmt.Location.EndLine
+		}
 
 		// Generate code snippet
 		finding.Code = dcd.getCodeSnippet(block.Statements)
@@ -220,7 +219,10 @@ func (dcd *DeadCodeDetector) determineDeadCodeReason(block *BasicBlock) (DeadCod
 
 		// Check last statement in predecessor block
 		if len(pred.From.Statements) > 0 {
-			lastStmt := pred.From.Statements[len(pred.From.Statements)-1]
+			lastStmt, ok := jsNode(pred.From.Statements[len(pred.From.Statements)-1])
+			if !ok {
+				continue
+			}
 
 			switch lastStmt.Type {
 			case parser.NodeReturnStatement:
@@ -235,8 +237,16 @@ func (dcd *DeadCodeDetector) determineDeadCodeReason(block *BasicBlock) (DeadCod
 		}
 	}
 
-	// Check if block is after an infinite loop
-	if strings.Contains(block.ID, "unreachable") {
+	switch {
+	case strings.Contains(block.ID, LabelUnreachableAfterReturn):
+		return ReasonUnreachableAfterReturn, SeverityLevelCritical
+	case strings.Contains(block.ID, LabelUnreachableAfterBreak):
+		return ReasonUnreachableAfterBreak, SeverityLevelCritical
+	case strings.Contains(block.ID, LabelUnreachableAfterContinue):
+		return ReasonUnreachableAfterContinue, SeverityLevelCritical
+	case strings.Contains(block.ID, LabelUnreachableAfterThrow):
+		return ReasonUnreachableAfterThrow, SeverityLevelCritical
+	case strings.Contains(block.ID, LabelUnreachable):
 		return ReasonUnreachableAfterInfiniteLoop, SeverityLevelWarning
 	}
 
@@ -266,13 +276,17 @@ func (dcd *DeadCodeDetector) generateDescription(reason DeadCodeReason) string {
 }
 
 // getCodeSnippet generates a code snippet from statements
-func (dcd *DeadCodeDetector) getCodeSnippet(statements []*parser.Node) string {
+func (dcd *DeadCodeDetector) getCodeSnippet(statements []any) string {
 	if len(statements) == 0 {
 		return ""
 	}
 
 	var snippets []string
-	for _, stmt := range statements {
+	for _, value := range statements {
+		stmt, ok := jsNode(value)
+		if !ok {
+			continue
+		}
 		// Use a simplified representation for now
 		snippets = append(snippets, string(stmt.Type))
 	}
@@ -318,61 +332,33 @@ func DetectAll(cfgs map[string]*CFG, filePath string) map[string]*DeadCodeResult
 // compound statement's finding spans its body while the body's block emits its
 // own nested finding.
 func mergeContiguousFindings(findings []*DeadCodeFinding) []*DeadCodeFinding {
-	if len(findings) <= 1 {
-		return findings
-	}
-
-	severityRank := map[SeverityLevel]int{
-		SeverityLevelInfo:     1,
-		SeverityLevelWarning:  2,
-		SeverityLevelCritical: 3,
-	}
-
-	merged := make([]*DeadCodeFinding, 0, len(findings))
-	current := findings[0]
-
-	for _, next := range findings[1:] {
-		// Contiguous if the next finding starts at or before the line right after
-		// the current region's end (overlapping or back-to-back lines).
-		contiguous := next.StartLine <= current.EndLine+1
-		if contiguous && next.Reason == current.Reason {
-			if next.EndLine > current.EndLine {
-				current.EndLine = next.EndLine
-			}
-			current.Code = mergeCodeLines(current.Code, next.Code)
-			if severityRank[next.Severity] > severityRank[current.Severity] {
-				current.Severity = next.Severity
-				current.Description = next.Description
-			}
-			continue
+	lineFindings := make([]*corecfg.LineFinding, 0, len(findings))
+	origins := make(map[*corecfg.LineFinding]*DeadCodeFinding, len(findings))
+	for _, finding := range findings {
+		lineFinding := &corecfg.LineFinding{
+			StartLine:   finding.StartLine,
+			EndLine:     finding.EndLine,
+			Reason:      string(finding.Reason),
+			Severity:    toCoreSeverity(finding.Severity),
+			Description: finding.Description,
+			Code:        finding.Code,
 		}
-		merged = append(merged, current)
-		current = next
+		lineFindings = append(lineFindings, lineFinding)
+		origins[lineFinding] = finding
 	}
-	merged = append(merged, current)
-
+	corecfg.SortLineFindings(lineFindings)
+	mergedLines := corecfg.MergeContiguousFindings(lineFindings)
+	merged := make([]*DeadCodeFinding, 0, len(mergedLines))
+	for _, lineFinding := range mergedLines {
+		finding := origins[lineFinding]
+		finding.StartLine = lineFinding.StartLine
+		finding.EndLine = lineFinding.EndLine
+		finding.Severity = fromCoreSeverity(lineFinding.Severity)
+		finding.Description = lineFinding.Description
+		finding.Code = lineFinding.Code
+		merged = append(merged, finding)
+	}
 	return merged
-}
-
-// mergeCodeLines appends the lines of b to a, skipping a leading line of b that
-// duplicates the trailing line of a. This keeps the merged snippet readable when
-// a nested-body block repeats the line already shown by its enclosing statement.
-func mergeCodeLines(a, b string) string {
-	if a == "" {
-		return b
-	}
-	if b == "" {
-		return a
-	}
-	aLines := strings.Split(a, "\n")
-	bLines := strings.Split(b, "\n")
-	if len(aLines) > 0 && len(bLines) > 0 && aLines[len(aLines)-1] == bLines[0] {
-		bLines = bLines[1:]
-	}
-	if len(bLines) == 0 {
-		return a
-	}
-	return a + "\n" + strings.Join(bLines, "\n")
 }
 
 // isOnlyEmptyStatements reports whether every statement in the block is an
@@ -382,12 +368,35 @@ func isOnlyEmptyStatements(block *BasicBlock) bool {
 	if block == nil || len(block.Statements) == 0 {
 		return false
 	}
+	classifier := javaScriptCFGClassifier{}
 	for _, stmt := range block.Statements {
-		if stmt == nil || stmt.Type != parser.NodeEmptyStatement {
+		if !classifier.IsNoOp(stmt) {
 			return false
 		}
 	}
 	return true
+}
+
+func toCoreSeverity(severity SeverityLevel) corecfg.DeadCodeSeverity {
+	switch severity {
+	case SeverityLevelCritical:
+		return corecfg.SeverityCritical
+	case SeverityLevelWarning:
+		return corecfg.SeverityWarning
+	default:
+		return corecfg.SeverityInfo
+	}
+}
+
+func fromCoreSeverity(severity corecfg.DeadCodeSeverity) SeverityLevel {
+	switch severity {
+	case corecfg.SeverityCritical:
+		return SeverityLevelCritical
+	case corecfg.SeverityWarning:
+		return SeverityLevelWarning
+	default:
+		return SeverityLevelInfo
+	}
 }
 
 // HasFindings returns true if there are any dead code findings

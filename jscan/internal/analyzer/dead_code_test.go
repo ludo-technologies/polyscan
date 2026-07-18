@@ -156,6 +156,41 @@ func TestDeadCodeDetector_Detect_CodeAfterThrow(t *testing.T) {
 	}
 }
 
+func TestDeadCodeDetector_Detect_TryTerminatorKeepsCatchReachable(t *testing.T) {
+	tests := []struct {
+		name       string
+		terminator string
+	}{
+		{name: "return", terminator: "return g();"},
+		{name: "throw", terminator: "throw new Error('error');"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code := `
+				function test() {
+					try {
+						` + tt.terminator + `
+					} catch (e) {
+						handle(e);
+					}
+				}
+			`
+			ast := parseJS(t, code)
+			funcNode := findFunction(ast, "test")
+			graph, err := NewCFGBuilder().Build(funcNode)
+			if err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
+
+			result := NewDeadCodeDetector(graph).Detect()
+			if len(result.Findings) != 0 {
+				t.Fatalf("catch body must remain reachable, got findings: %+v", result.Findings)
+			}
+		})
+	}
+}
+
 func TestDeadCodeDetector_Detect_CodeAfterBreak(t *testing.T) {
 	code := `
 		function test() {
@@ -628,23 +663,6 @@ func TestMergeContiguousFindings(t *testing.T) {
 	})
 }
 
-func TestMergeCodeLines(t *testing.T) {
-	cases := []struct {
-		a, b, expected string
-	}{
-		{"", "b", "b"},
-		{"a", "", "a"},
-		{"a", "b", "a\nb"},
-		// Duplicate boundary line (nested body repeats enclosing line) is collapsed.
-		{"if\nCall", "Call", "if\nCall"},
-	}
-	for _, tc := range cases {
-		if got := mergeCodeLines(tc.a, tc.b); got != tc.expected {
-			t.Errorf("mergeCodeLines(%q, %q) = %q, expected %q", tc.a, tc.b, got, tc.expected)
-		}
-	}
-}
-
 func TestIsOnlyEmptyStatements(t *testing.T) {
 	if isOnlyEmptyStatements(nil) {
 		t.Error("nil block should not be empty-statements-only")
@@ -656,16 +674,16 @@ func TestIsOnlyEmptyStatements(t *testing.T) {
 	semi := &parser.Node{Type: parser.NodeEmptyStatement}
 	ret := &parser.Node{Type: parser.NodeReturnStatement}
 
-	if !isOnlyEmptyStatements(&BasicBlock{Statements: []*parser.Node{semi}}) {
+	if !isOnlyEmptyStatements(&BasicBlock{Statements: []any{semi}}) {
 		t.Error("block with only a separator should be empty-statements-only")
 	}
-	if !isOnlyEmptyStatements(&BasicBlock{Statements: []*parser.Node{semi, semi}}) {
+	if !isOnlyEmptyStatements(&BasicBlock{Statements: []any{semi, semi}}) {
 		t.Error("block with multiple separators should be empty-statements-only")
 	}
-	if isOnlyEmptyStatements(&BasicBlock{Statements: []*parser.Node{ret}}) {
+	if isOnlyEmptyStatements(&BasicBlock{Statements: []any{ret}}) {
 		t.Error("block with a real statement should not be empty-statements-only")
 	}
-	if isOnlyEmptyStatements(&BasicBlock{Statements: []*parser.Node{semi, ret}}) {
+	if isOnlyEmptyStatements(&BasicBlock{Statements: []any{semi, ret}}) {
 		t.Error("block mixing separators and a real statement should not be empty-statements-only")
 	}
 }

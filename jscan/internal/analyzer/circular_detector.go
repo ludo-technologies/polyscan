@@ -5,19 +5,13 @@ import (
 	"sort"
 	"strings"
 
+	coregraph "github.com/ludo-technologies/polyscan/core/graph"
 	"github.com/ludo-technologies/polyscan/jscan/domain"
 )
 
-// CircularDependencyDetector detects circular dependencies using Tarjan's algorithm
-type CircularDependencyDetector struct {
-	// Tarjan's algorithm state (reset on each detection)
-	index    int
-	stack    []string
-	indices  map[string]int
-	lowlinks map[string]int
-	onStack  map[string]bool
-	sccs     [][]string
-}
+// CircularDependencyDetector detects circular dependencies and enriches the
+// core graph result with jscan-specific details and remediation suggestions.
+type CircularDependencyDetector struct{}
 
 // NewCircularDependencyDetector creates a new CircularDependencyDetector
 func NewCircularDependencyDetector() *CircularDependencyDetector {
@@ -33,7 +27,40 @@ func isLoadTimeEdge(edge *domain.DependencyEdge) bool {
 	return edge != nil && edge.EdgeType != domain.EdgeTypeDynamic
 }
 
-// DetectCycles finds all cycles in the dependency graph using Tarjan's SCC algorithm
+// loadTimeGraph excludes dynamic imports from the graph seen by cycle
+// detection while leaving the full dependency graph unchanged for reporting.
+type loadTimeGraph struct {
+	graph *domain.DependencyGraph
+}
+
+func (g loadTimeGraph) NodeIDs() []string { return g.graph.NodeIDs() }
+
+func (g loadTimeGraph) Successors(nodeID string) []string {
+	var ids []string
+	for _, edge := range g.graph.GetOutgoingEdges(nodeID) {
+		if isLoadTimeEdge(edge) && g.graph.HasNode(edge.To) {
+			ids = append(ids, edge.To)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func (g loadTimeGraph) Predecessors(nodeID string) []string {
+	var ids []string
+	for _, edge := range g.graph.GetIncomingEdges(nodeID) {
+		if isLoadTimeEdge(edge) && g.graph.HasNode(edge.From) {
+			ids = append(ids, edge.From)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func (g loadTimeGraph) NodeCount() int             { return g.graph.NodeCount() }
+func (g loadTimeGraph) HasNode(nodeID string) bool { return g.graph.HasNode(nodeID) }
+
+// DetectCycles finds all load-time cycles using the shared core detector.
 func (d *CircularDependencyDetector) DetectCycles(graph *domain.DependencyGraph) *domain.CircularDependencyAnalysis {
 	if graph == nil || graph.NodeCount() == 0 {
 		return &domain.CircularDependencyAnalysis{
@@ -44,8 +71,14 @@ func (d *CircularDependencyDetector) DetectCycles(graph *domain.DependencyGraph)
 		}
 	}
 
-	// Find all strongly connected components using Tarjan's algorithm
-	sccs := d.tarjanSCC(graph)
+	result := coregraph.NewCycleDetector().DetectCycles(loadTimeGraph{graph: graph})
+	sccs := result.Cycles
+	for _, scc := range sccs {
+		sort.Strings(scc)
+	}
+	sort.Slice(sccs, func(i, j int) bool {
+		return strings.Join(sccs[i], "\x00") < strings.Join(sccs[j], "\x00")
+	})
 
 	// Filter to only SCCs with more than one node (actual cycles)
 	var cycles []domain.CircularDependency
@@ -53,15 +86,12 @@ func (d *CircularDependencyDetector) DetectCycles(graph *domain.DependencyGraph)
 	var coreInfrastructure = make(map[string]int) // module -> count of cycles it's in
 
 	for _, scc := range sccs {
-		if len(scc) > 1 {
-			// This is an actual cycle
-			cycle := d.buildCycleInfo(scc, graph)
-			cycles = append(cycles, cycle)
+		cycle := d.buildCycleInfo(scc, graph)
+		cycles = append(cycles, cycle)
 
-			for _, module := range scc {
-				modulesInCycles[module] = true
-				coreInfrastructure[module]++
-			}
+		for _, module := range scc {
+			modulesInCycles[module] = true
+			coreInfrastructure[module]++
 		}
 	}
 
@@ -84,80 +114,6 @@ func (d *CircularDependencyDetector) DetectCycles(graph *domain.DependencyGraph)
 		CircularDependencies:     cycles,
 		CycleBreakingSuggestions: suggestions,
 		CoreInfrastructure:       coreModules,
-	}
-}
-
-// tarjanSCC implements Tarjan's strongly connected components algorithm
-func (d *CircularDependencyDetector) tarjanSCC(graph *domain.DependencyGraph) [][]string {
-	// Initialize state
-	d.index = 0
-	d.stack = make([]string, 0)
-	d.indices = make(map[string]int)
-	d.lowlinks = make(map[string]int)
-	d.onStack = make(map[string]bool)
-	d.sccs = make([][]string, 0)
-
-	// Process all nodes
-	nodeIDs := graph.GetAllNodeIDs()
-	sort.Strings(nodeIDs) // For deterministic results
-
-	for _, nodeID := range nodeIDs {
-		if _, visited := d.indices[nodeID]; !visited {
-			d.strongconnect(nodeID, graph)
-		}
-	}
-
-	return d.sccs
-}
-
-// strongconnect is the recursive function for Tarjan's algorithm
-func (d *CircularDependencyDetector) strongconnect(v string, graph *domain.DependencyGraph) {
-	// Set the depth index for v to the smallest unused index
-	d.indices[v] = d.index
-	d.lowlinks[v] = d.index
-	d.index++
-	d.stack = append(d.stack, v)
-	d.onStack[v] = true
-
-	// Consider successors of v
-	edges := graph.GetOutgoingEdges(v)
-	for _, edge := range edges {
-		// Lazy (dynamic import) edges do not run at module load time, so
-		// they cannot form a load-time cycle. Skip them. See issue #460.
-		if !isLoadTimeEdge(edge) {
-			continue
-		}
-		w := edge.To
-		// Skip external/unresolved nodes that aren't in the graph
-		if graph.GetNode(w) == nil {
-			continue
-		}
-
-		if _, visited := d.indices[w]; !visited {
-			// Successor w has not yet been visited; recurse on it
-			d.strongconnect(w, graph)
-			d.lowlinks[v] = min(d.lowlinks[v], d.lowlinks[w])
-		} else if d.onStack[w] {
-			// Successor w is in stack and hence in the current SCC
-			d.lowlinks[v] = min(d.lowlinks[v], d.indices[w])
-		}
-	}
-
-	// If v is a root node, pop the stack and generate an SCC
-	if d.lowlinks[v] == d.indices[v] {
-		scc := make([]string, 0)
-		for {
-			w := d.stack[len(d.stack)-1]
-			d.stack = d.stack[:len(d.stack)-1]
-			d.onStack[w] = false
-			scc = append(scc, w)
-			if w == v {
-				break
-			}
-		}
-		// Sort for deterministic output
-		sort.Strings(scc)
-		d.sccs = append(d.sccs, scc)
 	}
 }
 

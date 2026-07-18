@@ -11,11 +11,15 @@ import (
 
 // Block label constants
 const (
-	LabelFunctionBody = "func_body"
-	LabelClassBody    = "class_body"
-	LabelUnreachable  = "unreachable"
-	LabelEntry        = "ENTRY"
-	LabelExit         = "EXIT"
+	LabelFunctionBody             = "func_body"
+	LabelClassBody                = "class_body"
+	LabelUnreachable              = "unreachable"
+	LabelUnreachableAfterReturn   = "unreachable_after_return"
+	LabelUnreachableAfterBreak    = "unreachable_after_break"
+	LabelUnreachableAfterContinue = "unreachable_after_continue"
+	LabelUnreachableAfterThrow    = "unreachable_after_throw"
+	LabelEntry                    = "ENTRY"
+	LabelExit                     = "EXIT"
 
 	// Loop-related labels
 	LabelLoopHeader = "loop_header"
@@ -149,7 +153,11 @@ func (b *CFGBuilder) BuildAll(node *parser.Node) (map[string]*CFG, error) {
 	discoveredLocations := make(map[string]bool)
 	for _, cfg := range allCFGs {
 		for _, block := range cfg.Blocks {
-			for _, stmt := range block.Statements {
+			for _, value := range block.Statements {
+				stmt, ok := jsNode(value)
+				if !ok {
+					continue
+				}
 				if stmt.IsFunction() {
 					key := fmt.Sprintf("%d:%d", stmt.Location.StartLine, stmt.Location.StartCol)
 					discoveredLocations[key] = true
@@ -695,7 +703,7 @@ func (b *CFGBuilder) buildTryStatement(node *parser.Node) {
 		finallyBlock = b.newBlock(LabelFinallyBlock)
 
 		// Add finally statements
-		finallyBlock.Statements = append(finallyBlock.Statements, node.Finalizer.Body...)
+		addJSStatements(finallyBlock, node.Finalizer.Body)
 
 		// Connect try and catch to finally
 		if tryEndBlock != nil && !b.endsWithJump(tryEndBlock) {
@@ -729,7 +737,7 @@ func (b *CFGBuilder) buildReturnStatement(node *parser.Node) {
 	b.cfg.ConnectBlocks(b.currentBlock, b.cfg.Exit, EdgeReturn)
 
 	// Create unreachable block for code after return
-	b.currentBlock = b.newBlock(LabelUnreachable)
+	b.currentBlock = b.newBlock(LabelUnreachableAfterReturn)
 }
 
 // buildBreakStatement builds CFG for break statement
@@ -744,7 +752,7 @@ func (b *CFGBuilder) buildBreakStatement(node *parser.Node) {
 	}
 
 	// Create unreachable block for code after break
-	b.currentBlock = b.newBlock(LabelUnreachable)
+	b.currentBlock = b.newBlock(LabelUnreachableAfterBreak)
 }
 
 // buildContinueStatement builds CFG for continue statement
@@ -759,7 +767,7 @@ func (b *CFGBuilder) buildContinueStatement(node *parser.Node) {
 	}
 
 	// Create unreachable block for code after continue
-	b.currentBlock = b.newBlock(LabelUnreachable)
+	b.currentBlock = b.newBlock(LabelUnreachableAfterContinue)
 }
 
 // buildThrowStatement builds CFG for throw statement
@@ -782,7 +790,7 @@ func (b *CFGBuilder) buildThrowStatement(node *parser.Node) {
 	}
 
 	// Create unreachable block for code after throw
-	b.currentBlock = b.newBlock(LabelUnreachable)
+	b.currentBlock = b.newBlock(LabelUnreachableAfterThrow)
 }
 
 // buildBlockStatement builds CFG for block statement
@@ -824,8 +832,7 @@ func (b *CFGBuilder) endsWithJump(block *BasicBlock) bool {
 	}
 
 	lastStmt := block.Statements[len(block.Statements)-1]
-	return lastStmt.Type == parser.NodeReturnStatement ||
-		lastStmt.Type == parser.NodeBreakStatement ||
-		lastStmt.Type == parser.NodeContinueStatement ||
-		lastStmt.Type == parser.NodeThrowStatement
+	classifier := javaScriptCFGClassifier{}
+	return classifier.IsReturn(lastStmt) || classifier.IsBreak(lastStmt) ||
+		classifier.IsContinue(lastStmt) || classifier.IsThrow(lastStmt)
 }

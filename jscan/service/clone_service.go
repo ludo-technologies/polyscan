@@ -63,6 +63,18 @@ func (s *CloneServiceImpl) DetectClones(ctx context.Context, req *domain.CloneRe
 	if req.SimilarityThreshold > 0 {
 		config.SimilarityThreshold = req.SimilarityThreshold
 	}
+	if req.LSHSimilarityThreshold > 0 {
+		config.LSHSimilarityThreshold = req.LSHSimilarityThreshold
+	}
+	if req.LSHBands > 0 {
+		config.LSHBands = req.LSHBands
+	}
+	if req.LSHRows > 0 {
+		config.LSHRows = req.LSHRows
+	}
+	if req.LSHHashes > 0 {
+		config.LSHMinHashCount = req.LSHHashes
+	}
 	config.IgnoreLiterals = req.IgnoreLiterals
 	config.IgnoreIdentifiers = req.IgnoreIdentifiers
 

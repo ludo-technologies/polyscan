@@ -1,5 +1,7 @@
 package domain
 
+import "sort"
+
 // DependencyEdgeType represents the type of dependency relationship
 type DependencyEdgeType string
 
@@ -132,13 +134,61 @@ func (g *DependencyGraph) EdgeCount() int {
 	return count
 }
 
-// GetAllNodeIDs returns all node IDs in the graph
-func (g *DependencyGraph) GetAllNodeIDs() []string {
+// NodeIDs returns all node IDs sorted lexicographically.
+func (g *DependencyGraph) NodeIDs() []string {
 	ids := make([]string, 0, len(g.Nodes))
 	for id := range g.Nodes {
 		ids = append(ids, id)
 	}
+	sort.Strings(ids)
 	return ids
+}
+
+// Successors returns sorted target IDs for outgoing edges. Duplicate edges are
+// intentionally preserved because jscan coupling counts import statements.
+func (g *DependencyGraph) Successors(nodeID string) []string {
+	edges := g.Edges[nodeID]
+	if len(edges) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(edges))
+	for _, edge := range edges {
+		if edge != nil {
+			ids = append(ids, edge.To)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// Predecessors returns sorted source IDs for incoming edges. Duplicate edges
+// are intentionally preserved because jscan coupling counts import statements.
+func (g *DependencyGraph) Predecessors(nodeID string) []string {
+	edges := g.ReverseEdges[nodeID]
+	if len(edges) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(edges))
+	for _, edge := range edges {
+		if edge != nil {
+			ids = append(ids, edge.From)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// HasNode reports whether a node ID exists in the graph.
+func (g *DependencyGraph) HasNode(nodeID string) bool {
+	_, ok := g.Nodes[nodeID]
+	return ok
+}
+
+// GetAllNodeIDs returns all node IDs in deterministic order.
+func (g *DependencyGraph) GetAllNodeIDs() []string {
+	return g.NodeIDs()
 }
 
 // UpdateNodeFlags updates IsEntryPoint and IsLeaf flags for all nodes

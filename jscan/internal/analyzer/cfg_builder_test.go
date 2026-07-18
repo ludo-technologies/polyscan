@@ -889,11 +889,15 @@ func TestCFGBuilder_Build_SetsFunctionNode(t *testing.T) {
 	if cfg.FunctionNode == nil {
 		t.Fatal("FunctionNode should be set on CFG")
 	}
-	if cfg.FunctionNode.Location.StartLine != funcNode.Location.StartLine {
-		t.Errorf("FunctionNode start line mismatch: got %d, want %d", cfg.FunctionNode.Location.StartLine, funcNode.Location.StartLine)
+	storedNode, ok := cfg.FunctionNode.(*parser.Node)
+	if !ok {
+		t.Fatalf("FunctionNode has type %T, want *parser.Node", cfg.FunctionNode)
 	}
-	if cfg.FunctionNode.Location.EndLine != funcNode.Location.EndLine {
-		t.Errorf("FunctionNode end line mismatch: got %d, want %d", cfg.FunctionNode.Location.EndLine, funcNode.Location.EndLine)
+	if storedNode.Location.StartLine != funcNode.Location.StartLine {
+		t.Errorf("FunctionNode start line mismatch: got %d, want %d", storedNode.Location.StartLine, funcNode.Location.StartLine)
+	}
+	if storedNode.Location.EndLine != funcNode.Location.EndLine {
+		t.Errorf("FunctionNode end line mismatch: got %d, want %d", storedNode.Location.EndLine, funcNode.Location.EndLine)
 	}
 }
 
