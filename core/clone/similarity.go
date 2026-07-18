@@ -353,6 +353,13 @@ func NewSyntacticSimilarityAnalyzer() *SyntacticSimilarityAnalyzer {
 	return &SyntacticSimilarityAnalyzer{extractor: extractor}
 }
 
+// NewSyntacticSimilarityAnalyzerWithExtractor creates a syntactic similarity
+// analyzer that uses a caller-configured feature extractor (e.g. with
+// language-specific pattern and literal-like label names).
+func NewSyntacticSimilarityAnalyzerWithExtractor(extractor *ASTFeatureExtractor) *SyntacticSimilarityAnalyzer {
+	return &SyntacticSimilarityAnalyzer{extractor: extractor}
+}
+
 // ComputeSimilarity computes the syntactic similarity between two code fragments
 // using Jaccard coefficient of normalized AST hash sets. It ignores differences
 // in identifier names and literal values, focusing only on the structural

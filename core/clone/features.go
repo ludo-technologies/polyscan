@@ -27,6 +27,15 @@ type ASTFeatureExtractor struct {
 	// Language-specific: set this to match your AST node types.
 	// If nil, no pattern features are extracted.
 	PatternNames []string
+
+	// literalLikeNames holds base label names whose nodes carry identifier or
+	// literal payloads (e.g. Python's Name/Constant, JavaScript's
+	// Identifier/Literal). When includeLiterals is false, label features for
+	// these nodes (subtree hashes, k-gram members, and type features) are not
+	// emitted, so renamed identifiers and changed literals do not perturb the
+	// feature set. Language-specific: set via WithLiteralNames. If empty, no
+	// labels are filtered.
+	literalLikeNames map[string]struct{}
 }
 
 // NewASTFeatureExtractor creates a feature extractor with sensible defaults.
@@ -58,6 +67,28 @@ func (a *ASTFeatureExtractor) WithPatterns(patterns []string) *ASTFeatureExtract
 	return a
 }
 
+// WithLiteralNames sets the base label names treated as identifier/literal
+// payload carriers, which are excluded from label features when
+// includeLiterals is false.
+func (a *ASTFeatureExtractor) WithLiteralNames(names []string) *ASTFeatureExtractor {
+	a.literalLikeNames = make(map[string]struct{}, len(names))
+	for _, name := range names {
+		a.literalLikeNames[name] = struct{}{}
+	}
+	return a
+}
+
+// shouldEmitLabelFeature reports whether label features for a node should be
+// emitted. Identifier/literal-like nodes are skipped when includeLiterals is
+// false so their payload churn does not perturb the feature set.
+func (a *ASTFeatureExtractor) shouldEmitLabelFeature(lbl string) bool {
+	if a.includeLiterals || len(a.literalLikeNames) == 0 {
+		return true
+	}
+	_, isLiteralLike := a.literalLikeNames[a.baseType(lbl)]
+	return !isLiteralLike
+}
+
 // ExtractFeatures builds a mixed set of features from the tree.
 func (a *ASTFeatureExtractor) ExtractFeatures(ast *apted.TreeNode) ([]string, error) {
 	if ast == nil {
@@ -85,6 +116,9 @@ func (a *ASTFeatureExtractor) ExtractFeatures(ast *apted.TreeNode) ([]string, er
 	typeCounts := make(map[string]int)
 	preorder := a.preorderLabels(ast)
 	for _, lbl := range preorder {
+		if !a.shouldEmitLabelFeature(lbl) {
+			continue
+		}
 		base := a.baseType(lbl)
 		if a.includeTypes && base != "" {
 			typeCounts[base]++
@@ -139,7 +173,7 @@ func (a *ASTFeatureExtractor) ExtractSubtreeHashes(ast *apted.TreeNode, maxHeigh
 			_, _ = h.Write(b[:])
 		}
 		hv := h.Sum64()
-		if height <= maxHeight {
+		if height <= maxHeight && a.shouldEmitLabelFeature(n.Label) {
 			feats = append(feats, fmt.Sprintf("sub:%d:%016x", height, hv))
 		}
 		return hv, height
@@ -153,7 +187,7 @@ func (a *ASTFeatureExtractor) ExtractNodeSequences(ast *apted.TreeNode, k int) (
 	if ast == nil || k <= 1 {
 		return []string{}, nil
 	}
-	labels := a.preorderLabels(ast)
+	labels := a.preorderFeatureLabels(ast)
 	if len(labels) < k {
 		return []string{}, nil
 	}
@@ -186,6 +220,27 @@ func (a *ASTFeatureExtractor) preorderLabels(ast *apted.TreeNode) []string {
 			return
 		}
 		labels = append(labels, a.canonicalLabel(n.Label))
+		for _, ch := range n.Children {
+			walk(ch)
+		}
+	}
+	walk(ast)
+	return labels
+}
+
+// preorderFeatureLabels returns pre-order canonical labels with
+// identifier/literal-like labels filtered out per shouldEmitLabelFeature.
+func (a *ASTFeatureExtractor) preorderFeatureLabels(ast *apted.TreeNode) []string {
+	labels := []string{}
+	var walk func(n *apted.TreeNode)
+	walk = func(n *apted.TreeNode) {
+		if n == nil {
+			return
+		}
+		label := a.canonicalLabel(n.Label)
+		if a.shouldEmitLabelFeature(label) {
+			labels = append(labels, label)
+		}
 		for _, ch := range n.Children {
 			walk(ch)
 		}
