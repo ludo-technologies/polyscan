@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestLinearPenalty(t *testing.T) {
 	if p := LinearPenalty(1.0, 2.0, 15.0); p != 0 {
@@ -163,5 +166,31 @@ func TestIsHealthyScore(t *testing.T) {
 	}
 	if IsHealthyScore(69) {
 		t.Error("69 should not be healthy")
+	}
+}
+
+func TestPenaltiesGuardInvalidInputs(t *testing.T) {
+	nan := math.NaN()
+
+	if p := LinearPenalty(nan, 2.0, 15.0); p != 0 {
+		t.Errorf("LinearPenalty(NaN) = %d, want 0", p)
+	}
+	if p := DuplicationPenalty(nan); p != 0 {
+		t.Errorf("DuplicationPenalty(NaN) = %d, want 0", p)
+	}
+	if p := ArchitecturePenalty(nan); p != 0 {
+		t.Errorf("ArchitecturePenalty(NaN) = %d, want 0", p)
+	}
+	if p := DependencyPenalty(10, 0, 0, nan); p != 0 {
+		t.Errorf("DependencyPenalty(NaN MSD) = %d, want 0", p)
+	}
+	if p := CouplingPenalty(1, 0, -10); p != 0 {
+		t.Errorf("CouplingPenalty(negative total) = %d, want 0", p)
+	}
+	if p := CouplingPenalty(-3, 0, 10); p != 0 {
+		t.Errorf("CouplingPenalty(negative count) = %d, want 0", p)
+	}
+	if s := HealthScoreFromPenalties(-5); s != 100 {
+		t.Errorf("HealthScoreFromPenalties(-5) = %d, want capped 100", s)
 	}
 }

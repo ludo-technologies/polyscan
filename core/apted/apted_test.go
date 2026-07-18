@@ -719,3 +719,42 @@ func TestComputeApproximateDistanceNilTrees(t *testing.T) {
 		t.Errorf("Approximate distance to nil should equal tree size, got %f", distance)
 	}
 }
+
+func TestOptimizedAnalyzerDistanceAndSimilarityRespectsCap(t *testing.T) {
+	a := NewOptimizedAPTEDAnalyzer(NewDefaultCostModel(), 2.0)
+
+	// Same size (no size-diff early exit), but 6 renames needed: uncapped
+	// distance is 6, so the cap must kick in.
+	left := NewTreeNode(0, "Root")
+	right := NewTreeNode(100, "Root")
+	for i := 1; i <= 6; i++ {
+		left.AddChild(NewTreeNode(i, "L"))
+		right.AddChild(NewTreeNode(100+i, "R"))
+	}
+
+	capped := a.ComputeDistance(left, right)
+	if capped != 3.0 {
+		t.Fatalf("ComputeDistance = %f, want capped 3.0", capped)
+	}
+
+	distance, similarity := a.ComputeDistanceAndSimilarity(left, right)
+	if distance != capped {
+		t.Errorf("ComputeDistanceAndSimilarity distance = %f, want %f (must match capped ComputeDistance)", distance, capped)
+	}
+	if want := a.normalizeSimilarity(capped, left, right); similarity != want {
+		t.Errorf("similarity = %f, want %f (derived from capped distance)", similarity, want)
+	}
+
+	detailed := a.ComputeDetailedDistance(left, right)
+	if detailed.Distance != capped {
+		t.Errorf("ComputeDetailedDistance distance = %f, want %f", detailed.Distance, capped)
+	}
+
+	// Nil trees must not panic even with early stopping enabled.
+	if d := a.ComputeDistance(nil, left); d != a.maxDistance+1.0 && d != float64(left.Size()) {
+		t.Logf("nil-tree distance = %f", d)
+	}
+	if d, _ := a.ComputeDistanceAndSimilarity(nil, nil); d != 0 {
+		t.Errorf("nil trees distance = %f, want 0", d)
+	}
+}

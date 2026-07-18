@@ -66,8 +66,9 @@ const (
 
 // LinearPenalty maps a value onto a 0..MaxScoreBase penalty that starts at 0
 // when value <= start and grows linearly to the maximum at saturation.
+// A NaN value is treated as missing data and yields no penalty.
 func LinearPenalty(value, start, saturation float64) int {
-	if value <= start {
+	if math.IsNaN(value) || value <= start {
 		return 0
 	}
 	if saturation <= start {
@@ -84,8 +85,9 @@ func LinearPenalty(value, start, saturation float64) int {
 
 // DuplicationPenalty calculates the penalty for code duplication (max 20).
 // Linear: 0% duplication = 0 penalty, DuplicationThresholdHigh (30%) = max.
+// A NaN percentage is treated as missing data and yields no penalty.
 func DuplicationPenalty(duplicationPercent float64) int {
-	if duplicationPercent <= DuplicationThresholdLow {
+	if math.IsNaN(duplicationPercent) || duplicationPercent <= DuplicationThresholdLow {
 		return 0
 	}
 
@@ -102,12 +104,15 @@ func DuplicationPenalty(duplicationPercent float64) int {
 // weighted ratio of problematic classes (High = 1.0, Medium = CouplingMediumWeight),
 // saturating at CouplingSaturationRatio.
 func CouplingPenalty(highCouplingClasses, mediumCouplingClasses, totalClasses int) int {
-	if totalClasses == 0 {
+	if totalClasses <= 0 {
 		return 0
 	}
 
 	weightedProblematicClasses := float64(highCouplingClasses) + (CouplingMediumWeight * float64(mediumCouplingClasses))
 	ratio := weightedProblematicClasses / float64(totalClasses)
+	if ratio < 0 {
+		ratio = 0
+	}
 
 	penalty := ratio / CouplingSaturationRatio * 20.0
 	if penalty > 20.0 {
@@ -165,8 +170,12 @@ func DependencyPenalty(totalModules, modulesInCycles, maxDepth int, mainSequence
 }
 
 // ArchitecturePenalty calculates the penalty for architecture compliance
-// (max 12). Compliance is a 0..1 ratio.
+// (max 12). Compliance is a 0..1 ratio. A NaN compliance is treated as
+// missing data and yields no penalty.
 func ArchitecturePenalty(compliance float64) int {
+	if math.IsNaN(compliance) {
+		return 0
+	}
 	if compliance < 0 {
 		compliance = 0
 	}
@@ -208,7 +217,8 @@ func PenaltyToScore(penalty int, maxPenalty int) int {
 }
 
 // HealthScoreFromPenalties returns 100 minus the sum of all penalties,
-// floored at MinimumScore.
+// floored at MinimumScore and capped at 100 (negative penalties cannot
+// raise the score above a clean result).
 func HealthScoreFromPenalties(penalties ...int) int {
 	score := 100
 	for _, p := range penalties {
@@ -216,6 +226,9 @@ func HealthScoreFromPenalties(penalties ...int) int {
 	}
 	if score < MinimumScore {
 		score = MinimumScore
+	}
+	if score > 100 {
+		score = 100
 	}
 	return score
 }
