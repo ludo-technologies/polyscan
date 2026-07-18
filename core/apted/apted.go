@@ -112,8 +112,11 @@ func (a *APTEDAnalyzer) computeDistanceOptimized(tree1, tree2 *TreeNode) float64
 		return profileDistance
 	}
 
-	// Use the capped optimized algorithm. The profile distance below is a
-	// lower bound that keeps capped key roots from undercounting.
+	// Use the capped optimized algorithm, floored by the profile distance so
+	// capped key roots do not undercount. The label-profile floor is a true
+	// lower bound, but the shape-profile floor (used when labels fully cancel)
+	// is a heuristic: it can overestimate exact APTED when a structural
+	// reshuffle changes many node depths with few edits.
 	keyRoots1 := PrepareTreeForAPTED(tree1)
 	keyRoots2 := PrepareTreeForAPTED(tree2)
 
@@ -1026,7 +1029,7 @@ func NewOptimizedAPTEDAnalyzer(costModel CostModel, maxDistance float64) *Optimi
 
 // ComputeDistance computes tree edit distance with early stopping optimization.
 func (a *OptimizedAPTEDAnalyzer) ComputeDistance(tree1, tree2 *TreeNode) float64 {
-	if a.enableEarlyStop {
+	if a.enableEarlyStop && tree1 != nil && tree2 != nil {
 		sizeDiff := math.Abs(float64(tree1.Size() - tree2.Size()))
 		if sizeDiff > a.maxDistance {
 			return a.maxDistance + 1.0
@@ -1037,6 +1040,37 @@ func (a *OptimizedAPTEDAnalyzer) ComputeDistance(tree1, tree2 *TreeNode) float64
 		return a.maxDistance + 1.0
 	}
 	return distance
+}
+
+// ComputeDistanceAndSimilarity computes both distance and similarity with the
+// analyzer's early-stopping cap applied. Without this override, the method
+// promoted from the embedded APTEDAnalyzer would bypass the cap and return
+// the full uncapped distance.
+func (a *OptimizedAPTEDAnalyzer) ComputeDistanceAndSimilarity(tree1, tree2 *TreeNode) (float64, float64) {
+	distance := a.ComputeDistance(tree1, tree2)
+	return distance, a.normalizeSimilarity(distance, tree1, tree2)
+}
+
+// ComputeDetailedDistance computes detailed tree edit distance information
+// with the analyzer's early-stopping cap applied (see ComputeDistanceAndSimilarity).
+func (a *OptimizedAPTEDAnalyzer) ComputeDetailedDistance(tree1, tree2 *TreeNode) *TreeEditResult {
+	distance, similarity := a.ComputeDistanceAndSimilarity(tree1, tree2)
+
+	var size1, size2 int
+	if tree1 != nil {
+		size1 = tree1.Size()
+	}
+	if tree2 != nil {
+		size2 = tree2.Size()
+	}
+
+	return &TreeEditResult{
+		Distance:   distance,
+		Similarity: similarity,
+		Tree1Size:  size1,
+		Tree2Size:  size2,
+		Operations: int(distance),
+	}
 }
 
 // BatchComputeDistances computes distances between multiple tree pairs.
