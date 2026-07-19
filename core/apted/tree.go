@@ -1,6 +1,11 @@
 package apted
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+	"sync"
+	"sync/atomic"
+)
 
 // TreeNode represents a node in the ordered tree for APTED algorithm.
 // This is a language-agnostic representation; language-specific parsers
@@ -16,6 +21,9 @@ type TreeNode struct {
 	PostOrderID  int
 	LeftMostLeaf int
 	KeyRoot      bool
+
+	preparationMu  sync.Mutex
+	cachedKeyRoots atomic.Pointer[[]int]
 
 	// OriginalNode holds the original language-specific AST node.
 	// This field is opaque to polyscan core; language adapters store their
@@ -43,6 +51,11 @@ func (t *TreeNode) AddChild(child *TreeNode) {
 	if child != nil {
 		child.Parent = t
 		t.Children = append(t.Children, child)
+
+		child.cachedKeyRoots.Store(nil)
+		for node := t; node != nil; node = node.Parent {
+			node.cachedKeyRoots.Store(nil)
+		}
 	}
 }
 
@@ -168,9 +181,33 @@ func PrepareTreeForAPTED(root *TreeNode) []int {
 	if root == nil {
 		return []int{}
 	}
+	root.preparationMu.Lock()
+	defer root.preparationMu.Unlock()
+	return prepareTreeForAPTED(root)
+}
+
+func prepareTreeForAPTED(root *TreeNode) []int {
 	PostOrderTraversal(root)
 	ComputeLeftMostLeaves(root)
-	return ComputeKeyRoots(root)
+	keyRoots := ComputeKeyRoots(root)
+	sort.Ints(keyRoots)
+	root.cachedKeyRoots.Store(&keyRoots)
+	return keyRoots
+}
+
+// ensurePreparedForAPTED prepares a tree at most once between structural
+// mutations. Once prepared, comparisons only read the tree metadata and can
+// safely run concurrently with separate analyzers.
+func ensurePreparedForAPTED(root *TreeNode) []int {
+	if keyRoots := root.cachedKeyRoots.Load(); keyRoots != nil {
+		return *keyRoots
+	}
+	root.preparationMu.Lock()
+	defer root.preparationMu.Unlock()
+	if keyRoots := root.cachedKeyRoots.Load(); keyRoots != nil {
+		return *keyRoots
+	}
+	return prepareTreeForAPTED(root)
 }
 
 // GetNodeByPostOrderID finds a node by its post-order ID.
