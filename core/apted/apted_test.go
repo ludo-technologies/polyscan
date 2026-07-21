@@ -3,6 +3,7 @@ package apted
 import (
 	"fmt"
 	"math"
+	"sync"
 	"testing"
 )
 
@@ -28,6 +29,32 @@ func TestComputeDistance_NilTrees(t *testing.T) {
 	}
 	if d := a.ComputeDistance(node, nil); d != 1.0 {
 		t.Errorf("node/nil distance = %f, want 1.0", d)
+	}
+}
+
+func TestComputeDistance_PreparedTreesAreConcurrentSafe(t *testing.T) {
+	left := buildSimpleTree("root", "a", "b", "c")
+	right := buildSimpleTree("root", "a", "x", "c")
+	PrepareTreeForAPTED(left)
+	PrepareTreeForAPTED(right)
+
+	const workers = 16
+	var wg sync.WaitGroup
+	errs := make(chan float64, workers)
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			distance := NewAPTEDAnalyzer(NewDefaultCostModel()).ComputeDistance(left, right)
+			if distance != 1 {
+				errs <- distance
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for distance := range errs {
+		t.Errorf("concurrent distance = %f, want 1", distance)
 	}
 }
 

@@ -299,6 +299,22 @@ func TestPrepareTreeForAPTED(t *testing.T) {
 	}
 }
 
+func TestAddChildInvalidatesPreparedTree(t *testing.T) {
+	root := NewTreeNode(0, "A")
+	root.AddChild(NewTreeNode(1, "B"))
+	PrepareTreeForAPTED(root)
+
+	root.AddChild(NewTreeNode(2, "C"))
+	keyRoots := ensurePreparedForAPTED(root)
+
+	if root.PostOrderID != 2 {
+		t.Fatalf("root post-order ID = %d, want 2 after mutation", root.PostOrderID)
+	}
+	if len(keyRoots) == 0 {
+		t.Fatal("expected recomputed key roots")
+	}
+}
+
 func TestPrepareTreeForAPTED_Nil(t *testing.T) {
 	kr := PrepareTreeForAPTED(nil)
 	if len(kr) != 0 {
