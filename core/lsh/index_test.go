@@ -1,6 +1,7 @@
 package lsh
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -214,5 +215,77 @@ func BenchmarkLSH_AddAndFind(b *testing.B) {
 			_ = idx.AddFragment(string(rune(j)), sig)
 		}
 		idx.FindCandidates(sigs[0])
+	}
+}
+
+// bandSig builds a raw signature for band-collision tests (bands*rows values).
+func bandSig(values ...uint64) *MinHashSignature {
+	return &MinHashSignature{signatures: values, numHashes: len(values)}
+}
+
+func TestFindCandidatesLimit_BandOrderSelection(t *testing.T) {
+	idx := NewLSHIndex(2, 2)
+	query := bandSig(1, 2, 3, 4)
+	// "1" collides with the query only in band 1, "10" only in band 0.
+	if err := idx.AddFragment("1", bandSig(8, 8, 3, 4)); err != nil {
+		t.Fatalf("add 1: %v", err)
+	}
+	if err := idx.AddFragment("10", bandSig(1, 2, 9, 9)); err != nil {
+		t.Fatalf("add 10: %v", err)
+	}
+
+	got := idx.FindCandidatesLimit(query, 0)
+	if len(got) != 2 || got[0] != "10" || got[1] != "1" {
+		t.Fatalf("uncapped candidates = %v, want [10 1] in band order", got)
+	}
+
+	// A cap of 1 must keep the band-0 candidate, not an ID-sorted subset.
+	got = idx.FindCandidatesLimit(query, 1)
+	if len(got) != 1 || got[0] != "10" {
+		t.Fatalf("capped candidates = %v, want [10]", got)
+	}
+}
+
+func TestFindCandidatesLimit_StopsAtCapInDenseBucket(t *testing.T) {
+	mh := NewMinHasher(128)
+	sig := mh.ComputeSignature([]string{"same", "feature", "set"})
+
+	idx := NewLSHIndex(32, 4)
+	want := []string{}
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("f%03d", i)
+		if err := idx.AddFragment(id, sig); err != nil {
+			t.Fatalf("add %s: %v", id, err)
+		}
+		if i < 8 {
+			want = append(want, id)
+		}
+	}
+
+	got := idx.FindCandidatesLimit(sig, 8)
+	if len(got) != len(want) {
+		t.Fatalf("capped candidate count = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("capped candidates = %v, want first-inserted %v", got, want)
+		}
+	}
+}
+
+func TestFindCandidatesLimit_DedupAcrossBands(t *testing.T) {
+	idx := NewLSHIndex(2, 2)
+	query := bandSig(1, 2, 3, 4)
+	// "both" collides in both bands but must occupy a single cap slot.
+	if err := idx.AddFragment("both", bandSig(1, 2, 3, 4)); err != nil {
+		t.Fatalf("add both: %v", err)
+	}
+	if err := idx.AddFragment("late", bandSig(8, 8, 3, 4)); err != nil {
+		t.Fatalf("add late: %v", err)
+	}
+
+	got := idx.FindCandidatesLimit(query, 2)
+	if len(got) != 2 || got[0] != "both" || got[1] != "late" {
+		t.Fatalf("candidates = %v, want [both late]", got)
 	}
 }
