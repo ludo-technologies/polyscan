@@ -1,6 +1,6 @@
 # pyscn → jscan sync management
 
-pyscn is the upstream (source of truth); changes to shared algorithms are ported to jscan manually or by an agent.
+Language-independent algorithms now live in `core/` and are consumed directly by both tools (jscan: Phase 2b, #9–#11; pyscn: Phase 3, [polyscan#12](https://github.com/ludo-technologies/polyscan/issues/12), completed 2026-07-23). Changes to those algorithms land in `core/` itself and need no porting between pyscn and jscan. This file now tracks only the **case-by-case** and **reference-only** areas — pyscn changes there are reviewed and selectively ported to jscan, manually or by an agent.
 The `/sync-pyscn` command reads this file to run a sync.
 
 - Upstream: https://github.com/ludo-technologies/pyscn (local clone: `../pyscn`)
@@ -16,39 +16,36 @@ The `/sync-pyscn` command reads this file to run a sync.
 | **case-by-case** | Shared concept but needs language adaptation. Decide per change whether to port |
 | **reference-only** | Language-specific. Never port code. Only report significant design-direction changes to a human |
 
+No row currently uses **sync**: every area that was language-independent enough to sync 1:1 has moved into `core/` and is consumed directly by both tools (see Sync history). The classification stays defined here in case a newly-shared, not-yet-core-extracted algorithm shows up again.
+
 ## File mapping
 
 ### internal/analyzer
 
 | pyscn | jscan | Classification | Notes |
 |---|---|---|---|
-| `internal/analyzer/apted.go` | *(adopted `core/apted`)* | sync | Shared algorithm changes go to `core/apted` |
 | `internal/analyzer/apted_tree.go` | `internal/analyzer/apted_tree.go` | reference-only | jscan retains only the JS/TS parser-to-`core/apted.TreeNode` converter |
 | `internal/analyzer/apted_cost.go` | `internal/analyzer/apted_cost.go` | reference-only | Cost models are language-specific (Python AST vs JS/TS AST) |
-| `internal/analyzer/minhash.go` | *(adopted `core/lsh`)* | sync | Shared MinHash changes go to `core/lsh` |
-| `internal/analyzer/lsh_index.go` | *(adopted `core/lsh`)* | sync | jscan retains only the int-ID, deterministic-order, and candidate-cap adapter |
-| `internal/analyzer/ast_features.go` | *(adopted `core/clone`)* | sync | jscan passes `core/apted.TreeNode` directly to `core/clone.ASTFeatureExtractor` |
+| `internal/analyzer/lsh_index.go` | `internal/analyzer/lsh_index.go` | case-by-case | Thin candidate-index adapter (int fragment IDs, deterministic order, `WithMaxCandidates` cap) kept local in both tools around `core/lsh`; not itself in core, so still worth diffing when either side changes it |
 | `internal/analyzer/clone_detector.go` | `internal/analyzer/clone_detector.go` | case-by-case | Pipeline orchestration + fragment extraction stay language-side; grouping/dedup/gates/classifier come from `core/clone` |
-| `internal/analyzer/grouping_strategy.go`<br>`internal/analyzer/*_grouping.go`<br>`internal/analyzer/group_dedup.go`<br>`internal/analyzer/grouping_mode.go` | *(adopted `core/clone`)* | sync | jscan uses `core/clone` generics (`GroupingStrategy[*domain.Clone]`) + exported dedup passes |
-| `internal/analyzer/cfg.go` | *(adopted `core/cfg`)* | sync | Analyzer aliases preserve internal source compatibility |
+| `internal/analyzer/cfg.go` | `internal/analyzer/cfg.go` | case-by-case | Both tools alias `core/cfg` types for internal source compatibility; rarely needs edits unless `core/cfg`'s public shape changes |
 | `internal/analyzer/cfg_builder.go` | `internal/analyzer/cfg_builder.go` | reference-only | Control-flow semantics are language-specific (try/except/match vs try/catch/switch/hoisting) |
-| `internal/analyzer/reachability.go` | *(adopted `core/cfg`)* | sync | jscan retains a compatibility result projection |
-| `internal/analyzer/complexity.go` | *(adopted `core/cfg`)* | case-by-case | JS contributes logical and ternary operators and enriches the shared result |
-| `internal/analyzer/dead_code.go` | *(adopted `core/cfg`)* | case-by-case | JS retains line/snippet/reason enrichment and unused-code analysis |
+| `internal/analyzer/reachability.go` | `internal/analyzer/reachability.go` | case-by-case | Both tools retain a thin compatibility result projection over `core/cfg` reachability |
+| `internal/analyzer/complexity.go` | `internal/analyzer/complexity.go` | case-by-case | JS contributes logical and ternary operators and enriches the shared result |
+| `internal/analyzer/dead_code.go` | `internal/analyzer/dead_code.go` | case-by-case | JS retains line/snippet/reason enrichment and unused-code analysis |
 | `internal/analyzer/cbo.go` | `internal/analyzer/cbo.go` | reference-only | AST traversal for dependency collection is language-specific |
-| `internal/analyzer/coupling_metrics.go` | *(adopted `core/graph`)* | sync | jscan supplies export-based abstractness and rich risk/zone summaries |
-| `internal/analyzer/circular_detector.go` | *(adopted `core/graph`)* | sync | jscan filters dynamic imports and enriches shared Tarjan SCC results |
+| `internal/analyzer/coupling_metrics.go` | `internal/analyzer/coupling_metrics.go` | case-by-case | Both tools delegate Martin metrics/Tarjan-adjacent coupling math to `core/graph`, supplying their own abstractness signal and risk/zone summaries |
+| `internal/analyzer/circular_detector.go` | `internal/analyzer/circular_detector.go` | case-by-case | Both tools delegate Tarjan SCC to `core/graph`; each filters dynamic/lazy imports and enriches cycle results independently |
 | `internal/analyzer/dependency_graph.go` | `internal/analyzer/dependency_graph.go` | case-by-case | Graph construction is shared; ModuleInfo contents are language-specific |
 | `internal/analyzer/textual_similarity.go` | *(adopted `core/clone`)* | case-by-case | Type-1 gate in `core/clone.TextualSimilarityAnalyzer`; jscan injects `removeJSComments` as `CommentStripper` (`javascript_comments.go`) |
-| `internal/analyzer/syntactic_similarity.go` | *(adopted `core/clone`)* | sync | Type-2 gate in `core/clone.SyntacticSimilarityAnalyzer` / `PairClassifier` |
 | `internal/analyzer/module_analyzer.go` | `internal/analyzer/module_analyzer.go` | reference-only | Import resolution is language-specific (`__init__.py` vs ESM/CJS/Node builtins) |
 
 ### domain (scoring, type definitions)
 
 | pyscn | jscan | Classification | Notes |
 |---|---|---|---|
-| `domain/analyze.go` | `domain/analyze.go` | sync | Health-score computation and penalty constants. **Grade computation must match across both tools**. Intentional divergence: `calculateComplexityPenalty` (jscan uses high/medium count ratio, ESLint-aligned; pyscn uses average complexity) and `calculateDeadCodePenalty` (jscan uses per-file rate) — jscan-side improvements, do not overwrite |
-| `domain/system_analysis.go` | `domain/system_analysis.go` | sync | Same as above |
+| `domain/analyze.go` | `domain/analyze.go` | case-by-case | Health-score summation, normalization, and grade mapping (`GradeFromScore`, `IsHealthyScore`) now come from `core/domain` in both tools — each has its own parity test against core (jscan: `analyze_test.go`; pyscn: `TestGradeParityWithCore`), so grade computation is identical by construction. `calculateComplexityPenalty` (jscan: high/medium count ratio, ESLint-aligned; pyscn: max of avg-McCabe/cognitive/nesting) and `calculateDeadCodePenalty` (jscan: per-file rate; pyscn: log-normalized) stay intentionally divergent — do not overwrite |
+| `domain/system_analysis.go` | `domain/system_analysis.go` | case-by-case | Same as above |
 | `domain/complexity.go` | `domain/complexity.go` | case-by-case | Keep thresholds and risk-level definitions aligned |
 | `domain/clone.go` | `domain/clone.go` | case-by-case | Keep similarity thresholds and clone-type definitions aligned |
 | `domain/cbo.go` | `domain/cbo.go` | case-by-case | |
@@ -73,10 +70,10 @@ The `/sync-pyscn` command reads this file to run a sync.
 Out of sync scope, but reference points when considering porting features to jscan:
 
 - Cognitive complexity: `cognitive_complexity.go`, `nesting_depth.go`, `raw_metrics.go`
-- LCOM4: `lcom.go`, `domain/lcom.go`
-- DFA (unused-variable detection): `dfa.go`, `dfa_builder.go`
+- LCOM4: `lcom.go`, `domain/lcom.go` — the union-find (shared-variable + call-edge unions) and risk assessment now live in `core/lcom.ComputeLCOM4` / `AssessRisk` (pyscn Phase 3, PR #673); adopting this in jscan means pulling from `core/lcom` directly, not porting pyscn's original implementation. Python method/attribute extraction (decorator exclusion, `@property` reclassification, ctypes `_fields_`) stays pyscn-local
+- DFA (unused-variable detection): `dfa.go`, `dfa_builder.go` — def-use chain construction and reaching-def linking now live in `core/dfa` (pyscn Phase 3, PR #673) via the `RefExtractor`/`ParamExtractor` extension points; Python def/use extraction stays pyscn-local
 - DI anti-pattern detection: `di_antipattern_detector.go` plus `di_*.go`, `*_detector.go`, `framework_patterns.go`
-- Split similarity-analysis structure (remaining): `structural_similarity.go`, `semantic_similarity.go`, `similarity_analyzer.go`, multi-dimensional `clone_classifier` — Type-1/2 gates are in `core/clone` (jscan adopted); structural/semantic still unported
+- Split similarity-analysis structure (remaining): `structural_similarity.go`, `semantic_similarity.go`, `similarity_analyzer.go`, multi-dimensional `clone_classifier` — Type-1/2 gates are in `core/clone` (jscan adopted); semantic evidence penalties (disjoint literals, missing strong signals, incompatible return categories) now live in `core/semantic.ApplySemanticEvidence` (pyscn Phase 3, PR #673); structural similarity still fully unported
 - Re-export resolution: `reexport_resolver.go`
 - Improvement suggestions: `domain/suggestion.go`
 - MCP server: `mcp/`, `cmd/pyscn-mcp/`
@@ -137,3 +134,4 @@ Skipped during the 2026-07-08 sync (`fb3fe92`..`249b121`):
 | 2026-07-12 | *(monorepo `core/`)* | Phase 2b clone adoption (#9 / `c57f3b4`): jscan deleted local `grouping_strategy.go`, `textual_similarity.go`, `syntactic_similarity.go`, `ast_features.go` and wired `core/clone` (grouping strategies, dedup passes, similarity gates, `PairClassifier`). Language-side keeps fragment extraction, TreeConverter, JS cost model, LSH orchestration, and `removeJSComments` as `CommentStripper`. Further algorithm changes for clone grouping/gates go to `core/clone`, not jscan copies |
 | 2026-07-18 | *(monorepo `core/`)* | Phase 2b CFG/graph/LSH adoption (#11): jscan adopted `core/cfg` data structures, reachability, complexity, dead-code post-processing; `core/graph` Tarjan SCC and Martin metrics; `core/lsh` MinHash/index kernels; and shared `core/domain` scoring calculators. JavaScript classifiers, CFG construction, source enrichment, dynamic-import filtering, LSH candidate caps, and jscan-specific scoring penalties remain language-side. Intentional core semantics: exception edges contribute to complexity, unreachable registered blocks are included in complexity, and isolated dependency nodes use I=0/D=1. Reachability prunes only normal fallthrough after terminators so exception/control-transfer targets remain reachable |
 | 2026-07-18 | *(monorepo `core/`)* | Phase 2b APTED adoption (#10): jscan deleted its local APTED algorithm/tree/default-cost copies and now uses `core/apted` directly with max-size normalization. Language-side keeps only the JS/TS parser converter and JavaScript cost model. |
+| 2026-07-24 | *(pyscn Phase 3 done, `152d9d0`)* | pyscn completed [polyscan#12](https://github.com/ludo-technologies/polyscan/issues/12): adopted `core/clone` (#664), `core/apted` (#669), `core/cfg` (#670), `core/graph` (#672), `core/lsh`+`core/lcom`+`core/dfa`+`core/semantic` (#673), and `core/domain` scoring/grade mapping (#674). Every **sync**-classified row in this file is retired: rows whose files were deleted on both sides (`apted.go`, `minhash.go`, `ast_features.go`, `grouping_strategy.go`/`*_grouping.go`/`group_dedup.go`, `syntactic_similarity.go`) were removed outright; rows whose files remain as thin core-delegating wrappers on both sides (`lsh_index.go`, `cfg.go`, `reachability.go`, `coupling_metrics.go`, `circular_detector.go`, `domain/analyze.go`, `domain/system_analysis.go`) were reclassified to **case-by-case**. Grade computation is identical between pyscn and jscan by construction — both call `core/domain.GradeFromScore`/`IsHealthyScore` directly and each has its own unit test asserting parity with core |
