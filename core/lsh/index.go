@@ -53,21 +53,32 @@ func (idx *LSHIndex) BuildIndex() error { return nil }
 
 // FindCandidates retrieves candidate fragment IDs that share at least one band bucket.
 func (idx *LSHIndex) FindCandidates(signature *MinHashSignature) []string {
+	return idx.FindCandidatesLimit(signature, 0)
+}
+
+// FindCandidatesLimit retrieves candidate fragment IDs that share at least one
+// band bucket, stopping as soon as maxCandidates distinct IDs have been
+// collected so dense buckets never materialize in full. maxCandidates <= 0
+// disables the cap. Traversal order is deterministic — band order, then bucket
+// insertion order — so capped queries keep the earliest-encountered
+// candidates rather than an arbitrary subset.
+func (idx *LSHIndex) FindCandidatesLimit(signature *MinHashSignature, maxCandidates int) []string {
 	if signature == nil || len(signature.signatures) == 0 {
 		return []string{}
 	}
-	ids := make(map[string]struct{})
-	bands := idx.computeBandKeys(signature)
-	for _, key := range bands {
-		if bucket, ok := idx.buckets[key]; ok {
-			for _, id := range bucket {
-				ids[id] = struct{}{}
+	seen := make(map[string]struct{})
+	out := []string{}
+	for _, key := range idx.computeBandKeys(signature) {
+		for _, id := range idx.buckets[key] {
+			if maxCandidates > 0 && len(out) >= maxCandidates {
+				return out
 			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, id)
 		}
-	}
-	out := make([]string, 0, len(ids))
-	for id := range ids {
-		out = append(out, id)
 	}
 	return out
 }
