@@ -173,6 +173,63 @@ type Unit struct{ foo Foo }
 	}
 }
 
+func TestAnalyzeCouplingRustAmbiguousTypeName(t *testing.T) {
+	// Two files declare Point and a third holds an impl for it. The
+	// ambiguous name must not silently merge the impl into one declaration
+	// or resolve references arbitrarily; both sides warn and leave it out.
+	dir := writeFiles(t, map[string]string{
+		"circle.rs": `pub struct Point { x: f64, y: f64 }
+
+impl Point {
+    pub fn distance(&self, other: &Point) -> f64 { (self.x - other.x).abs() }
+}
+`,
+		"vector.rs": `pub struct Point { x: f64, y: f64 }
+
+impl Point {
+    pub fn add(&self, other: &Point) -> Point { Point { x: self.x + other.x, y: self.y + other.y } }
+}
+`,
+		// ops.rs declares an impl for Point but does not declare Point
+		// itself. With two declarations of Point in the tree, the impl
+		// block must be left unresolved.
+		"ops.rs": `use crate::circle::Point;
+
+impl Point {
+    pub fn origin() -> Point { Point { x: 0.0, y: 0.0 } }
+}
+`,
+	})
+	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	// Both declarations must appear as separate classes.
+	var pointClasses int
+	for _, class := range report.Coupling.Classes {
+		if class.Language == "Rust" && class.Name == "Point" {
+			pointClasses++
+		}
+	}
+	if pointClasses != 2 {
+		t.Errorf("Rust Point classes = %d, want 2 (one per declaring file)", pointClasses)
+	}
+	// The ambiguous impl must produce warnings.
+	if len(report.Coupling.Warnings) == 0 {
+		t.Error("no warnings for ambiguous type name, want at least one")
+	}
+	ambiguous := false
+	for _, w := range report.Coupling.Warnings {
+		if strings.Contains(w, "ambiguous") {
+			ambiguous = true
+			break
+		}
+	}
+	if !ambiguous {
+		t.Errorf("warnings = %v, want one containing 'ambiguous'", report.Coupling.Warnings)
+	}
+}
+
 func TestAnalyzeCouplingAbsentWithoutSupportedLanguage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"a.cpp": "struct S { int a; };\n"})
 	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)
