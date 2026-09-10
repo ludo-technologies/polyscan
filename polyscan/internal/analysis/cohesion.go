@@ -70,10 +70,16 @@ type classMethod struct {
 type cohesionBuilder struct {
 	classes map[string]*classMethods
 	keys    []string
+	// typeDeclarations maps language+name to the file that declares the
+	// type. It is populated by setDeclarations from the same engine result
+	// the coupling analysis uses, so the cohesion result can reference the
+	// declaring file instead of the first method's file for a type whose
+	// declaration and impl blocks live in different files.
+	typeDeclarations map[string]string
 }
 
 func newCohesionBuilder() *cohesionBuilder {
-	return &cohesionBuilder{classes: map[string]*classMethods{}}
+	return &cohesionBuilder{classes: map[string]*classMethods{}, typeDeclarations: map[string]string{}}
 }
 
 func (b *cohesionBuilder) add(language *engine.Language, display string, fn engine.Function) {
@@ -94,13 +100,37 @@ func (b *cohesionBuilder) add(language *engine.Language, display string, fn engi
 	class.methods = append(class.methods, classMethod{Function: fn, file: display})
 }
 
+// setDeclarations records the file that declares each type from the engine
+// result. The coupling analysis collects the same information; this method
+// lets the cohesion analysis use it without duplicating the work.
+func (b *cohesionBuilder) setDeclarations(language *engine.Language, display string, result *engine.Result) {
+	for _, t := range result.Types {
+		if t.Declared {
+			key := language.Name + "\x00" + t.Name
+			if _, ok := b.typeDeclarations[key]; !ok {
+				b.typeDeclarations[key] = display
+			}
+		}
+	}
+}
+
 // build measures every type that has at least one method with a receiver
 // parameter. A type with none, such as one that only has constructors, has
 // no cohesion to measure and is left out.
 func (b *cohesionBuilder) build() *Cohesion {
 	cohesion := &Cohesion{Classes: []Class{}}
 	for _, key := range b.keys {
-		class := b.classes[key].measure()
+		cm := b.classes[key]
+		class := cm.measure()
+		// When the declaring file is known and the language scopes types
+		// per file, use it instead of the first method's file so the
+		// cohesion result matches the coupling result for a type whose
+		// declaration and impl blocks live in different files.
+		if !cm.language.TypeSpansDirectory {
+			if declKey, ok := b.typeDeclarations[cm.language.Name+"\x00"+cm.name]; ok {
+				class.FilePath = declKey
+			}
+		}
 		if class.TotalMethods > class.ExcludedMethods {
 			cohesion.Classes = append(cohesion.Classes, class)
 		}

@@ -211,6 +211,13 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 			if err := coupling.add(language, display, file, content, result); err != nil {
 				return nil, err
 			}
+			// Give the cohesion analysis the type declarations the
+			// coupling analysis already collects, so a Rust type whose
+			// declaration and impl blocks live in different files uses
+			// the declaring file in both results.
+			if options.LCOM && language.HasCohesion() {
+				cohesion.setDeclarations(language, display, result)
+			}
 		}
 	}
 

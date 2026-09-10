@@ -149,6 +149,69 @@ mod tests {
 	}
 }
 
+func TestAnalyzeCohesionRustUsesDeclaringFile(t *testing.T) {
+	// A Rust type whose declaration and impl blocks live in different
+	// files should use the declaring file in both coupling and cohesion,
+	// so countClasses counts it once.
+	dir := writeFiles(t, map[string]string{
+		"types.rs": `pub struct Foo { n: u32 }
+
+impl Foo {
+    pub fn new() -> Self { Foo { n: 0 } }
+}
+`,
+		"ops.rs": `use crate::types::Foo;
+
+impl Foo {
+    pub fn inc(&mut self) { self.n += 1; }
+    pub fn get(&self) -> u32 { self.n }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true, CBO: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if report.Cohesion == nil {
+		t.Fatal("cohesion is nil for a Rust tree")
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want 1 (Foo): %+v", len(classes), classes)
+	}
+	foo := classes[0]
+	if foo.Name != "Foo" || foo.Language != "Rust" {
+		t.Errorf("class = %+v, want Rust Foo", foo)
+	}
+	// The declaring file is types.rs; without the fix it would be ops.rs.
+	if filepath.Base(foo.FilePath) != "types.rs" {
+		t.Errorf("FilePath = %q, want types.rs (the declaring file)", foo.FilePath)
+	}
+	if foo.TotalMethods != 3 {
+		t.Errorf("TotalMethods = %d, want 3 (new, inc, get)", foo.TotalMethods)
+	}
+
+	// Coupling should also use the declaring file.
+	if report.Coupling == nil {
+		t.Fatal("coupling is nil for a Rust tree")
+	}
+	if len(report.Coupling.Classes) != 1 {
+		t.Fatalf("coupling classes = %d, want 1", len(report.Coupling.Classes))
+	}
+	couplingFoo := report.Coupling.Classes[0]
+	if filepath.Base(couplingFoo.FilePath) != "types.rs" {
+		t.Errorf("coupling FilePath = %q, want types.rs", couplingFoo.FilePath)
+	}
+
+	// Both analyses must agree on the declaring file so that
+	// countClasses merges them into one type instead of counting two.
+	if couplingFoo.FilePath != foo.FilePath {
+		t.Errorf("FilePath mismatch: coupling=%q, cohesion=%q, want both types.rs",
+			couplingFoo.FilePath, foo.FilePath)
+	}
+}
+
 func TestAnalyzeCohesionAbsentWithoutSupportedLanguage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"a.cpp": "struct S { int a; void m() { a = 1; } };\n"})
 	report, err := Analyze([]string{dir}, Options{LCOM: true, Complexity: true}, nil)
