@@ -88,6 +88,11 @@ func LoadConfig(configPath, targetPath string, warn io.Writer) (*config.Config, 
 	return result.Config, nil
 }
 
+// TestFilePatterns are the exclude patterns that name JavaScript/TypeScript
+// test files: the *.test.* and *.spec.* files and __tests__ directories of
+// Jest, Vitest and Mocha, the conventions dead code analysis recognizes.
+var TestFilePatterns = []string{"*.test.*", "*.spec.*", "__tests__"}
+
 // ContainsFiles reports whether any JavaScript/TypeScript file exists under
 // the paths. Configuration plays no part: polyscan analyze asks before the
 // JavaScript configuration is even discovered, so a tree with no JavaScript

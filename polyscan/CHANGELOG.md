@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `polyscan analyze --exclude` leaves files and directories out of every analysis, for every language. A pattern without a slash is a glob matched against the file name and against each directory on the path (`fixtures`); a pattern with a slash is matched against the path relative to the analyzed directory, with `**` for any number of segments (`src/generated/**`). The patterns follow the rules of `exclude_patterns` in `jscan.config.json`, and for JavaScript/TypeScript they are added to that file's own exclude patterns
+
+### Changed
+
+- Test files and test code are left out of every analysis by default, where before they were analyzed for complexity and, for JavaScript/TypeScript, for everything. Go `*_test.go`; Rust `#[test]` functions, `#[cfg(test)]` items, `tests.rs`, `*_tests.rs` and `tests/`; C++ `*_test.*`, `*_tests.*`, `test_*.*`, `*Test.*`, `test/` and `tests/`; JavaScript/TypeScript `*.test.*`, `*.spec.*` and `__tests__/`. `--include-tests` restores the previous behavior, with test code still out of clone detection, cohesion, coupling and dependency analysis
+
 ## [0.3.2] - 2026-09-10
 
 ### Changed

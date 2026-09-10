@@ -28,6 +28,8 @@ Key flags:
 - `--no-open`: don't auto-open the HTML report in a browser (use in scripts)
 - `-o <path>`: HTML report path (default: `polyscan-report.html` in the current directory)
 - `--min-complexity <n>`: hide functions below this complexity from the listing (scores still cover everything)
+- `--exclude <patterns>`: leave files and directories out of every analysis; a glob without a slash matches a file name or a directory anywhere on the path (`fixtures`), one with a slash matches a path relative to the analyzed directory with `**` for any number of segments (`src/generated/**`)
+- `--include-tests`: analyze test files and test code, which are left out by default (`*_test.go`, `*.test.*`, `*.spec.*`, `__tests__/`, Rust `#[cfg(test)]` and `tests/`, C++ `*_test.*` and `test/`)
 
 With `--format json`, the machine-readable results go to stdout and the health-score summary goes to stderr, so stdout stays parseable.
 

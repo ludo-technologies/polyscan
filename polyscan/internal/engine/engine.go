@@ -100,9 +100,10 @@ type Language struct {
 	// pattern ending in a slash names a directory anywhere on the path.
 	// TestCode is an optional tree-sitter query whose captures span test
 	// code inside a file, such as attribute-marked test functions or
-	// modules. Both are analyzed for complexity but excluded from clone
-	// detection, where the shared skeleton of test functions swamps the
-	// report.
+	// modules. Both are left out of every analysis by default; when they
+	// are included, they still stay out of clone detection, where the
+	// shared skeleton of test functions swamps the report, and of cohesion,
+	// coupling and dependency analysis, which describe the code under test.
 	TestFiles []string
 	TestCode  string
 	// TypeSpansDirectory reports that the methods of one type may be

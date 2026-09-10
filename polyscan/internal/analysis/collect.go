@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ludo-technologies/polyscan/polyscan/internal/lang"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/pathmatch"
 )
 
 // skippedDirs are the directories a walk never descends into: version
@@ -31,15 +32,25 @@ func skipDir(name string) bool {
 
 // collectFiles returns, sorted and without duplicates, the absolute paths
 // of the files of a supported language under paths. A path that is a file
-// is taken as given when its language is supported.
-func collectFiles(paths []string) ([]string, error) {
+// is taken as given when its language is supported, unless its name matches
+// an exclude pattern. Under a directory, exclude patterns apply to the path
+// relative to that directory, so a directory above the root cannot exclude
+// the whole tree; a directory that matches is not walked. Unless
+// includeTests is set, the files a language names as test files are left
+// out under the same relative-path rule.
+func collectFiles(paths []string, exclude []string, includeTests bool) ([]string, error) {
 	seen := map[string]bool{}
 	var files []string
-	add := func(path string) {
-		if _, ok := lang.ByPath(path); ok && !seen[path] {
-			seen[path] = true
-			files = append(files, path)
+	add := func(path, rel string) {
+		language, ok := lang.ByPath(path)
+		if !ok || seen[path] || pathmatch.Matches(rel, exclude) {
+			return
 		}
+		if !includeTests && language.IsTestFile(rel) {
+			return
+		}
+		seen[path] = true
+		files = append(files, path)
 	}
 	for _, p := range paths {
 		root, err := filepath.Abs(p)
@@ -51,20 +62,27 @@ func collectFiles(paths []string) ([]string, error) {
 			return nil, err
 		}
 		if !info.IsDir() {
-			add(root)
+			add(root, filepath.Base(root))
 			continue
 		}
 		err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
+			if path == root {
+				return nil
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				return err
+			}
 			if d.IsDir() {
-				if path != root && skipDir(d.Name()) {
+				if skipDir(d.Name()) || pathmatch.Matches(rel, exclude) {
 					return fs.SkipDir
 				}
 				return nil
 			}
-			add(path)
+			add(path, rel)
 			return nil
 		})
 		if err != nil {

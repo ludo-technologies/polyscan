@@ -32,6 +32,12 @@ type Options struct {
 	// CBO counts, for each type, the other types of the tree it refers to,
 	// for the languages whose definition declares types and references.
 	CBO bool
+	// IncludeTests keeps test files and test code in the analysis. By
+	// default both are left out: the files a language names as test files
+	// are not collected, and the functions its test-code query captures are
+	// dropped from the complexity report as they are from every other
+	// analysis.
+	IncludeTests bool
 }
 
 // Function is the complexity result for one function.
@@ -122,8 +128,8 @@ var ErrNoFiles = errors.New("no supported source files found")
 // parse-error penalty, is the same for every selection; the dependency
 // analysis reads its files again and reports the ones it leaves out in
 // Warnings.
-func Analyze(paths []string, options Options) (*Report, error) {
-	files, err := collectFiles(paths)
+func Analyze(paths []string, options Options, exclude []string) (*Report, error) {
+	files, err := collectFiles(paths, exclude, options.IncludeTests)
 	if err != nil {
 		return nil, err
 	}
@@ -167,6 +173,9 @@ func Analyze(paths []string, options Options) (*Report, error) {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("%s: %v; functions containing it were not analyzed", display, result.SyntaxError))
 		}
 		functions := result.Functions
+		if !options.IncludeTests {
+			functions = withoutTests(functions)
+		}
 
 		if options.Complexity {
 			for _, fn := range functions {
@@ -221,6 +230,17 @@ func Analyze(paths []string, options Options) (*Report, error) {
 		report.Coupling = coupling.build()
 	}
 	return report, nil
+}
+
+// withoutTests returns the functions that do not lie in test code.
+func withoutTests(functions []engine.Function) []engine.Function {
+	kept := functions[:0:0]
+	for _, fn := range functions {
+		if !fn.IsTest {
+			kept = append(kept, fn)
+		}
+	}
+	return kept
 }
 
 // analyzeDeps builds the dependency graph of the Go files among files. Test

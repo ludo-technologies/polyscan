@@ -35,7 +35,7 @@ func fixtures(t *testing.T) string {
 }
 
 func TestAnalyzeComplexity(t *testing.T) {
-	report, err := Analyze([]string{fixtures(t)}, Options{Complexity: true})
+	report, err := Analyze([]string{fixtures(t)}, Options{Complexity: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestAnalyzeComplexity(t *testing.T) {
 }
 
 func TestAnalyzeClones(t *testing.T) {
-	report, err := Analyze([]string{"../../testdata/go/clones"}, Options{Clones: true})
+	report, err := Analyze([]string{"../../testdata/go/clones"}, Options{Clones: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestAnalyzeClones(t *testing.T) {
 }
 
 func TestAnalyzeWithoutSupportedFiles(t *testing.T) {
-	if _, err := Analyze([]string{t.TempDir()}, Options{Complexity: true}); err == nil || !strings.Contains(err.Error(), "no supported source files") {
+	if _, err := Analyze([]string{t.TempDir()}, Options{Complexity: true}, nil); err == nil || !strings.Contains(err.Error(), "no supported source files") {
 		t.Errorf("err = %v, want no supported source files", err)
 	}
 }
@@ -134,7 +134,7 @@ func TestRiskLevel(t *testing.T) {
 }
 
 func TestAnalyzeRust(t *testing.T) {
-	report, err := Analyze([]string{"../../testdata/rust"}, Options{Complexity: true, Clones: true})
+	report, err := Analyze([]string{"../../testdata/rust"}, Options{Complexity: true, Clones: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -146,12 +146,11 @@ func TestAnalyzeRust(t *testing.T) {
 	if fn := byName["Server::handle"]; fn.Complexity != 8 || fn.Language != "Rust" {
 		t.Errorf("Server::handle = %+v, want complexity 8 in Rust", fn)
 	}
-	if _, ok := byName["tests::sums_positive_values"]; !ok {
-		t.Error("test functions must still be analyzed for complexity")
+	if _, ok := byName["tests::sums_positive_values"]; ok {
+		t.Error("test functions are left out by default")
 	}
-
-	if _, ok := byName["roundtrip"]; !ok {
-		t.Error("functions in tests.rs must still be analyzed for complexity")
+	if _, ok := byName["roundtrip"]; ok {
+		t.Error("functions in tests.rs are left out by default")
 	}
 
 	// sums_positive_values is a copy of sum_positive but lies in #[cfg(test)],
@@ -163,7 +162,7 @@ func TestAnalyzeRust(t *testing.T) {
 }
 
 func TestAnalyzeMergesLanguages(t *testing.T) {
-	report, err := Analyze([]string{"../../testdata/go/clones", "../../testdata/rust"}, Options{Clones: true})
+	report, err := Analyze([]string{"../../testdata/go/clones", "../../testdata/rust"}, Options{Clones: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -236,7 +235,7 @@ func TestRankOrdersGroupsLikeCore(t *testing.T) {
 }
 
 func TestAnalyzeCpp(t *testing.T) {
-	report, err := Analyze([]string{"../../testdata/cpp"}, Options{Complexity: true, Clones: true})
+	report, err := Analyze([]string{"../../testdata/cpp"}, Options{Complexity: true, Clones: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -247,8 +246,8 @@ func TestAnalyzeCpp(t *testing.T) {
 	if fn := byName["Server::handle"]; fn.Complexity != 9 || fn.Language != "C++" {
 		t.Errorf("Server::handle = %+v, want complexity 9 in C++", fn)
 	}
-	if _, ok := byName["sumPositiveAgain"]; !ok {
-		t.Error("functions in test files must still be analyzed for complexity")
+	if _, ok := byName["sumPositiveAgain"]; ok {
+		t.Error("functions in test files are left out by default")
 	}
 	// sumPositiveAgain is a copy of sumPositive but lies in sample_test.cpp.
 	stats := report.Clones.Statistics
@@ -273,7 +272,7 @@ func TestAnalyzeSkipsDependencyAndBuildDirectories(t *testing.T) {
 		}
 	}
 
-	files, err := collectFiles([]string{dir})
+	files, err := collectFiles([]string{dir}, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,11 +282,53 @@ func TestAnalyzeSkipsDependencyAndBuildDirectories(t *testing.T) {
 	}
 
 	// A skipped name given explicitly is analyzed.
-	files, err = collectFiles([]string{filepath.Join(dir, "vendor")})
+	files, err = collectFiles([]string{filepath.Join(dir, "vendor")}, nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{filepath.Join(dir, "vendor", "dep", "sample.go")}; !reflect.DeepEqual(files, want) {
+		t.Errorf("collected %v, want %v", files, want)
+	}
+}
+
+func TestCollectFilesExclude(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"sum.go", "sum_test.go", "pkg/sum.go", "pkg/sum_test.go", "pkg/testdata/fixture.go", "gen/api/client.go"} {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("package p\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files, err := collectFiles([]string{dir}, []string{"testdata", "gen/api/**"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(dir, "pkg", "sum.go"), filepath.Join(dir, "sum.go")}
+	if !reflect.DeepEqual(files, want) {
+		t.Errorf("collected %v, want %v", files, want)
+	}
+
+	// Patterns apply relative to the analyzed directory, so the temporary
+	// directory's own name cannot exclude the tree; a file named directly
+	// is matched on its own name.
+	files, err = collectFiles([]string{filepath.Join(dir, "sum_test.go"), filepath.Join(dir, "pkg", "sum.go")}, []string{filepath.Base(dir), "sum.go"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{filepath.Join(dir, "sum_test.go")}; !reflect.DeepEqual(files, want) {
+		t.Errorf("collected %v, want %v", files, want)
+	}
+
+	// Test files come back with includeTests, still under the other patterns.
+	files, err = collectFiles([]string{dir}, []string{"pkg"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{filepath.Join(dir, "gen", "api", "client.go"), filepath.Join(dir, "sum.go"), filepath.Join(dir, "sum_test.go")}; !reflect.DeepEqual(files, want) {
 		t.Errorf("collected %v, want %v", files, want)
 	}
 }
