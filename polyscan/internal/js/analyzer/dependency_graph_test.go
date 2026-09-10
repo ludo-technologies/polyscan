@@ -681,3 +681,42 @@ export const app = 1;
 		t.Error("Expected at least one node")
 	}
 }
+
+func TestResolveImportTargetWithEmittedExtension(t *testing.T) {
+	config := DefaultDependencyGraphBuilderConfig()
+	config.ProjectRoot = "/project"
+	builder := NewDependencyGraphBuilder(config)
+
+	knownNodeIDs := map[string]bool{
+		"src/a.ts":         true,
+		"src/b.tsx":        true,
+		"src/c.mts":        true,
+		"src/d.cts":        true,
+		"src/dir/index.ts": true,
+		"src/types.d.ts":   true,
+		"src/plain.js":     true,
+	}
+
+	testCases := []struct {
+		source   string
+		expected string
+	}{
+		{"./a.js", "src/a.ts"},
+		{"./b.jsx", "src/b.tsx"},
+		{"./c.mjs", "src/c.mts"},
+		{"./d.cjs", "src/d.cts"},
+		{"./dir/index.js", "src/dir/index.ts"},
+		{"./types.js", "src/types.d.ts"},
+		{"./plain.js", "src/plain.js"},
+		{"./missing.js", "src/missing.js"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.source, func(t *testing.T) {
+			result := builder.resolveImportTarget(tc.source, domain.ModuleTypeRelative, "/project/src/index.ts", knownNodeIDs)
+			if result != tc.expected {
+				t.Errorf("resolveImportTarget(%q) = %q, expected %q", tc.source, result, tc.expected)
+			}
+		})
+	}
+}
