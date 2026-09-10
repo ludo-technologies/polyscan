@@ -32,11 +32,19 @@ polyscan analyze --select clone .
 
 # List only functions with complexity 10 or higher; the summary still covers every function
 polyscan analyze --min-complexity 10 .
+
+# Leave a generated directory out of every analysis
+polyscan analyze --exclude 'src/generated/**' .
+
+# Analyze test files and test code too; they are left out by default
+polyscan analyze --include-tests .
 ```
 
 `--select` takes any of `complexity`, `deadcode`, `clone`, `cbo`, `lcom` and `deps` (default: all); `deps` exists for Go and JavaScript/TypeScript, `cbo` for Go, Rust and JavaScript/TypeScript, `lcom` for Go and Rust, `deadcode` for JavaScript/TypeScript only, and a deselected or missing dimension is left out of the health score. JavaScript/TypeScript honors a `jscan.config.json` when the project has one. The JSON output is one document for every language, with `language` on every function and clone fragment.
 
-Version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. A file that cannot be read is skipped and listed under `Errors`. A file with a syntax error is analyzed without the functions that contain the error, counted as partial, and listed under `Warnings`; C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
+Version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. `--exclude` leaves out further files and directories, for every language and every analysis: a pattern without a slash is a glob matched against the file name and against each directory on the path, so `fixtures` drops every `fixtures` directory; a pattern with a slash is matched against the path relative to the analyzed directory, with `**` standing for any number of segments, so `src/generated/**` drops that tree. The flag takes a comma-separated list or may be repeated, and for JavaScript/TypeScript its patterns are added to the `exclude_patterns` of `jscan.config.json`.
+
+Test files and test code are left out of every analysis unless `--include-tests` is given. For Go that is `*_test.go`; for C++ it is `*_test.*`, `*_tests.*`, `test_*.*` and `*Test.*` source files and any `test` or `tests` directory; for Rust it is `#[test]` functions, items under `#[cfg(test)]` or `#[cfg(all(test, ...))]`, `tests.rs` and `*_tests.rs` files and any `tests` directory, the conventional homes of a test module split into its own file and of Cargo's integration tests; for JavaScript/TypeScript it is `*.test.*` and `*.spec.*` files and any `__tests__` directory. With `--include-tests` the test code is analyzed for complexity and dead code, but it still stays out of clone detection, cohesion, coupling and dependency analysis: test functions share a skeleton by convention, and a test's types and imports describe the tests, not the package. A file that cannot be read is skipped and listed under `Errors`. A file with a syntax error is analyzed without the functions that contain the error, counted as partial, and listed under `Warnings`; C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
 
 ## Complexity
 
@@ -81,7 +89,7 @@ Every function of at least 10 lines of code (blank lines and comments excluded) 
 | Type-2 | Same structure with renamed identifiers or changed literals | Similarity ≥ 0.80 and matching normalized trees |
 | Type-3 | Near copy with statements added, removed or changed | Similarity ≥ 0.80 |
 
-Pairs below 0.80 are not reported. Test code is analyzed for complexity but excluded from clone detection: test functions share a skeleton by convention, and on this repository they made up 92% of the pairs. For Go that is `*_test.go`; for C++ it is `*_test.*`, `*_tests.*`, `test_*.*` and `*Test.*` source files and any `test` or `tests` directory; for Rust it is `#[test]` functions, items under `#[cfg(test)]` or `#[cfg(all(test, ...))]`, `tests.rs` and `*_tests.rs` files and any `tests` directory, the conventional homes of a test module split into its own file and of Cargo's integration tests.
+Pairs below 0.80 are not reported. Test code stays out of clone detection even under `--include-tests`: test functions share a skeleton by convention, and on this repository they made up 92% of the pairs.
 
 C++ files are parsed one at a time without the preprocessor. Every branch of an `#if` is analyzed, macros are not expanded, and code whose syntax only makes sense after expansion is a syntax error: the file is reported as partial and the functions containing the error are left out. Heavily templated code is parsed on a best-effort basis. Header files, `.h` included, are analyzed as C++.
 
@@ -96,7 +104,7 @@ A language is declarative: a tree-sitter grammar and two queries. See `internal/
 - The definitions query matches each function once. `@definition.<kind>` spans the function, `@name` its name, and an optional `@receiver` is prefixed to the name. The bundled `queries/tags.scm` of a grammar is the starting point.
 - In the decisions query every capture is one decision point, attributed to the innermost function that contains it and reported under the capture's name.
 - The optional scopes query names the scopes that enclose functions, such as classes, impl blocks and namespaces, so members read `Type::method`; a `@receiver` capture in the definitions query names a receiver declared on the function itself, as Go methods have.
-- The clone spec lists the node types of identifiers, literals and structural patterns, the cost tiers of the tree edit distance, and pairs of related node types. `TestFiles` names test files by file name glob or, with a trailing slash, by directory, and `TestCode` is a query capturing test code inside a file; both are excluded from clone detection.
+- The clone spec lists the node types of identifiers, literals and structural patterns, the cost tiers of the tree edit distance, and pairs of related node types. `TestFiles` names test files by file name glob or, with a trailing slash, by directory, and `TestCode` is a query capturing test code inside a file; both are left out of the analysis by default and, when included, still stay out of clone detection.
 
 ## Development
 

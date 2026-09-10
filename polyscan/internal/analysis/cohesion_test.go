@@ -63,7 +63,7 @@ func (s *Server) B() {}
 `,
 	})
 
-	report, err := Analyze([]string{dir}, Options{LCOM: true})
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -135,7 +135,7 @@ mod tests {
 `,
 	})
 
-	report, err := Analyze([]string{dir}, Options{LCOM: true})
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -151,7 +151,7 @@ mod tests {
 
 func TestAnalyzeCohesionAbsentWithoutSupportedLanguage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"a.cpp": "struct S { int a; void m() { a = 1; } };\n"})
-	report, err := Analyze([]string{dir}, Options{LCOM: true, Complexity: true})
+	report, err := Analyze([]string{dir}, Options{LCOM: true, Complexity: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestAnalyzeCohesionAbsentWithoutSupportedLanguage(t *testing.T) {
 		t.Errorf("cohesion = %+v, want none for a C++ tree", report.Cohesion)
 	}
 	dir = writeFiles(t, map[string]string{"a.go": "package p\n\nfunc F() {}\n"})
-	report, err = Analyze([]string{dir}, Options{LCOM: true})
+	report, err = Analyze([]string{dir}, Options{LCOM: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}

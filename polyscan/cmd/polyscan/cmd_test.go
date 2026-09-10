@@ -133,8 +133,8 @@ func TestAnalyzeJSON(t *testing.T) {
 		t.Fatalf("analyze: %v\n%s", err, out)
 	}
 	doc := decodeAnalyzeJSON(t, out)
-	if len(doc.Complexity.Functions) != 3 || doc.Complexity.Summary.TotalFunctions != 10 {
-		t.Errorf("listed %d functions of %d, want 3 of 10",
+	if len(doc.Complexity.Functions) != 2 || doc.Complexity.Summary.TotalFunctions != 9 {
+		t.Errorf("listed %d functions of %d, want 2 of 9",
 			len(doc.Complexity.Functions), doc.Complexity.Summary.TotalFunctions)
 	}
 	for _, fn := range doc.Complexity.Functions {
@@ -198,6 +198,95 @@ func TestAnalyzeSelect(t *testing.T) {
 	// category lines must not appear as clean results.
 	if strings.Contains(out, "Complexity: ") || !strings.Contains(out, "Code Duplication:") {
 		t.Errorf("category scores should list only the selected analyses:\n%s", out)
+	}
+}
+
+func TestAnalyzeExcludesTestsByDefault(t *testing.T) {
+	out, err := run(t, "analyze", "--format", "text", "--select", "complexity", "../../testdata/go/clones")
+	if err != nil {
+		t.Fatalf("analyze: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "sum_test.go") || !strings.Contains(out, "sum.go") {
+		t.Errorf("test file analyzed by default:\n%s", out)
+	}
+	out, err = run(t, "analyze", "--format", "text", "--select", "complexity", "--include-tests", "../../testdata/go/clones")
+	if err != nil {
+		t.Fatalf("analyze: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "sum_test.go") {
+		t.Errorf("--include-tests should analyze the test file:\n%s", out)
+	}
+
+	// JavaScript follows the same conventions as its dead code analysis.
+	dir := t.TempDir()
+	for _, name := range []string{"app.ts", "app.test.ts", "app.spec.ts", "__tests__/helper.ts"} {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("export function f(a: number) { return a > 0 ? a : -a }\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		args []string
+		want int
+	}{
+		{nil, 1},
+		{[]string{"--include-tests"}, 4},
+	} {
+		out, err := run(t, append([]string{"analyze", "--format", "json", "--select", "complexity,deps"}, append(tc.args, dir)...)...)
+		if err != nil {
+			t.Fatalf("analyze %v: %v\n%s", tc.args, err, out)
+		}
+		report := decodeAnalyzeJSON(t, out)
+		if got := len(report.Complexity.Functions); got != tc.want {
+			t.Errorf("%v: %d functions analyzed, want %d\n%s", tc.args, got, tc.want, out)
+		}
+		// Test files count for complexity only; the dependency graph
+		// describes the modules under test.
+		if report.Deps == nil || report.Deps.Analysis.TotalModules != 1 {
+			t.Errorf("%v: deps = %+v, want the one source module", tc.args, report.Deps)
+		}
+	}
+	// A single analysis over test files alone has no module to analyze.
+	out, err = run(t, "analyze", "--format", "json", "--select", "deps", "--include-tests", filepath.Join(dir, "app.test.ts"))
+	if err != nil {
+		t.Fatalf("analyze: %v\n%s", err, out)
+	}
+	if report := decodeAnalyzeJSON(t, out); report.Deps != nil && report.Deps.Analysis.TotalModules != 0 {
+		t.Errorf("deps = %+v, want no modules", report.Deps)
+	}
+
+	// The JavaScript conventions do not reach the other languages.
+	goDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(goDir, "__tests__"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(goDir, "__tests__", "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := run(t, "analyze", "--format", "text", "--select", "complexity", goDir); err != nil || !strings.Contains(out, "main") {
+		t.Errorf("__tests__/main.go should be analyzed as Go: %v\n%s", err, out)
+	}
+}
+
+func TestAnalyzeExclude(t *testing.T) {
+	out, err := run(t, "analyze", "--format", "text", "--select", "complexity", "--exclude", "other", "../../testdata/go/clones")
+	if err != nil {
+		t.Fatalf("analyze: %v\n%s", err, out)
+	}
+	if strings.Contains(out, "other/") || !strings.Contains(out, "sum.go") {
+		t.Errorf("excluded directory still analyzed:\n%s", out)
+	}
+	if _, err := run(t, "analyze", "--format", "text", "--exclude", "*.go", "../../testdata/go/clones"); err == nil {
+		t.Error("excluding every file should report that there are none")
+	}
+
+	// JavaScript honors the same flag on top of jscan's configuration.
+	out, err = run(t, "analyze", "--format", "text", "--select", "complexity", "--exclude", "simple", "../../testdata/javascript")
+	if err == nil {
+		t.Errorf("excluding the only JavaScript directory should report no files:\n%s", out)
 	}
 }
 

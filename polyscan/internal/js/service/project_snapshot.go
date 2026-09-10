@@ -66,6 +66,20 @@ func NewProjectSnapshot(paths []string) *ProjectSnapshot {
 	return &ProjectSnapshot{Files: files}
 }
 
+// Subset returns a snapshot over the files keep accepts, sharing their
+// entries and parse trees with s: a file loaded through either snapshot is
+// loaded in both. It lets analyses that run over different file sets, such
+// as clone detection leaving test files out, share one parse.
+func (s *ProjectSnapshot) Subset(keep func(path string) bool) *ProjectSnapshot {
+	subset := &ProjectSnapshot{retain: s.retain}
+	for _, file := range s.Files {
+		if keep(file.Path) {
+			subset.Files = append(subset.Files, file)
+		}
+	}
+	return subset
+}
+
 // BuildProjectSnapshot reads and parses each file once, in parallel, and keeps
 // the parse trees for every analysis that runs over the snapshot. Files come
 // out in path order regardless of scheduling, so downstream reports stay

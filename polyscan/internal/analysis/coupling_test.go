@@ -69,7 +69,7 @@ type Server struct{ s Store }
 `,
 	})
 
-	report, err := Analyze([]string{dir}, Options{CBO: true})
+	report, err := Analyze([]string{dir}, Options{CBO: true, IncludeTests: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -111,7 +111,7 @@ type A struct{ b B; u model.User }
 type B struct{}
 `,
 	})
-	report, err := Analyze([]string{dir}, Options{CBO: true})
+	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -148,7 +148,7 @@ struct Fixture { f: Foo }
 type Unit struct{ foo Foo }
 `,
 	})
-	report, err := Analyze([]string{dir}, Options{CBO: true})
+	report, err := Analyze([]string{dir}, Options{CBO: true, IncludeTests: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -175,7 +175,7 @@ type Unit struct{ foo Foo }
 
 func TestAnalyzeCouplingAbsentWithoutSupportedLanguage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"a.cpp": "struct S { int a; };\n"})
-	report, err := Analyze([]string{dir}, Options{CBO: true})
+	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}

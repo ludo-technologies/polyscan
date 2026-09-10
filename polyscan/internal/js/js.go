@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ludo-technologies/polyscan/polyscan/internal/js/analyzer"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/app"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/config"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
@@ -101,8 +102,9 @@ func ContainsFiles(paths []string) (bool, error) {
 }
 
 // CollectFiles collects the JavaScript/TypeScript files under each path,
-// honoring the configuration's include and exclude patterns.
-func CollectFiles(paths []string, cfg *config.Config) ([]string, error) {
+// honoring the configuration's include and exclude patterns. Test files, as
+// analyzer.IsTestFile names them, are left out unless includeTests is set.
+func CollectFiles(paths []string, cfg *config.Config, includeTests bool) ([]string, error) {
 	helper := app.NewFileHelper()
 	var files []string
 	for _, path := range paths {
@@ -110,7 +112,11 @@ func CollectFiles(paths []string, cfg *config.Config) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to collect files from %s: %w", path, err)
 		}
-		files = append(files, pathFiles...)
+		for _, file := range pathFiles {
+			if includeTests || !analyzer.IsTestFile(file) {
+				files = append(files, file)
+			}
+		}
 	}
 	return files, nil
 }
@@ -127,12 +133,32 @@ func CollectFiles(paths []string, cfg *config.Config) ([]string, error) {
 // each file inside its fan-out and releases it right after, which holds far
 // fewer parse trees at once. Dependency analysis is the exception: graph
 // construction needs every module's tree at once.
+//
+// Test files among files count for complexity and dead code only. Clone
+// detection, CBO and dependency analysis run over the other files: test
+// functions share a skeleton by convention, and a test's classes and imports
+// describe the tests, not the modules under test.
 func Run(ctx context.Context, files []string, cfg *config.Config, selected Selection) *Result {
+	var sources []string
+	for _, file := range files {
+		if !analyzer.IsTestFile(file) {
+			sources = append(sources, file)
+		}
+	}
+	// The snapshot holds the files some selected analysis reads; a file
+	// no analysis loads would leave the accounting incomplete.
+	if !selected.Complexity && !selected.DeadCode {
+		files = sources
+	}
 	var snapshot *service.ProjectSnapshot
 	if selected.count() > 1 || selected.Deps {
 		snapshot = service.BuildProjectSnapshot(ctx, files)
 	} else {
 		snapshot = service.NewProjectSnapshot(files)
+	}
+	sourceSnapshot := snapshot
+	if len(sources) != len(files) {
+		sourceSnapshot = snapshot.Subset(func(path string) bool { return !analyzer.IsTestFile(path) })
 	}
 
 	result := &Result{}
@@ -165,7 +191,7 @@ func Run(ctx context.Context, files []string, cfg *config.Config, selected Selec
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resp, err := runClones(ctx, snapshot, files)
+			resp, err := runClones(ctx, sourceSnapshot, sources)
 			mu.Lock()
 			result.Clones, result.ClonesErr = resp, err
 			mu.Unlock()
@@ -176,7 +202,7 @@ func Run(ctx context.Context, files []string, cfg *config.Config, selected Selec
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resp, err := runCBO(ctx, snapshot, files)
+			resp, err := runCBO(ctx, sourceSnapshot, sources)
 			mu.Lock()
 			result.CBO, result.CBOErr = resp, err
 			mu.Unlock()
@@ -187,7 +213,7 @@ func Run(ctx context.Context, files []string, cfg *config.Config, selected Selec
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			resp, err := runDeps(ctx, snapshot, files)
+			resp, err := runDeps(ctx, sourceSnapshot, sources)
 			mu.Lock()
 			result.Deps, result.DepsErr = resp, err
 			mu.Unlock()

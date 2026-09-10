@@ -41,6 +41,8 @@ func analyzeCmd() *cobra.Command {
 		outputPath    string
 		noOpen        bool
 		minComplexity int
+		exclude       []string
+		includeTests  bool
 	)
 
 	cmd := &cobra.Command{
@@ -58,6 +60,11 @@ for JavaScript/TypeScript only. The health score is computed over the
 dimensions that ran: a dimension a language does not have is left out, not
 scored as clean.
 
+Test files and test code are left out of every analysis unless --include-tests
+is given: Go *_test.go; Rust #[test] functions, #[cfg(test)] items, tests.rs,
+*_tests.rs and tests/; C++ *_test.*, *_tests.*, test_*.*, *Test.*, test/ and
+tests/; JavaScript/TypeScript *.test.*, *.spec.* and __tests__/.
+
 By default, generates an HTML report and opens it in your browser.
 
 Examples:
@@ -66,7 +73,9 @@ Examples:
   polyscan analyze --format json src/       # JSON report to stdout
   polyscan analyze --format text src/       # Text report to stdout
   polyscan analyze --select clone .         # Clone detection only
-  polyscan analyze --min-complexity 10 .    # List only functions at or above 10`,
+  polyscan analyze --min-complexity 10 .    # List only functions at or above 10
+  polyscan analyze --exclude 'src/generated/**' .  # Leave a directory out of every analysis
+  polyscan analyze --include-tests .        # Analyze test files and test code too`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			outputFormat := jsdomain.OutputFormat(format)
@@ -82,18 +91,19 @@ Examples:
 			if err != nil {
 				return err
 			}
+			options.IncludeTests = includeTests
 
 			start := time.Now()
 			var generic *analysis.Report
 			if options != (analysis.Options{}) {
-				generic, err = analysis.Analyze(args, options)
+				generic, err = analysis.Analyze(args, options, exclude)
 				if err != nil && !errors.Is(err, analysis.ErrNoFiles) {
 					return err
 				}
 			}
 			var javascript *js.Result
 			if selection != (js.Selection{}) {
-				javascript, err = analyzeJavaScript(args, selection, cmd.ErrOrStderr())
+				javascript, err = analyzeJavaScript(args, selection, exclude, includeTests, cmd.ErrOrStderr())
 				if err != nil {
 					return err
 				}
@@ -167,6 +177,12 @@ Examples:
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "Report path (HTML default: "+defaultReportPath+"; JSON/text default: stdout)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Don't open the HTML report in the browser")
 	cmd.Flags().IntVar(&minComplexity, "min-complexity", 1, "List only functions with at least this complexity")
+	cmd.Flags().StringSliceVar(&exclude, "exclude", nil,
+		"Files and directories to leave out (comma-separated or repeated): a glob\n"+
+			"without a slash matches a file name or a directory anywhere on the path,\n"+
+			"one with a slash matches a path relative to the analyzed directory, with\n"+
+			"** for any number of segments (e.g. 'fixtures', 'src/generated/**')")
+	cmd.Flags().BoolVar(&includeTests, "include-tests", false, "Analyze test files and test code, which are left out by default")
 	return cmd
 }
 
@@ -174,13 +190,14 @@ Examples:
 // TypeScript files under paths, or returns nil when there are none. The
 // files are collected with jscan's own configuration discovery and
 // exclusion rules, so a JavaScript project keeps exactly the analysis
-// jscan gave it. An analysis that fails is reported on warn and left out
-// of the report, as in jscan.
+// jscan gave it, with the command line's exclude patterns added to the
+// configuration's own. An analysis that fails is reported on warn and left
+// out of the report, as in jscan.
 //
 // A tree without JavaScript skips the pipeline before configuration
 // discovery, so a jscan configuration that would not load cannot fail the
 // other languages' analysis.
-func analyzeJavaScript(paths []string, selection js.Selection, warn io.Writer) (*js.Result, error) {
+func analyzeJavaScript(paths []string, selection js.Selection, exclude []string, includeTests bool, warn io.Writer) (*js.Result, error) {
 	hasJS, err := js.ContainsFiles(paths)
 	if err != nil {
 		return nil, err
@@ -192,7 +209,8 @@ func analyzeJavaScript(paths []string, selection js.Selection, warn io.Writer) (
 	if err != nil {
 		return nil, fmt.Errorf("failed to load the JavaScript configuration: %w", err)
 	}
-	files, err := js.CollectFiles(paths, cfg)
+	cfg.Analysis.ExcludePatterns = append(cfg.Analysis.ExcludePatterns, exclude...)
+	files, err := js.CollectFiles(paths, cfg, includeTests)
 	if err != nil {
 		return nil, err
 	}
