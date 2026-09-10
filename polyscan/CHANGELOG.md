@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-09-10
+
+### Changed
+
+- The `cbo` and `deps.analysis` sections of the JSON report now use snake_case keys, as every other section does and as pyscn's `cbo` and `system.dependency_analysis` output does. The domain structs behind them had no `json` tags, so a report contained `Classes` and `Instability` next to `total_files` and `health_score`. A consumer that decoded the PascalCase keys must switch to the snake_case ones (#128)
+
 ## [0.3.1] - 2026-09-10
 
 ### Fixed
