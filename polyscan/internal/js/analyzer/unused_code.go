@@ -233,7 +233,7 @@ func DetectUnusedExports(allModuleInfos map[string]*domain.ModuleInfo, graph *Im
 			continue
 		}
 		// Skip test files
-		if isTestFile(filePath) {
+		if IsTestFile(filePath) {
 			continue
 		}
 
@@ -349,8 +349,12 @@ func isEntryPointFile(filePath string) bool {
 	return false
 }
 
-// isTestFile checks if a file is a test file.
-func isTestFile(filePath string) bool {
+// IsTestFile reports whether the path names a test file under the
+// conventions of Jest, Vitest and Mocha: a *.test.* or *.spec.* file, or a
+// file under a __tests__ directory. It is the one definition of a
+// JavaScript/TypeScript test file, shared by file collection, the
+// per-analysis file sets and dead code analysis.
+func IsTestFile(filePath string) bool {
 	base := filepath.Base(filePath)
 
 	// Check for *.test.* and *.spec.* patterns
@@ -403,7 +407,7 @@ func DetectOrphanFiles(allModuleInfos map[string]*domain.ModuleInfo, graph *Impo
 	// 2. Files not imported by any other file (root files with no reverse edges)
 	entryPoints := make(map[string]bool)
 	for filePath := range allModuleInfos {
-		if isTestFile(filePath) || isConfigFile(filePath) {
+		if IsTestFile(filePath) || isConfigFile(filePath) {
 			continue
 		}
 		if isEntryPointFile(filePath) {
@@ -441,7 +445,7 @@ func DetectOrphanFiles(allModuleInfos map[string]*domain.ModuleInfo, graph *Impo
 		if reachable[filePath] {
 			continue
 		}
-		if isTestFile(filePath) || isConfigFile(filePath) {
+		if IsTestFile(filePath) || isConfigFile(filePath) {
 			continue
 		}
 		findings = append(findings, &DeadCodeFinding{
@@ -472,7 +476,7 @@ func DetectUnusedExportedFunctions(allModuleInfos map[string]*domain.ModuleInfo,
 		if isEntryPointFile(filePath) {
 			continue
 		}
-		if isTestFile(filePath) {
+		if IsTestFile(filePath) {
 			continue
 		}
 

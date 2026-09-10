@@ -552,9 +552,9 @@ func TestIsTestFile(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		result := isTestFile(tc.path)
+		result := IsTestFile(tc.path)
 		if result != tc.expected {
-			t.Errorf("isTestFile(%q) = %v, want %v", tc.path, result, tc.expected)
+			t.Errorf("IsTestFile(%q) = %v, want %v", tc.path, result, tc.expected)
 		}
 	}
 }

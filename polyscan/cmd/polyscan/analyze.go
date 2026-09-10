@@ -92,9 +92,6 @@ Examples:
 				return err
 			}
 			options.IncludeTests = includeTests
-			if !includeTests {
-				exclude = append(exclude, js.TestFilePatterns...)
-			}
 
 			start := time.Now()
 			var generic *analysis.Report
@@ -106,7 +103,7 @@ Examples:
 			}
 			var javascript *js.Result
 			if selection != (js.Selection{}) {
-				javascript, err = analyzeJavaScript(args, selection, exclude, cmd.ErrOrStderr())
+				javascript, err = analyzeJavaScript(args, selection, exclude, includeTests, cmd.ErrOrStderr())
 				if err != nil {
 					return err
 				}
@@ -200,7 +197,7 @@ Examples:
 // A tree without JavaScript skips the pipeline before configuration
 // discovery, so a jscan configuration that would not load cannot fail the
 // other languages' analysis.
-func analyzeJavaScript(paths []string, selection js.Selection, exclude []string, warn io.Writer) (*js.Result, error) {
+func analyzeJavaScript(paths []string, selection js.Selection, exclude []string, includeTests bool, warn io.Writer) (*js.Result, error) {
 	hasJS, err := js.ContainsFiles(paths)
 	if err != nil {
 		return nil, err
@@ -213,7 +210,7 @@ func analyzeJavaScript(paths []string, selection js.Selection, exclude []string,
 		return nil, fmt.Errorf("failed to load the JavaScript configuration: %w", err)
 	}
 	cfg.Analysis.ExcludePatterns = append(cfg.Analysis.ExcludePatterns, exclude...)
-	files, err := js.CollectFiles(paths, cfg)
+	files, err := js.CollectFiles(paths, cfg, includeTests)
 	if err != nil {
 		return nil, err
 	}

@@ -235,7 +235,7 @@ func TestAnalyzeExcludesTestsByDefault(t *testing.T) {
 		{nil, 1},
 		{[]string{"--include-tests"}, 4},
 	} {
-		out, err := run(t, append([]string{"analyze", "--format", "json", "--select", "complexity"}, append(tc.args, dir)...)...)
+		out, err := run(t, append([]string{"analyze", "--format", "json", "--select", "complexity,deps"}, append(tc.args, dir)...)...)
 		if err != nil {
 			t.Fatalf("analyze %v: %v\n%s", tc.args, err, out)
 		}
@@ -243,6 +243,31 @@ func TestAnalyzeExcludesTestsByDefault(t *testing.T) {
 		if got := len(report.Complexity.Functions); got != tc.want {
 			t.Errorf("%v: %d functions analyzed, want %d\n%s", tc.args, got, tc.want, out)
 		}
+		// Test files count for complexity only; the dependency graph
+		// describes the modules under test.
+		if report.Deps == nil || report.Deps.Analysis.TotalModules != 1 {
+			t.Errorf("%v: deps = %+v, want the one source module", tc.args, report.Deps)
+		}
+	}
+	// A single analysis over test files alone has no module to analyze.
+	out, err = run(t, "analyze", "--format", "json", "--select", "deps", "--include-tests", filepath.Join(dir, "app.test.ts"))
+	if err != nil {
+		t.Fatalf("analyze: %v\n%s", err, out)
+	}
+	if report := decodeAnalyzeJSON(t, out); report.Deps != nil && report.Deps.Analysis.TotalModules != 0 {
+		t.Errorf("deps = %+v, want no modules", report.Deps)
+	}
+
+	// The JavaScript conventions do not reach the other languages.
+	goDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(goDir, "__tests__"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(goDir, "__tests__", "main.go"), []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := run(t, "analyze", "--format", "text", "--select", "complexity", goDir); err != nil || !strings.Contains(out, "main") {
+		t.Errorf("__tests__/main.go should be analyzed as Go: %v\n%s", err, out)
 	}
 }
 
