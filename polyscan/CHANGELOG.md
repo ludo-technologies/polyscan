@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-10
+
+### Fixed
+
+- A relative JavaScript/TypeScript import written with the extension of the compiled output, as `Node16` and `NodeNext` module resolution require, now resolves to the TypeScript source. `import { x } from './foo.js'` reaches `foo.ts`, `foo.tsx` or `foo.d.ts`, `.jsx` reaches `.tsx`, and `.mjs` and `.cjs` reach `.mts` and `.cts`, with the same rewrite applied to index files and path aliases. Before, the specifier became an external module of the dependency graph, the target file was reported as an entry point, and its exports were reported as unused (#126)
+
 ## [0.3.0] - 2026-09-09
 
 ### Added
