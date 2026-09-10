@@ -462,6 +462,25 @@ func TestResolveImportPath_IndexFile(t *testing.T) {
 	}
 }
 
+func TestResolveImportPath_EmittedExtension(t *testing.T) {
+	knownFiles := map[string]bool{
+		"/src/utils.ts":      true,
+		"/src/widget.tsx":    true,
+		"/src/lib/index.mts": true,
+	}
+
+	cases := map[string]string{
+		"./utils.js":      "/src/utils.ts",
+		"./widget.jsx":    "/src/widget.tsx",
+		"./lib/index.mjs": "/src/lib/index.mts",
+	}
+	for source, expected := range cases {
+		if resolved := resolveImportPath("/src/app.ts", source, knownFiles); resolved != expected {
+			t.Errorf("resolveImportPath(%q) = %q, expected %q", source, resolved, expected)
+		}
+	}
+}
+
 func TestResolveImportPath_ParentDirectory(t *testing.T) {
 	knownFiles := map[string]bool{
 		"/src/utils.js": true,

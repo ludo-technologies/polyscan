@@ -249,28 +249,9 @@ func (b *DependencyGraphBuilder) resolveImportTarget(source string, sourceType d
 		resolved = filepath.Clean(resolved)
 		normalized := b.normalizeModuleID(resolved)
 
-		// If the normalized ID matches a known node, return it directly
-		if knownNodeIDs[normalized] {
-			return normalized
+		if target := resolveModuleCandidate(normalized, knownNodeIDs); target != "" {
+			return target
 		}
-
-		// Try appending common extensions
-		extensions := []string{".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"}
-		for _, ext := range extensions {
-			candidate := normalized + ext
-			if knownNodeIDs[candidate] {
-				return candidate
-			}
-		}
-
-		// Try directory index files
-		for _, ext := range extensions {
-			candidate := normalized + "/index" + ext
-			if knownNodeIDs[candidate] {
-				return candidate
-			}
-		}
-
 		// No match found; return normalized as-is (will become external)
 		return normalized
 

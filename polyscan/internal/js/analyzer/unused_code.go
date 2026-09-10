@@ -317,7 +317,8 @@ func getExportedNames(exp *domain.Export) []string {
 }
 
 // resolveImportPath resolves a relative import source to an actual file path.
-// It tries the raw path, then common extensions, then index files.
+// It tries the raw path, the TypeScript sources behind an emitted JavaScript name,
+// common extensions, then index files.
 func resolveImportPath(importingFile, source string, knownFiles map[string]bool) string {
 	// Only handle relative imports
 	if !strings.HasPrefix(source, "./") && !strings.HasPrefix(source, "../") {
@@ -328,32 +329,12 @@ func resolveImportPath(importingFile, source string, knownFiles map[string]bool)
 	resolved := filepath.Join(dir, source)
 	resolved = filepath.Clean(resolved)
 
-	// Try exact path first
-	if knownFiles[resolved] {
-		return resolved
-	}
-
-	// Try adding extensions
-	extensions := []string{".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"}
-	for _, ext := range extensions {
-		candidate := resolved + ext
+	for _, candidate := range moduleCandidates(filepath.ToSlash(resolved)) {
+		candidate = filepath.FromSlash(candidate)
 		if knownFiles[candidate] {
 			return candidate
 		}
 	}
-
-	// Try as directory with index files
-	indexFiles := []string{
-		"index.ts", "index.tsx", "index.js", "index.jsx",
-		"index.mts", "index.cts", "index.mjs", "index.cjs",
-	}
-	for _, idx := range indexFiles {
-		candidate := filepath.Join(resolved, idx)
-		if knownFiles[candidate] {
-			return candidate
-		}
-	}
-
 	return ""
 }
 
@@ -640,7 +621,6 @@ func resolveAliasImportPaths(source string, idx *suffixIndex) []string {
 		candidateBases[source[2:]] = true
 	}
 
-	extensions := []string{".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"}
 	matches := make(map[string]bool)
 
 	for base := range candidateBases {
@@ -650,14 +630,7 @@ func resolveAliasImportPaths(source string, idx *suffixIndex) []string {
 			continue
 		}
 
-		candidates := []string{base}
-		for _, ext := range extensions {
-			candidates = append(candidates, base+ext)
-			candidates = append(candidates, filepath.ToSlash(filepath.Join(base, "index"+ext)))
-		}
-
-		for _, c := range candidates {
-			c = filepath.ToSlash(c)
+		for _, c := range moduleCandidates(filepath.ToSlash(base)) {
 			if files, ok := idx.bySuffix[c]; ok {
 				for _, f := range files {
 					matches[f] = true
