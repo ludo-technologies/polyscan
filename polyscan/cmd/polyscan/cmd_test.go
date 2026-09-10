@@ -37,15 +37,15 @@ type analyzeJSON struct {
 	DeadCode json.RawMessage `json:"dead_code"`
 	CBO      *struct {
 		Classes []struct {
-			Name     string `json:"Name"`
+			Name     string `json:"name"`
 			Language string `json:"language"`
 			Metrics  struct {
-				CouplingCount    int      `json:"CouplingCount"`
-				DependentClasses []string `json:"DependentClasses"`
-			} `json:"Metrics"`
+				CouplingCount    int      `json:"coupling_count"`
+				DependentClasses []string `json:"dependent_classes"`
+			} `json:"metrics"`
 		} `json:"classes"`
 		Summary struct {
-			TotalClasses int `json:"TotalClasses"`
+			TotalClasses int `json:"total_classes"`
 		} `json:"summary"`
 	} `json:"cbo"`
 	Clone *struct {
@@ -60,8 +60,8 @@ type analyzeJSON struct {
 	} `json:"clone"`
 	Deps *struct {
 		Analysis struct {
-			TotalModules int `json:"TotalModules"`
-			MaxDepth     int `json:"MaxDepth"`
+			TotalModules int `json:"total_modules"`
+			MaxDepth     int `json:"max_depth"`
 		} `json:"analysis"`
 		Warnings []string `json:"warnings"`
 	} `json:"deps"`

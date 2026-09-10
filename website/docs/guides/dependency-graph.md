@@ -17,7 +17,7 @@ Every metric is built from two counts. For a given module:
 
 The two describe opposite kinds of exposure. A module with high `Ca` is dangerous to change, because the change ripples outward. A module with high `Ce` is fragile, because it breaks when anything it uses changes.
 
-In the JSON output, both counts are per module in `.deps.analysis.ModuleMetrics`, as `AfferentCoupling` and `EfferentCoupling`, alongside `Instability`, `Abstractness`, `Distance`, and a `RiskLevel`.
+In the JSON output, both counts are per module in `.deps.analysis.module_metrics`, as `afferent_coupling` and `efferent_coupling`, alongside `instability`, `abstractness`, `distance`, and a `risk_level`.
 
 ## Instability
 
@@ -47,7 +47,7 @@ The two bad corners are:
 
 **Concrete and stable**, at the bottom left. Many modules import a module full of concrete implementation. This is the more common and more painful case, since every change to that implementation touches everything downstream. The fix is to extract an interface and let dependents import that instead.
 
-The coupling analysis in the JSON output names the modules in each zone explicitly: `.deps.analysis.CouplingAnalysis.ZoneOfPain` lists the stable-but-concrete modules, and `MainSequence` the healthy ones. The deviation feeds the health score, contributing up to 3 penalty points. See [the health score page](../output/health-score.md#dependencies).
+The coupling analysis in the JSON output names the modules in each zone explicitly: `.deps.analysis.coupling_analysis.zone_of_pain` lists the stable-but-concrete modules, and `main_sequence` the healthy ones. The deviation feeds the health score, contributing up to 3 penalty points. See [the health score page](../output/health-score.md#dependencies).
 
 ## Circular dependencies
 
@@ -61,7 +61,7 @@ Find them in the text report's dependency section, or from the JSON:
 
 ```bash
 polyscan analyze --format json --select deps src/ 2>/dev/null \
-  | jq '.deps.analysis.CircularDependencies'
+  | jq '.deps.analysis.circular_dependencies'
 ```
 
 Or fail the build on them:
@@ -83,7 +83,7 @@ expected depth = max(3, ⌈log₂(module count + 1)⌉ + 1)
 
 A graph of 100 modules is expected to be about 8 deep. Exceeding the expectation costs up to 3 points in the health score.
 
-Deep chains make change expensive, because a modification at the bottom must be understood at every level above it. They usually come from layering that has grown one wrapper at a time. The chains themselves are listed in `.deps.analysis.LongestChains`.
+Deep chains make change expensive, because a modification at the bottom must be understood at every level above it. They usually come from layering that has grown one wrapper at a time. The chains themselves are listed in `.deps.analysis.longest_chains`.
 
 ## Rendering the graph
 

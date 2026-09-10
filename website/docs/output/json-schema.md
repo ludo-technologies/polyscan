@@ -316,32 +316,28 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
 }
 ```
 
-!!! warning "This section uses different field naming"
-
-    Entries in `classes` use PascalCase keys, while every other part of the document uses snake_case. This is an inconsistency in the output rather than in this documentation, and a parser written against the rest of the schema will not read this section correctly.
-
 ```json
 {
-  "Name": "report",
-  "FilePath": "/home/you/project/src/report.js",
-  "StartLine": 1,
-  "EndLine": 11,
-  "Metrics": {
-    "CouplingCount": 1,
-    "InheritanceDependencies": 0,
-    "TypeHintDependencies": 0,
-    "InstantiationDependencies": 0,
-    "AttributeAccessDependencies": 0,
-    "ImportDependencies": 1,
-    "DependentClasses": ["cart"]
+  "name": "report",
+  "file_path": "/home/you/project/src/report.js",
+  "start_line": 1,
+  "end_line": 11,
+  "metrics": {
+    "coupling_count": 1,
+    "inheritance_dependencies": 0,
+    "type_hint_dependencies": 0,
+    "instantiation_dependencies": 0,
+    "attribute_access_dependencies": 0,
+    "import_dependencies": 1,
+    "dependent_classes": ["cart"]
   },
-  "RiskLevel": "low",
-  "IsAbstract": false,
-  "BaseClasses": null
+  "risk_level": "low",
+  "is_abstract": false,
+  "base_classes": null
 }
 ```
 
-`CouplingCount` is the CBO value. `DependentClasses` names what this class or module depends on, and the `*Dependencies` counters break the total down by how the dependency was formed. A Go or Rust entry is one type and carries a `language` field (`"Go"` or `"Rust"`), which a JavaScript/TypeScript entry, whose unit is the file, omits; its `DependentClasses` name only types declared in the analyzed tree, and it uses `InheritanceDependencies` for embedded types and implemented traits and `TypeHintDependencies` for every other reference.
+`coupling_count` is the CBO value. `dependent_classes` names what this class or module depends on, and the `*_dependencies` counters break the total down by how the dependency was formed. A Go or Rust entry is one type and carries a `language` field (`"Go"` or `"Rust"`), which a JavaScript/TypeScript entry, whose unit is the file, omits; its `dependent_classes` name only types declared in the analyzed tree, and it uses `inheritance_dependencies` for embedded types and implemented traits and `type_hint_dependencies` for every other reference.
 
 ## `lcom`
 
