@@ -1,7 +1,6 @@
 package analysis
 
 import (
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -78,27 +77,19 @@ type typeDeclaration struct {
 type cohesionBuilder struct {
 	classes map[string]*classMethods
 	keys    []string
-	// declarations maps a fully-scoped key (language, location and name,
-	// the same scheme the coupling analysis keys types on) to the type's
-	// declaration, and byBare indexes those declarations by bare name for
-	// cross-file lookup.
-	declarations map[string]*typeDeclaration
-	byBare       map[string][]*typeDeclaration
+	// index tracks the type declarations of the tree; see declIndex.
+	index *declIndex[*typeDeclaration]
 }
 
 func newCohesionBuilder() *cohesionBuilder {
-	return &cohesionBuilder{classes: map[string]*classMethods{}, declarations: map[string]*typeDeclaration{}, byBare: map[string][]*typeDeclaration{}}
+	return &cohesionBuilder{classes: map[string]*classMethods{}, index: newDeclIndex[*typeDeclaration]()}
 }
 
 func (b *cohesionBuilder) add(language *engine.Language, display string, fn engine.Function) {
 	if fn.Receiver == "" {
 		return
 	}
-	location := display
-	if language.TypeSpansDirectory {
-		location = filepath.Dir(display)
-	}
-	key := language.Name + "\x00" + location + "\x00" + fn.Receiver
+	key := scopedKey(language, locationOf(language, display), fn.Receiver)
 	class, ok := b.classes[key]
 	if !ok {
 		class = &classMethods{name: fn.Receiver, language: language}
@@ -109,21 +100,12 @@ func (b *cohesionBuilder) add(language *engine.Language, display string, fn engi
 }
 
 // setDeclarations records the file and line span declaring each type from
-// the engine result, keyed the way the coupling analysis keys types.
+// the engine result.
 func (b *cohesionBuilder) setDeclarations(language *engine.Language, display string, result *engine.Result) {
-	location := display
-	if language.TypeSpansDirectory {
-		location = filepath.Dir(display)
-	}
+	location := locationOf(language, display)
 	for _, t := range result.Types {
 		if t.Declared && !t.IsTest {
-			full := language.Name + "\x00" + location + "\x00" + t.Name
-			if _, ok := b.declarations[full]; !ok {
-				d := &typeDeclaration{file: display, start: t.StartLine, end: t.EndLine}
-				b.declarations[full] = d
-				bare := language.Name + "\x00" + bareName(language, t.Name)
-				b.byBare[bare] = append(b.byBare[bare], d)
-			}
+			b.index.add(language, location, t.Name, &typeDeclaration{file: display, start: t.StartLine, end: t.EndLine})
 		}
 	}
 }
@@ -133,24 +115,42 @@ func (b *cohesionBuilder) setDeclarations(language *engine.Language, display str
 // no cohesion to measure and is left out.
 func (b *cohesionBuilder) build() *Cohesion {
 	cohesion := &Cohesion{Classes: []Class{}}
+	// Merge the per-file groups of an unambiguously-declared type before
+	// measuring, so a type whose declaration and methods span files is
+	// measured once and reported once under its declaring file. An
+	// ambiguous name keeps one group per file, so unrelated same-named
+	// types stay distinct.
+	merged := map[string]*classMethods{}
+	decls := map[string]*typeDeclaration{}
+	var order []string
 	for _, key := range b.keys {
 		cm := b.classes[key]
-		class := cm.measure()
-		// When the language scopes types per file and the tree declares
-		// the type exactly once, attribute the class to the declaring
-		// file with the declaration's line span, so the cohesion result
-		// matches the coupling result for a type whose declaration and
-		// impl blocks live in different files. An ambiguous name keeps
-		// the first method's file, so unrelated same-named types in
-		// different files stay distinct.
+		target := key
+		var decl *typeDeclaration
 		if !cm.language.TypeSpansDirectory {
-			bare := cm.language.Name + "\x00" + bareName(cm.language, cm.name)
-			if candidates := b.byBare[bare]; len(candidates) == 1 {
-				if d := candidates[0]; d.file != class.FilePath {
-					class.FilePath = d.file
-					class.StartLine, class.EndLine = d.start, d.end
-				}
+			if d, ok := b.index.unique(cm.language, cm.name); ok {
+				decl = d
+				target = scopedKey(cm.language, d.file, cm.name)
 			}
+		}
+		m, ok := merged[target]
+		if !ok {
+			m = &classMethods{name: cm.name, language: cm.language}
+			merged[target] = m
+			decls[target] = decl
+			order = append(order, target)
+		}
+		m.methods = append(m.methods, cm.methods...)
+	}
+	for _, key := range order {
+		class := merged[key].measure()
+		// Attribute the merged class to the declaring file with the
+		// declaration's line span when it differs from the first
+		// method's file, so the cohesion result matches the coupling
+		// result.
+		if d := decls[key]; d != nil && d.file != class.FilePath {
+			class.FilePath = d.file
+			class.StartLine, class.EndLine = d.start, d.end
 		}
 		if class.TotalMethods > class.ExcludedMethods {
 			cohesion.Classes = append(cohesion.Classes, class)

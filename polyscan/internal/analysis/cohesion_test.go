@@ -186,14 +186,15 @@ impl Foo {
 	if foo.Name != "Foo" || foo.Language != "Rust" {
 		t.Errorf("class = %+v, want Rust Foo", foo)
 	}
-	// The declaring file is types.rs; without the fix it would be ops.rs.
-	// Only the ops.rs methods are measured (new has no receiver and its
-	// group is left out), and the line span is the declaration's.
+	// The declaring file is types.rs; without the fix the methods would be
+	// reported under ops.rs. All three methods are measured together (new
+	// has no receiver and stays out of the graph), and the line span is
+	// the declaration's.
 	if filepath.Base(foo.FilePath) != "types.rs" {
 		t.Errorf("FilePath = %q, want types.rs (the declaring file)", foo.FilePath)
 	}
-	if foo.TotalMethods != 2 {
-		t.Errorf("TotalMethods = %d, want 2 (inc, get)", foo.TotalMethods)
+	if foo.TotalMethods != 3 || foo.ExcludedMethods != 1 {
+		t.Errorf("methods = %d total, %d excluded; want 3 and 1 (new, inc, get)", foo.TotalMethods, foo.ExcludedMethods)
 	}
 	if foo.StartLine != 1 || foo.EndLine != 1 {
 		t.Errorf("span = %d-%d, want the declaration's 1-1 in types.rs, not the methods' lines in ops.rs", foo.StartLine, foo.EndLine)
@@ -255,6 +256,46 @@ impl Foo {
 	}
 	if foo.StartLine != 1 || foo.EndLine != 1 {
 		t.Errorf("span = %d-%d, want the declaration's 1-1", foo.StartLine, foo.EndLine)
+	}
+}
+
+func TestAnalyzeCohesionRustMergesCrossFileMethods(t *testing.T) {
+	// When the declaring file holds its own impl block and another file
+	// adds more methods, the type must be measured once and reported once
+	// under the declaring file, not once per file.
+	dir := writeFiles(t, map[string]string{
+		"a.rs": `pub struct Foo { n: u32 }
+
+impl Foo {
+    pub fn inc(&mut self) { self.n += 1; }
+    pub fn get(&self) -> u32 { self.n }
+}
+`,
+		"b.rs": `use crate::a::Foo;
+
+impl Foo {
+    pub fn double(&mut self) { self.n *= 2; }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want 1 (Foo measured once): %+v", len(classes), classes)
+	}
+	foo := classes[0]
+	if foo.Name != "Foo" || foo.Language != "Rust" {
+		t.Errorf("class = %+v, want Rust Foo", foo)
+	}
+	if filepath.Base(foo.FilePath) != "a.rs" {
+		t.Errorf("FilePath = %q, want a.rs (the declaring file)", foo.FilePath)
+	}
+	if foo.TotalMethods != 3 {
+		t.Errorf("TotalMethods = %d, want 3 (inc, get, double)", foo.TotalMethods)
 	}
 }
 
