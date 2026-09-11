@@ -198,7 +198,11 @@ func (b *couplingBuilder) build() *Coupling {
 		case len(candidates) == 1:
 			candidates[0].refs = append(candidates[0].refs, t.refs...)
 		case len(candidates) > 1:
-			b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous type name %q: undeclared impl block matches %d declarations across the tree, references left unresolved", t.file, t.name, len(candidates)))
+			// t.file is only set for declared types; the file of an
+			// undeclared block is the location in its key, which is the
+			// display path for a language scoped per file.
+			loc := strings.SplitN(key, "\x00", 3)[1]
+			b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous type name %q: undeclared impl block matches %d declarations across the tree, references left unresolved", loc, t.name, len(candidates)))
 		}
 	}
 

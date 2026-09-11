@@ -178,25 +178,30 @@ func TestAnalyzeCouplingRustAmbiguousTypeName(t *testing.T) {
 	// ambiguous name must not silently merge the impl into one declaration
 	// or resolve references arbitrarily; both sides warn and leave it out.
 	dir := writeFiles(t, map[string]string{
-		"circle.rs": `pub struct Point { x: f64, y: f64 }
+		"unit.rs": `pub struct Unit(pub f64);
+`,
+		"helper.rs": `pub struct Helper;
+`,
+		"circle.rs": `pub struct Point { x: f64, y: f64, u: Unit }
 
 impl Point {
-    pub fn distance(&self, other: &Point) -> f64 { (self.x - other.x).abs() }
+    pub fn distance(&self, other: &Point) -> f64 { (self.x - other.x).abs() + self.u.0 }
 }
 `,
-		"vector.rs": `pub struct Point { x: f64, y: f64 }
+		"vector.rs": `pub struct Point { x: f64, y: f64, u: Unit }
 
 impl Point {
-    pub fn add(&self, other: &Point) -> Point { Point { x: self.x + other.x, y: self.y + other.y } }
+    pub fn add(&self, other: &Point) -> Point { Point { x: self.x + other.x, y: self.y + other.y, u: Unit(self.u.0) } }
 }
 `,
-		// ops.rs declares an impl for Point but does not declare Point
-		// itself. With two declarations of Point in the tree, the impl
-		// block must be left unresolved.
+		// ops.rs holds an impl for Point but declares nothing itself. With
+		// two declarations of Point in the tree, the impl block must be
+		// left unresolved: its references (Helper, Unit) must reach
+		// neither declaration.
 		"ops.rs": `use crate::circle::Point;
 
 impl Point {
-    pub fn origin() -> Point { Point { x: 0.0, y: 0.0 } }
+    pub fn origin(h: &Helper) -> Point { let _ = h; Point { x: 0.0, y: 0.0, u: Unit(0.0) } }
 }
 `,
 	})
@@ -204,29 +209,32 @@ impl Point {
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
-	// Both declarations must appear as separate classes.
-	var pointClasses int
+	// Both declarations appear as separate classes, each depending only on
+	// Unit: the references of the orphaned impl block (Helper) reach
+	// neither.
+	byFile := map[string][]string{}
 	for _, class := range report.Coupling.Classes {
 		if class.Language == "Rust" && class.Name == "Point" {
-			pointClasses++
+			byFile[filepath.Base(class.FilePath)] = class.DependentClasses
 		}
 	}
-	if pointClasses != 2 {
-		t.Errorf("Rust Point classes = %d, want 2 (one per declaring file)", pointClasses)
+	want := map[string][]string{
+		"circle.rs": {"Unit"},
+		"vector.rs": {"Unit"},
 	}
-	// The ambiguous impl must produce warnings.
-	if len(report.Coupling.Warnings) == 0 {
-		t.Error("no warnings for ambiguous type name, want at least one")
+	if !reflect.DeepEqual(byFile, want) {
+		t.Errorf("Point dependencies = %v, want %v", byFile, want)
 	}
-	ambiguous := false
+	// The ambiguous impl must produce a warning, not a silent drop.
+	found := false
 	for _, w := range report.Coupling.Warnings {
-		if strings.Contains(w, "ambiguous") {
-			ambiguous = true
+		if strings.Contains(w, "ambiguous") && strings.Contains(w, "undeclared impl block") {
+			found = true
 			break
 		}
 	}
-	if !ambiguous {
-		t.Errorf("warnings = %v, want one containing 'ambiguous'", report.Coupling.Warnings)
+	if !found {
+		t.Errorf("warnings = %v, want one about the ambiguous undeclared impl block", report.Coupling.Warnings)
 	}
 }
 
