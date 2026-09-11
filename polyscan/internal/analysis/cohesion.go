@@ -15,9 +15,11 @@ type Class struct {
 	Name     string `json:"name"`
 	FilePath string `json:"file_path"`
 	Language string `json:"language"`
-	// StartLine and EndLine span the type's methods in FilePath. A type
-	// whose methods are spread over several files is placed in the first of
-	// them.
+	// StartLine and EndLine span the type's methods in FilePath, or the
+	// type's declaration when the class is attributed to a declaring file
+	// that holds none of the measured methods. A type whose methods are
+	// spread over several files without a single declaration is placed in
+	// the first of them.
 	StartLine int `json:"start_line"`
 	EndLine   int `json:"end_line"`
 	// LCOM4 is the number of connected components among the methods, where
@@ -64,22 +66,28 @@ type classMethod struct {
 	file string
 }
 
+// typeDeclaration is the file and line span declaring one type.
+type typeDeclaration struct {
+	file       string
+	start, end int
+}
+
 // cohesionBuilder groups methods by type. A type is identified by its
 // language, its receiver name and the file that declares its methods, or
 // the directory when the language lets a type's methods span one.
 type cohesionBuilder struct {
 	classes map[string]*classMethods
 	keys    []string
-	// typeDeclarations maps language+name to the file that declares the
-	// type. It is populated by setDeclarations from the same engine result
-	// the coupling analysis uses, so the cohesion result can reference the
-	// declaring file instead of the first method's file for a type whose
-	// declaration and impl blocks live in different files.
-	typeDeclarations map[string]string
+	// declarations maps a fully-scoped key (language, location and name,
+	// the same scheme the coupling analysis keys types on) to the type's
+	// declaration, and byBare indexes those declarations by bare name for
+	// cross-file lookup.
+	declarations map[string]*typeDeclaration
+	byBare       map[string][]*typeDeclaration
 }
 
 func newCohesionBuilder() *cohesionBuilder {
-	return &cohesionBuilder{classes: map[string]*classMethods{}, typeDeclarations: map[string]string{}}
+	return &cohesionBuilder{classes: map[string]*classMethods{}, declarations: map[string]*typeDeclaration{}, byBare: map[string][]*typeDeclaration{}}
 }
 
 func (b *cohesionBuilder) add(language *engine.Language, display string, fn engine.Function) {
@@ -100,15 +108,21 @@ func (b *cohesionBuilder) add(language *engine.Language, display string, fn engi
 	class.methods = append(class.methods, classMethod{Function: fn, file: display})
 }
 
-// setDeclarations records the file that declares each type from the engine
-// result. The coupling analysis collects the same information; this method
-// lets the cohesion analysis use it without duplicating the work.
+// setDeclarations records the file and line span declaring each type from
+// the engine result, keyed the way the coupling analysis keys types.
 func (b *cohesionBuilder) setDeclarations(language *engine.Language, display string, result *engine.Result) {
+	location := display
+	if language.TypeSpansDirectory {
+		location = filepath.Dir(display)
+	}
 	for _, t := range result.Types {
-		if t.Declared {
-			key := language.Name + "\x00" + t.Name
-			if _, ok := b.typeDeclarations[key]; !ok {
-				b.typeDeclarations[key] = display
+		if t.Declared && !t.IsTest {
+			full := language.Name + "\x00" + location + "\x00" + t.Name
+			if _, ok := b.declarations[full]; !ok {
+				d := &typeDeclaration{file: display, start: t.StartLine, end: t.EndLine}
+				b.declarations[full] = d
+				bare := language.Name + "\x00" + bareName(language, t.Name)
+				b.byBare[bare] = append(b.byBare[bare], d)
 			}
 		}
 	}
@@ -122,13 +136,20 @@ func (b *cohesionBuilder) build() *Cohesion {
 	for _, key := range b.keys {
 		cm := b.classes[key]
 		class := cm.measure()
-		// When the declaring file is known and the language scopes types
-		// per file, use it instead of the first method's file so the
-		// cohesion result matches the coupling result for a type whose
-		// declaration and impl blocks live in different files.
+		// When the language scopes types per file and the tree declares
+		// the type exactly once, attribute the class to the declaring
+		// file with the declaration's line span, so the cohesion result
+		// matches the coupling result for a type whose declaration and
+		// impl blocks live in different files. An ambiguous name keeps
+		// the first method's file, so unrelated same-named types in
+		// different files stay distinct.
 		if !cm.language.TypeSpansDirectory {
-			if declKey, ok := b.typeDeclarations[cm.language.Name+"\x00"+cm.name]; ok {
-				class.FilePath = declKey
+			bare := cm.language.Name + "\x00" + bareName(cm.language, cm.name)
+			if candidates := b.byBare[bare]; len(candidates) == 1 {
+				if d := candidates[0]; d.file != class.FilePath {
+					class.FilePath = d.file
+					class.StartLine, class.EndLine = d.start, d.end
+				}
 			}
 		}
 		if class.TotalMethods > class.ExcludedMethods {

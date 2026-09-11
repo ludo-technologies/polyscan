@@ -154,10 +154,12 @@ func TestAnalyzeCohesionRustUsesDeclaringFile(t *testing.T) {
 	// files should use the declaring file in both coupling and cohesion,
 	// so countClasses counts it once.
 	dir := writeFiles(t, map[string]string{
-		"types.rs": `pub struct Foo { n: u32 }
+		"unit.rs": `pub struct Unit;
+`,
+		"types.rs": `pub struct Foo { n: u32, u: Unit }
 
 impl Foo {
-    pub fn new() -> Self { Foo { n: 0 } }
+    pub fn new() -> Self { Foo { n: 0, u: Unit } }
 }
 `,
 		"ops.rs": `use crate::types::Foo;
@@ -185,11 +187,16 @@ impl Foo {
 		t.Errorf("class = %+v, want Rust Foo", foo)
 	}
 	// The declaring file is types.rs; without the fix it would be ops.rs.
+	// Only the ops.rs methods are measured (new has no receiver and its
+	// group is left out), and the line span is the declaration's.
 	if filepath.Base(foo.FilePath) != "types.rs" {
 		t.Errorf("FilePath = %q, want types.rs (the declaring file)", foo.FilePath)
 	}
-	if foo.TotalMethods != 3 {
-		t.Errorf("TotalMethods = %d, want 3 (new, inc, get)", foo.TotalMethods)
+	if foo.TotalMethods != 2 {
+		t.Errorf("TotalMethods = %d, want 2 (inc, get)", foo.TotalMethods)
+	}
+	if foo.StartLine != 1 || foo.EndLine != 1 {
+		t.Errorf("span = %d-%d, want the declaration's 1-1 in types.rs, not the methods' lines in ops.rs", foo.StartLine, foo.EndLine)
 	}
 
 	// Coupling should also use the declaring file.
@@ -209,6 +216,82 @@ impl Foo {
 	if couplingFoo.FilePath != foo.FilePath {
 		t.Errorf("FilePath mismatch: coupling=%q, cohesion=%q, want both types.rs",
 			couplingFoo.FilePath, foo.FilePath)
+	}
+}
+
+func TestAnalyzeCohesionRustLCOMAloneUsesDeclaringFile(t *testing.T) {
+	// The declaring file must be used even without the coupling analysis:
+	// --select lcom alone collects the declarations itself.
+	dir := writeFiles(t, map[string]string{
+		"types.rs": `pub struct Foo { n: u32 }
+
+impl Foo {
+    pub fn new() -> Self { Foo { n: 0 } }
+}
+`,
+		"ops.rs": `use crate::types::Foo;
+
+impl Foo {
+    pub fn inc(&mut self) { self.n += 1; }
+    pub fn get(&self) -> u32 { self.n }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if report.Coupling != nil {
+		t.Fatal("coupling was not selected but is present")
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want 1 (Foo): %+v", len(classes), classes)
+	}
+	foo := classes[0]
+	if filepath.Base(foo.FilePath) != "types.rs" {
+		t.Errorf("FilePath = %q, want types.rs (the declaring file)", foo.FilePath)
+	}
+	if foo.StartLine != 1 || foo.EndLine != 1 {
+		t.Errorf("span = %d-%d, want the declaration's 1-1", foo.StartLine, foo.EndLine)
+	}
+}
+
+func TestAnalyzeCohesionRustSameNamedTypesStayDistinct(t *testing.T) {
+	// Two unrelated Foo types in different files must each keep their own
+	// file: an ambiguous bare name is never attributed to the file seen
+	// first.
+	dir := writeFiles(t, map[string]string{
+		"a.rs": `pub struct Foo { n: u32 }
+
+impl Foo {
+    pub fn inc(&mut self) { self.n += 1; }
+    pub fn get(&self) -> u32 { self.n }
+}
+`,
+		"b.rs": `pub struct Foo { s: String }
+
+impl Foo {
+    pub fn push(&mut self, v: String) { self.s.push_str(&v); }
+    pub fn len(&self) -> usize { self.s.len() }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	byFile := map[string]int{}
+	for _, class := range report.Cohesion.Classes {
+		if class.Language == "Rust" && class.Name == "Foo" {
+			byFile[filepath.Base(class.FilePath)]++
+		}
+	}
+	want := map[string]int{"a.rs": 1, "b.rs": 1}
+	if !reflect.DeepEqual(byFile, want) {
+		t.Errorf("Foo classes by file = %v, want %v", byFile, want)
 	}
 }
 

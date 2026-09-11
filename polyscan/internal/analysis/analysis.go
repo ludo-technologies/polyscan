@@ -201,6 +201,10 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 		// a type its package declares.
 		if options.LCOM && language.HasCohesion() && !language.IsTestFile(display) {
 			cohesionFiles++
+			// Record the type declarations alongside the methods, so the
+			// cohesion result can attribute a type to its declaring file
+			// with or without the coupling analysis.
+			cohesion.setDeclarations(language, display, result)
 			for _, fn := range functions {
 				if !fn.IsTest {
 					cohesion.add(language, display, fn)
@@ -210,13 +214,6 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 		if options.CBO && language.HasCoupling() && !language.IsTestFile(display) {
 			if err := coupling.add(language, display, file, content, result); err != nil {
 				return nil, err
-			}
-			// Give the cohesion analysis the type declarations the
-			// coupling analysis already collects, so a Rust type whose
-			// declaration and impl blocks live in different files uses
-			// the declaring file in both results.
-			if options.LCOM && language.HasCohesion() {
-				cohesion.setDeclarations(language, display, result)
 			}
 		}
 	}
