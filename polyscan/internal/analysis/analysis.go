@@ -201,6 +201,10 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 		// a type its package declares.
 		if options.LCOM && language.HasCohesion() && !language.IsTestFile(display) {
 			cohesionFiles++
+			// Record the type declarations alongside the methods, so the
+			// cohesion result can attribute a type to its declaring file
+			// with or without the coupling analysis.
+			cohesion.setDeclarations(language, display, result)
 			for _, fn := range functions {
 				if !fn.IsTest {
 					cohesion.add(language, display, fn)
