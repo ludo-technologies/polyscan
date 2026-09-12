@@ -173,6 +173,71 @@ type Unit struct{ foo Foo }
 	}
 }
 
+func TestAnalyzeCouplingRustAmbiguousTypeName(t *testing.T) {
+	// Two files declare Point and a third holds an impl for it. The
+	// ambiguous name must not silently merge the impl into one declaration
+	// or resolve references arbitrarily; both sides warn and leave it out.
+	dir := writeFiles(t, map[string]string{
+		"unit.rs": `pub struct Unit(pub f64);
+`,
+		"helper.rs": `pub struct Helper;
+`,
+		"circle.rs": `pub struct Point { x: f64, y: f64, u: Unit }
+
+impl Point {
+    pub fn distance(&self, other: &Point) -> f64 { (self.x - other.x).abs() + self.u.0 }
+}
+`,
+		"vector.rs": `pub struct Point { x: f64, y: f64, u: Unit }
+
+impl Point {
+    pub fn add(&self, other: &Point) -> Point { Point { x: self.x + other.x, y: self.y + other.y, u: Unit(self.u.0) } }
+}
+`,
+		// ops.rs holds an impl for Point but declares nothing itself. With
+		// two declarations of Point in the tree, the impl block must be
+		// left unresolved: its references (Helper, Unit) must reach
+		// neither declaration.
+		"ops.rs": `use crate::circle::Point;
+
+impl Point {
+    pub fn origin(h: &Helper) -> Point { let _ = h; Point { x: 0.0, y: 0.0, u: Unit(0.0) } }
+}
+`,
+	})
+	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	// Both declarations appear as separate classes, each depending only on
+	// Unit: the references of the orphaned impl block (Helper) reach
+	// neither.
+	byFile := map[string][]string{}
+	for _, class := range report.Coupling.Classes {
+		if class.Language == "Rust" && class.Name == "Point" {
+			byFile[filepath.Base(class.FilePath)] = class.DependentClasses
+		}
+	}
+	want := map[string][]string{
+		"circle.rs": {"Unit"},
+		"vector.rs": {"Unit"},
+	}
+	if !reflect.DeepEqual(byFile, want) {
+		t.Errorf("Point dependencies = %v, want %v", byFile, want)
+	}
+	// The ambiguous impl must produce a warning, not a silent drop.
+	found := false
+	for _, w := range report.Coupling.Warnings {
+		if strings.Contains(w, "ambiguous") && strings.Contains(w, "undeclared impl block") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("warnings = %v, want one about the ambiguous undeclared impl block", report.Coupling.Warnings)
+	}
+}
+
 func TestAnalyzeCouplingAbsentWithoutSupportedLanguage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"a.cpp": "struct S { int a; };\n"})
 	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)

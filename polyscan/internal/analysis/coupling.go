@@ -186,14 +186,23 @@ func (b *couplingBuilder) build() *Coupling {
 
 	// A Rust impl block or a method group in a file that does not declare
 	// its type belongs to the declaration elsewhere when there is exactly
-	// one.
+	// one. An ambiguous bare name with more than one declaration across
+	// the tree is left unresolved with a warning.
 	for _, key := range order {
 		t := types[key]
 		if t.declared || t.language.TypeSpansDirectory {
 			continue
 		}
-		if candidates := byBare[bareKey(t.language, t.name)]; len(candidates) == 1 {
+		candidates := byBare[bareKey(t.language, t.name)]
+		switch {
+		case len(candidates) == 1:
 			candidates[0].refs = append(candidates[0].refs, t.refs...)
+		case len(candidates) > 1:
+			// t.file is only set for declared types; the file of an
+			// undeclared block is the location in its key, which is the
+			// display path for a language scoped per file.
+			loc := strings.SplitN(key, "\x00", 3)[1]
+			b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous type name %q: undeclared impl block matches %d declarations across the tree, references left unresolved", loc, t.name, len(candidates)))
 		}
 	}
 
@@ -216,8 +225,13 @@ func (b *couplingBuilder) build() *Coupling {
 			if target, ok := byFileBare[file][ref.Name]; ok {
 				return target, ref.Name
 			}
-			if candidates := byBare[bareKey(file.language, ref.Name)]; len(candidates) > 0 {
+			candidates := byBare[bareKey(file.language, ref.Name)]
+			switch {
+			case len(candidates) == 1:
 				return candidates[0], ref.Name
+			case len(candidates) > 1:
+				b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous reference %q: resolves to %d declarations across the tree, left unresolved", file.display, ref.Name, len(candidates)))
+				return nil, ""
 			}
 			return nil, ""
 		}
