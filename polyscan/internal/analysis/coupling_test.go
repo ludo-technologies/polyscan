@@ -101,6 +101,81 @@ type Server struct{ s Store }
 	}
 }
 
+func TestAnalyzeCouplingGoTypeAlias(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		"go.mod": "module example.com/app\n",
+		// Methods on an alias receiver belong to the aliased struct, as
+		// do a field and parameter typed by the alias.
+		"alias.go": `package app
+
+type Base struct{ n int }
+type Alias = Base
+
+type Dep struct{}
+type Other struct{}
+
+func (a *Alias) Use(d *Dep) {}
+func (a *Alias) Also(o Other) {}
+`,
+		"holder.go": `package app
+
+type Holder struct{ a *Alias }
+
+func (h *Holder) Take(x Alias) {}
+`,
+		// A method in another file of the package still belongs to Base.
+		"more.go": `package app
+
+func (a *Alias) Extra(d *Dep) {}
+`,
+		"lib/parser.go": `package lib
+
+type Parser struct{ n int }
+type Flags = Parser
+`,
+		"wrap.go": `package app
+
+import "example.com/app/lib"
+
+type Local = lib.Flags
+
+type Wrap struct{ fs *Local }
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	got := map[string][]string{}
+	for _, class := range report.Coupling.Classes {
+		got[class.Name] = class.DependentClasses
+	}
+	want := map[string][]string{
+		"Base":   {"Dep", "Other"},
+		"Holder": {"Base"},
+		"Wrap":   {"lib.Parser"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("dependencies = %v, want %v", got, want)
+	}
+	for _, class := range report.Coupling.Classes {
+		if class.Name == "Alias" || class.Name == "Local" || class.Name == "Flags" {
+			t.Errorf("unexpected class %s; aliases are not types of their own", class.Name)
+		}
+	}
+	var base CoupledClass
+	for _, class := range report.Coupling.Classes {
+		if class.Name == "Base" {
+			base = class
+			break
+		}
+	}
+	if base.CBO != 2 || base.TypeHint != 2 {
+		t.Errorf("Base = %+v, want coupling_count 2", base)
+	}
+}
+
 func TestAnalyzeCouplingGoWithoutModule(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
 		"a.go": `package p
