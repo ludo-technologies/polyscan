@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-09-12
+
 ### Added
 
 - `polyscan analyze --exclude` leaves files and directories out of every analysis, for every language. A pattern without a slash is a glob matched against the file name and against each directory on the path (`fixtures`); a pattern with a slash is matched against the path relative to the analyzed directory, with `**` for any number of segments (`src/generated/**`). The patterns follow the rules of `exclude_patterns` in `jscan.config.json`, and for JavaScript/TypeScript they are added to that file's own exclude patterns
@@ -14,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Test files and test code are left out of every analysis by default, where before they were analyzed for complexity and, for JavaScript/TypeScript, for everything. Go `*_test.go`; Rust `#[test]` functions, `#[cfg(test)]` items, `tests.rs`, `*_tests.rs` and `tests/`; C++ `*_test.*`, `*_tests.*`, `test_*.*`, `*Test.*`, `test/` and `tests/`; JavaScript/TypeScript `*.test.*`, `*.spec.*` and `__tests__/`. `--include-tests` restores the previous behavior, with test code still out of clone detection, cohesion, coupling and dependency analysis
+
+### Fixed
+
+- A Rust type declared in one file with `impl` blocks in another was counted twice in the report overview, because the cohesion analysis filed it under the file of its first method while the coupling analysis filed it under the declaring file. The cohesion analysis now uses the declaring file too, so the two rows merge into one class (#131)
+- A bare Rust type name that resolves to more than one declaration in the tree is left unresolved in the coupling analysis, with a warning. Before, a reference to such a name was assigned to whichever declaration was found first, while an `impl` block for it was dropped (#132)
 
 ## [0.3.2] - 2026-09-10
 
