@@ -332,3 +332,65 @@ func TestCollectFilesExclude(t *testing.T) {
 		t.Errorf("collected %v, want %v", files, want)
 	}
 }
+
+func TestDisplayPathOutsideCwd(t *testing.T) {
+	root := t.TempDir()
+	mix := filepath.Join(root, "mix", "pkg")
+	elsewhere := filepath.Join(root, "elsewhere")
+	if err := os.MkdirAll(mix, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(elsewhere, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(mix, "p.go")
+	if err := os.WriteFile(src, []byte("package pkg\n\nfunc F(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(elsewhere)
+
+	abs, err := filepath.Abs(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := displayPath(abs)
+	if filepath.IsAbs(got) {
+		t.Fatalf("displayPath(%q) = %q, want a relative path", abs, got)
+	}
+	want, err := filepath.Rel(elsewhere, abs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("displayPath = %q, want %q", got, want)
+	}
+
+	report, err := Analyze([]string{filepath.Join("..", "mix")}, Options{Complexity: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if len(report.Complexity.Functions) == 0 {
+		t.Fatal("no functions")
+	}
+	for _, fn := range report.Complexity.Functions {
+		if filepath.IsAbs(fn.FilePath) {
+			t.Errorf("%s FilePath = %q, want relative", fn.Name, fn.FilePath)
+		}
+		if !strings.Contains(fn.FilePath, "mix") || !strings.HasSuffix(fn.FilePath, "p.go") {
+			t.Errorf("%s FilePath = %q, want ../mix/.../p.go", fn.Name, fn.FilePath)
+		}
+	}
+}
+
+func TestDisplayPathUnderCwd(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "p.go")
+	if err := os.WriteFile(src, []byte("package p\n\nfunc F() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	got := displayPath(src)
+	if got != "p.go" {
+		t.Fatalf("displayPath under cwd = %q, want p.go", got)
+	}
+}

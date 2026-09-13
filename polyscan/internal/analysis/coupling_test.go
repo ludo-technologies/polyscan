@@ -82,9 +82,24 @@ type Server struct{ s Store }
 	if report.Coupling.FilesAnalyzed != 4 || len(report.Coupling.Warnings) != 0 {
 		t.Errorf("files = %d, warnings = %v; want 4 files and no warnings", report.Coupling.FilesAnalyzed, report.Coupling.Warnings)
 	}
+	relToDir := func(p string) string {
+		abs := p
+		if !filepath.IsAbs(p) {
+			a, err := filepath.Abs(p)
+			if err != nil {
+				return p
+			}
+			abs = a
+		}
+		rel, err := filepath.Rel(dir, abs)
+		if err != nil {
+			return strings.TrimPrefix(p, dir+"/")
+		}
+		return rel
+	}
 	got := map[string][]string{}
 	for _, class := range report.Coupling.Classes {
-		got[strings.TrimPrefix(class.FilePath, dir+"/")+":"+class.Name] = class.DependentClasses
+		got[relToDir(class.FilePath)+":"+class.Name] = class.DependentClasses
 	}
 	want := map[string][]string{
 		"server.go:Server":      {"Config", "Handler", "Logger", "model.User", "st.Store"},

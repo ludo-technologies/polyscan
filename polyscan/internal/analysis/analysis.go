@@ -461,14 +461,15 @@ func summarize(functions []Function) ComplexitySummary {
 }
 
 // displayPath shortens an absolute path to one relative to the working
-// directory when the file lies under it.
+// directory. Paths outside cwd stay relative (../...) so Go/Rust/C++ findings
+// use the same form as the JS pipeline when the target is not under cwd.
 func displayPath(path string) string {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return path
 	}
 	rel, err := filepath.Rel(cwd, path)
-	if err != nil || !filepath.IsLocal(rel) {
+	if err != nil {
 		return path
 	}
 	return rel
