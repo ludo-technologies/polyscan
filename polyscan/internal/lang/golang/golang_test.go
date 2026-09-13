@@ -489,6 +489,7 @@ func Free(x Item) {}
 	want := []engine.Type{
 		{Name: "Base", StartLine: 9, EndLine: 9, Declared: true},
 		{Name: "ID", StartLine: 10, EndLine: 10, Declared: true, References: []engine.Reference{{Name: "int"}}},
+		{Name: "Alias", StartLine: 13, EndLine: 13, Alias: true, AliasOf: engine.Reference{Name: "Base"}},
 		{Name: "Server", StartLine: 15, EndLine: 22, Declared: true, References: []engine.Reference{
 			{Name: "Base", Embedded: true}, {Name: "Embedded", Package: "m", Embedded: true}, {Name: "Gen", Embedded: true},
 			{Name: "ID"}, {Name: "User", Package: "m"}, {Name: "Context", Package: "context"}, {Name: "Item"},
@@ -522,5 +523,38 @@ func Helper(x Other) {}
 	want := []engine.Type{{Name: "Server", StartLine: 3, EndLine: 3, References: []engine.Reference{{Name: "Server"}, {Name: "Message"}}}}
 	if !reflect.DeepEqual(result.Types, want) {
 		t.Errorf("types = %+v\nwant   %+v", result.Types, want)
+	}
+}
+
+func TestTypeAliasReceiverIsNotADeclaration(t *testing.T) {
+	result, err := Language.Analyze([]byte(`package p
+
+type Base struct{ n int }
+type Alias = Base
+type Qual = m.User
+type Dep struct{}
+
+func (a *Alias) Use(d *Dep) {}
+`))
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	byName := map[string]engine.Type{}
+	for _, t := range result.Types {
+		byName[t.Name] = t
+	}
+	alias, ok := byName["Alias"]
+	if !ok || alias.Declared || !alias.Alias || alias.AliasOf != (engine.Reference{Name: "Base"}) {
+		t.Errorf("Alias = %+v, want an alias of Base, not declared", alias)
+	}
+	if !reflect.DeepEqual(alias.References, []engine.Reference{{Name: "Alias"}, {Name: "Dep"}}) {
+		t.Errorf("Alias references = %+v, want the method's receiver and Dep", alias.References)
+	}
+	qual, ok := byName["Qual"]
+	if !ok || !qual.Alias || qual.AliasOf != (engine.Reference{Name: "User", Package: "m"}) {
+		t.Errorf("Qual = %+v, want an alias of m.User", qual)
+	}
+	if byName["Base"].Declared != true || byName["Base"].Alias {
+		t.Errorf("Base = %+v, want a declared type", byName["Base"])
 	}
 }

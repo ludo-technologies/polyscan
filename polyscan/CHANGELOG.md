@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Go methods declared on a type-alias receiver (`type Alias = Base`; `func (a *Alias) M()`) are attributed to the aliased type in the coupling (CBO) analysis, and a field or parameter typed by an alias credits that type too. Before, the alias was not a declared type, the methods were dropped, and `Base` reported no coupling (#133)
+
 ## [0.3.3] - 2026-09-12
 
 ### Added

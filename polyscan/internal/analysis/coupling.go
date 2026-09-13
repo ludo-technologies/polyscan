@@ -77,6 +77,15 @@ type siteReference struct {
 	ref  engine.Reference
 }
 
+// aliasTarget is the type a Go type alias names. importPath is empty when
+// the target is a name of the same package; qualifier is the package
+// identifier as written on a qualified target, used when displaying it.
+type aliasTarget struct {
+	name       string
+	importPath string
+	qualifier  string
+}
+
 // couplingBuilder collects the types of every file and resolves their
 // references once the whole tree is known.
 type couplingBuilder struct {
@@ -184,6 +193,34 @@ func (b *couplingBuilder) build() *Coupling {
 		}
 	}
 
+	// A Go type alias is not a type of its own: methods on an alias
+	// receiver and references typed by the alias belong to the aliased
+	// named type. packageNames is complete here, so a qualified target
+	// can be resolved through the alias file's imports.
+	aliases := map[string]aliasTarget{}
+	aliasByImport := map[string]aliasTarget{}
+	for _, file := range b.files {
+		for _, et := range file.types {
+			if !et.Alias || et.AliasOf.Name == "" {
+				continue
+			}
+			target := aliasTarget{name: et.AliasOf.Name, qualifier: et.AliasOf.Package}
+			if et.AliasOf.Package != "" {
+				path, ok := importPathOf(file, et.AliasOf.Package, packageNames)
+				if !ok {
+					continue
+				}
+				target.importPath = path
+			}
+			key := file.language.Name + "\x00" + file.location + "\x00" + et.Name
+			aliases[key] = target
+			if file.importPath != "" {
+				aliasByImport[file.importPath+"."+et.Name] = target
+			}
+		}
+	}
+	b.mergeAliasMethods(types, aliases)
+
 	// A Rust impl block or a method group in a file that does not declare
 	// its type belongs to the declaration elsewhere when there is exactly
 	// one. An ambiguous bare name with more than one declaration across
@@ -210,12 +247,15 @@ func (b *couplingBuilder) build() *Coupling {
 		file, ref := site.file, site.ref
 		switch {
 		case ref.Package != "":
-			target, ok := b.resolveQualified(file, ref, byImportPath, packageNames)
+			target, name, ok := b.resolveQualified(file, ref, byImportPath, packageNames, aliasByImport)
 			if !ok {
 				return nil, ""
 			}
-			return target, ref.Package + "." + ref.Name
+			return target, ref.Package + "." + name
 		case file.language.TypeSpansDirectory:
+			if dest, display, ok := b.resolveAlias(file, ref.Name, types, aliases, aliasByImport, byImportPath); ok {
+				return dest, display
+			}
 			target, ok := types[file.language.Name+"\x00"+file.location+"\x00"+ref.Name]
 			if !ok || !target.declared {
 				return nil, ""
@@ -307,8 +347,21 @@ func (b *couplingBuilder) build() *Coupling {
 
 // resolveQualified finds the type a Go reference pkg.T names: the file's
 // import whose name is pkg, explicit or the package's own, must lead to a
-// package of the tree that declares T.
-func (b *couplingBuilder) resolveQualified(file *couplingFile, ref engine.Reference, byImportPath map[string]*coupledType, packageNames map[string]string) (*coupledType, bool) {
+// package of the tree that declares T, following type aliases in that
+// package. The returned name is the declared type, which may differ from
+// ref.Name when T is an alias.
+func (b *couplingBuilder) resolveQualified(file *couplingFile, ref engine.Reference, byImportPath map[string]*coupledType, packageNames map[string]string, aliasByImport map[string]aliasTarget) (*coupledType, string, bool) {
+	path, ok := importPathOf(file, ref.Package, packageNames)
+	if !ok {
+		return nil, "", false
+	}
+	target, name, ok := lookupInPackage(path, ref.Name, byImportPath, aliasByImport)
+	return target, name, ok
+}
+
+// importPathOf returns the import path the file binds to pkg, the name a
+// qualified type is written with.
+func importPathOf(file *couplingFile, pkg string, packageNames map[string]string) (string, bool) {
 	for _, imported := range file.imports {
 		name := imported.Name
 		switch name {
@@ -317,13 +370,119 @@ func (b *couplingBuilder) resolveQualified(file *couplingFile, ref engine.Refere
 		case "":
 			name = packageNames[imported.Path]
 		}
-		if name != ref.Package {
+		if name == pkg {
+			return imported.Path, true
+		}
+	}
+	return "", false
+}
+
+// mergeAliasMethods attributes the references of each same-package type
+// alias, including methods on an alias receiver, to the aliased declared
+// type. An alias of another package cannot hold methods.
+func (b *couplingBuilder) mergeAliasMethods(types map[string]*coupledType, aliases map[string]aliasTarget) {
+	for key, target := range aliases {
+		src := types[key]
+		if src == nil || target.importPath != "" {
 			continue
 		}
-		target, ok := byImportPath[imported.Path+"."+ref.Name]
-		return target, ok
+		parts := strings.SplitN(key, "\x00", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		lang, loc := parts[0], parts[1]
+		seen := map[string]bool{key: true}
+		for {
+			if target.importPath != "" {
+				break
+			}
+			destKey := lang + "\x00" + loc + "\x00" + target.name
+			if seen[destKey] {
+				break
+			}
+			seen[destKey] = true
+			if dest := types[destKey]; dest != nil && dest.declared {
+				dest.refs = append(dest.refs, src.refs...)
+				break
+			}
+			next, ok := aliases[destKey]
+			if !ok {
+				break
+			}
+			target = next
+		}
 	}
-	return nil, false
+}
+
+// resolveAlias follows a same-package alias name to the declared type it
+// names. ok is false when name is not an alias.
+func (b *couplingBuilder) resolveAlias(file *couplingFile, name string, types map[string]*coupledType, aliases map[string]aliasTarget, aliasByImport map[string]aliasTarget, byImportPath map[string]*coupledType) (*coupledType, string, bool) {
+	target, ok := aliases[file.language.Name+"\x00"+file.location+"\x00"+name]
+	if !ok {
+		return nil, "", false
+	}
+	return followAlias(file, target, types, aliases, aliasByImport, byImportPath)
+}
+
+// followAlias walks an alias chain to a declared type. A same-package
+// target is looked up in types; a qualified one through the imported
+// package, following aliases there too.
+func followAlias(file *couplingFile, target aliasTarget, types map[string]*coupledType, aliases map[string]aliasTarget, aliasByImport map[string]aliasTarget, byImportPath map[string]*coupledType) (*coupledType, string, bool) {
+	seen := map[string]bool{}
+	for {
+		id := target.importPath + "\x00" + target.name
+		if target.importPath == "" {
+			id = file.location + "\x00" + target.name
+		}
+		if seen[id] {
+			return nil, "", true
+		}
+		seen[id] = true
+		if target.importPath == "" {
+			key := file.language.Name + "\x00" + file.location + "\x00" + target.name
+			if dest := types[key]; dest != nil && dest.declared {
+				return dest, target.name, true
+			}
+			next, ok := aliases[key]
+			if !ok {
+				return nil, "", true
+			}
+			target = next
+			continue
+		}
+		dest, name, ok := lookupInPackage(target.importPath, target.name, byImportPath, aliasByImport)
+		if !ok {
+			return nil, "", true
+		}
+		display := name
+		if target.qualifier != "" {
+			display = target.qualifier + "." + name
+		}
+		return dest, display, true
+	}
+}
+
+// lookupInPackage finds the declared type name in importPath, following
+// aliases of that package. The returned name is the declared type.
+func lookupInPackage(importPath, name string, byImportPath map[string]*coupledType, aliasByImport map[string]aliasTarget) (*coupledType, string, bool) {
+	seen := map[string]bool{}
+	for {
+		if seen[importPath+"."+name] {
+			return nil, "", false
+		}
+		seen[importPath+"."+name] = true
+		if t, ok := byImportPath[importPath+"."+name]; ok {
+			return t, t.name, true
+		}
+		next, ok := aliasByImport[importPath+"."+name]
+		if !ok {
+			return nil, "", false
+		}
+		if next.importPath != "" {
+			importPath = next.importPath
+		}
+		name = next.name
+	}
 }
 
 // bareName strips the scope prefix from a type name.

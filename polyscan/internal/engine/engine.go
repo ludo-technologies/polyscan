@@ -73,7 +73,8 @@ type Language struct {
 	// declares, which the coupling (CBO) analysis measures: @name is the
 	// type's name and the capture that spans the match says what it is,
 	// @type a concrete declaration, @abstract an interface or trait, @impl a
-	// block that adds to a type without declaring it, as a Rust impl does. A
+	// block that adds to a type without declaring it, as a Rust impl does,
+	// @alias a name that denotes another type, as a Go type alias does. A
 	// language without a Types query has no coupling analysis.
 	Types string
 	// References is an optional tree-sitter query, paired with Types, for
@@ -229,6 +230,10 @@ type Type struct {
 	// References lists the types referred to, in source order without
 	// duplicates.
 	References []Reference
+	// Alias reports that the name is a type alias, not a type of its own.
+	// AliasOf is the type it names, as written at the alias.
+	Alias   bool
+	AliasOf Reference
 }
 
 // Reference is one type named by another type's declaration or methods.
@@ -257,6 +262,7 @@ const (
 	typeCapture         = "type"
 	abstractCapture     = "abstract"
 	implCapture         = "impl"
+	aliasCapture        = "alias"
 	referenceCapture    = "reference"
 	embeddedCapture     = "embedded"
 	packageCapture      = "package"
@@ -854,6 +860,7 @@ type typeSpan struct {
 	name               string
 	declared           bool
 	abstract           bool
+	alias              bool
 }
 
 // collectTypes gathers the file's types and attributes every reference to
@@ -883,7 +890,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 			switch captureName := l.types.CaptureNameForId(capture.Index); captureName {
 			case nameCapture:
 				name = capture.Node
-			case typeCapture, abstractCapture, implCapture:
+			case typeCapture, abstractCapture, implCapture, aliasCapture:
 				node = capture.Node
 				kind = captureName
 			}
@@ -904,8 +911,9 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 			startLine: int(node.StartPoint().Row) + 1,
 			endLine:   int(node.EndPoint().Row) + 1,
 			name:      name.Content(source),
-			declared:  kind != implCapture,
+			declared:  kind != implCapture && kind != aliasCapture,
 			abstract:  kind == abstractCapture,
+			alias:     kind == aliasCapture,
 		}
 		if prefix, _ := enclosing(scopes, s.start, s.end); len(prefix) > 0 {
 			s.name = strings.Join(prefix, separator) + separator + s.name
@@ -933,6 +941,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 		}
 		t.Declared = t.Declared || s.declared
 		t.Abstract = t.Abstract || s.abstract
+		t.Alias = t.Alias || s.alias
 	}
 	for i := range functions {
 		if fn := &functions[i]; fn.Receiver != "" && !fn.IsTest {
@@ -955,15 +964,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 			}
 			start, end = fn.startByte, fn.endByte
 		}
-		var found *typeSpan
-		for i := range spans {
-			if spans[i].start > start {
-				break
-			}
-			if spans[i].contains(start, end) {
-				found = &spans[i]
-			}
-		}
+		found := innermostSpan(spans, start, end)
 		if found == nil || inTest(tests, found.start, found.end) {
 			return nil
 		}
@@ -1010,6 +1011,19 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 	seen := map[string]map[Reference]bool{}
 	for _, id := range order {
 		ref := refs[id]
+		// A reference inside an alias declaration is the aliased type, not
+		// a use of that type by the alias name.
+		if s := innermostSpan(spans, ref.node.StartByte(), ref.node.EndByte()); s != nil && s.alias {
+			t := typeOf(s.name)
+			if t.AliasOf.Name == "" {
+				r := Reference{Name: ref.node.Content(source)}
+				if ref.pkg != nil {
+					r.Package = ref.pkg.Content(source)
+				}
+				t.AliasOf = r
+			}
+			continue
+		}
 		t := owner(ref.node.StartByte(), ref.node.EndByte())
 		if t == nil {
 			continue
@@ -1042,6 +1056,22 @@ func innermost(functions []Function, start, end uint32) *Function {
 		}
 		if fn.endByte >= end {
 			found = fn
+		}
+	}
+	return found
+}
+
+// innermostSpan returns the tightest type span that contains the byte
+// range. Spans are sorted by start, so among the containing spans the last
+// one is the innermost.
+func innermostSpan(spans []typeSpan, start, end uint32) *typeSpan {
+	var found *typeSpan
+	for i := range spans {
+		if spans[i].start > start {
+			break
+		}
+		if spans[i].contains(start, end) {
+			found = &spans[i]
 		}
 	}
 	return found

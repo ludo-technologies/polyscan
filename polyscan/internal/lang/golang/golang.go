@@ -76,13 +76,31 @@ var Language = &engine.Language{
 (func_literal parameters: (parameter_list [(parameter_declaration name: (identifier) @binding) (variadic_parameter_declaration name: (identifier) @binding)] @declaration)) @scope
 (func_literal result: (parameter_list (parameter_declaration name: (identifier) @binding) @declaration)) @scope
 `,
-	// Every type_spec is a type; an alias (type_alias) only names another.
-	// The span is the spec rather than the whole declaration, since a
-	// grouped declaration holds several specs. An interface matches both
-	// patterns and the engine keeps one span, abstract.
+	// Every type_spec is a type. An alias (type_alias) is recorded as a
+	// name that resolves to the aliased named type, so methods on an
+	// alias receiver and fields or parameters typed by the alias credit
+	// that type. The span is the spec rather than the whole declaration,
+	// since a grouped declaration holds several specs. An interface
+	// matches both type patterns and the engine keeps one span, abstract.
 	Types: `
 (type_spec name: (type_identifier) @name) @type
 (type_spec name: (type_identifier) @name type: (interface_type)) @abstract
+(type_alias name: (type_identifier) @name type: [
+  (type_identifier)
+  (qualified_type)
+  (generic_type)
+  (pointer_type (type_identifier))
+  (pointer_type (qualified_type))
+  (pointer_type (generic_type))
+  (parenthesized_type [
+    (type_identifier)
+    (qualified_type)
+    (generic_type)
+    (pointer_type (type_identifier))
+    (pointer_type (qualified_type))
+    (pointer_type (generic_type))
+  ])
+]) @alias
 `,
 	// Every type_identifier is a reference, including predeclared types and
 	// type parameters, which the analysis drops because nothing declares
