@@ -884,6 +884,25 @@ func TestNode_Walk_Nil(t *testing.T) {
 	})
 }
 
+func TestNode_Walk_SkipsBodyDuplicates(t *testing.T) {
+	parent := NewNode(NodeProgram)
+	child := NewNode(NodeFunction)
+	child.Name = "fn"
+	parent.AddChild(child)
+	parent.Body = append(parent.Body, child)
+
+	visited := 0
+	parent.Walk(func(n *Node) bool {
+		if n.Name == "fn" {
+			visited++
+		}
+		return true
+	})
+	if visited != 1 {
+		t.Errorf("expected fn visited once, got %d", visited)
+	}
+}
+
 func TestNode_Walk_StopTraversal(t *testing.T) {
 	parent := NewNode(NodeProgram)
 	child1 := NewNode(NodeFunction)
