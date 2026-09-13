@@ -277,8 +277,8 @@ func TestAnalyzeSkipsDependencyAndBuildDirectories(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{filepath.Join(dir, "pkg", "sample.go"), filepath.Join(dir, "sample.go")}
-	if !reflect.DeepEqual(files, want) {
-		t.Errorf("collected %v, want %v", files, want)
+	if got := collectPaths(files); !reflect.DeepEqual(got, want) {
+		t.Errorf("collected %v, want %v", got, want)
 	}
 
 	// A skipped name given explicitly is analyzed.
@@ -286,8 +286,8 @@ func TestAnalyzeSkipsDependencyAndBuildDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{filepath.Join(dir, "vendor", "dep", "sample.go")}; !reflect.DeepEqual(files, want) {
-		t.Errorf("collected %v, want %v", files, want)
+	if want := []string{filepath.Join(dir, "vendor", "dep", "sample.go")}; !reflect.DeepEqual(collectPaths(files), want) {
+		t.Errorf("collected %v, want %v", collectPaths(files), want)
 	}
 }
 
@@ -308,8 +308,8 @@ func TestCollectFilesExclude(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []string{filepath.Join(dir, "pkg", "sum.go"), filepath.Join(dir, "sum.go")}
-	if !reflect.DeepEqual(files, want) {
-		t.Errorf("collected %v, want %v", files, want)
+	if got := collectPaths(files); !reflect.DeepEqual(got, want) {
+		t.Errorf("collected %v, want %v", got, want)
 	}
 
 	// Patterns apply relative to the analyzed directory, so the temporary
@@ -319,8 +319,8 @@ func TestCollectFilesExclude(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{filepath.Join(dir, "sum_test.go")}; !reflect.DeepEqual(files, want) {
-		t.Errorf("collected %v, want %v", files, want)
+	if want := []string{filepath.Join(dir, "sum_test.go")}; !reflect.DeepEqual(collectPaths(files), want) {
+		t.Errorf("collected %v, want %v", collectPaths(files), want)
 	}
 
 	// Test files come back with includeTests, still under the other patterns.
@@ -328,43 +328,20 @@ func TestCollectFilesExclude(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{filepath.Join(dir, "gen", "api", "client.go"), filepath.Join(dir, "sum.go"), filepath.Join(dir, "sum_test.go")}; !reflect.DeepEqual(files, want) {
-		t.Errorf("collected %v, want %v", files, want)
+	if want := []string{filepath.Join(dir, "gen", "api", "client.go"), filepath.Join(dir, "sum.go"), filepath.Join(dir, "sum_test.go")}; !reflect.DeepEqual(collectPaths(files), want) {
+		t.Errorf("collected %v, want %v", collectPaths(files), want)
 	}
 }
 
 func TestDisplayPathOutsideCwd(t *testing.T) {
-	root := t.TempDir()
-	mix := filepath.Join(root, "mix", "pkg")
+	root := writeFiles(t, map[string]string{
+		"mix/pkg/p.go":    "package pkg\n\nfunc F(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n",
+		"elsewhere/.keep": "",
+	})
 	elsewhere := filepath.Join(root, "elsewhere")
-	if err := os.MkdirAll(mix, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(elsewhere, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	src := filepath.Join(mix, "p.go")
-	if err := os.WriteFile(src, []byte("package pkg\n\nfunc F(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	t.Chdir(elsewhere)
 
-	abs, err := filepath.Abs(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := displayPath(abs)
-	if filepath.IsAbs(got) {
-		t.Fatalf("displayPath(%q) = %q, want a relative path", abs, got)
-	}
-	want, err := filepath.Rel(elsewhere, abs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != want {
-		t.Fatalf("displayPath = %q, want %q", got, want)
-	}
-
+	wantRel := filepath.Join("..", "mix", "pkg", "p.go")
 	report, err := Analyze([]string{filepath.Join("..", "mix")}, Options{Complexity: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
@@ -373,24 +350,57 @@ func TestDisplayPathOutsideCwd(t *testing.T) {
 		t.Fatal("no functions")
 	}
 	for _, fn := range report.Complexity.Functions {
-		if filepath.IsAbs(fn.FilePath) {
-			t.Errorf("%s FilePath = %q, want relative", fn.Name, fn.FilePath)
+		if fn.FilePath != wantRel {
+			t.Errorf("%s FilePath = %q, want %q", fn.Name, fn.FilePath, wantRel)
 		}
-		if !strings.Contains(fn.FilePath, "mix") || !strings.HasSuffix(fn.FilePath, "p.go") {
-			t.Errorf("%s FilePath = %q, want ../mix/.../p.go", fn.Name, fn.FilePath)
+	}
+
+	absTarget := filepath.Join(root, "mix")
+	wantAbs := filepath.Join(absTarget, "pkg", "p.go")
+	report, err = Analyze([]string{absTarget}, Options{Complexity: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze abs: %v", err)
+	}
+	if len(report.Complexity.Functions) == 0 {
+		t.Fatal("no functions for abs target")
+	}
+	for _, fn := range report.Complexity.Functions {
+		if fn.FilePath != wantAbs {
+			t.Errorf("%s FilePath = %q, want %q", fn.Name, fn.FilePath, wantAbs)
 		}
 	}
 }
 
 func TestDisplayPathUnderCwd(t *testing.T) {
-	dir := t.TempDir()
-	src := filepath.Join(dir, "p.go")
-	if err := os.WriteFile(src, []byte("package p\n\nfunc F() {}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	dir := writeFiles(t, map[string]string{
+		"p.go": "package p\n\nfunc F() {}\n",
+	})
 	t.Chdir(dir)
-	got := displayPath(src)
-	if got != "p.go" {
-		t.Fatalf("displayPath under cwd = %q, want p.go", got)
+	report, err := Analyze([]string{"."}, Options{Complexity: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if len(report.Complexity.Functions) == 0 {
+		t.Fatal("no functions")
+	}
+	for _, fn := range report.Complexity.Functions {
+		if fn.FilePath != "p.go" {
+			t.Errorf("%s FilePath = %q, want p.go", fn.Name, fn.FilePath)
+		}
+	}
+}
+
+func TestAnalyzeThroughTestsDirName(t *testing.T) {
+	root := writeFiles(t, map[string]string{
+		"tests/myproj/lib.rs": "pub fn f(x: i32) -> i32 { if x > 0 { 1 } else { 0 } }\n",
+		"work/.keep":          "",
+	})
+	t.Chdir(filepath.Join(root, "work"))
+	report, err := Analyze([]string{filepath.Join("..", "tests", "myproj")}, Options{CBO: true, LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if report.Files.Analyzed == 0 {
+		t.Fatalf("files_analyzed=0; tests/ in the display path must not drop the tree")
 	}
 }

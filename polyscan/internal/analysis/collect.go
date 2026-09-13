@@ -30,27 +30,41 @@ func skipDir(name string) bool {
 	return skippedDirs[name] || strings.HasPrefix(name, ".")
 }
 
-// collectFiles returns, sorted and without duplicates, the absolute paths
-// of the files of a supported language under paths. A path that is a file
-// is taken as given when its language is supported, unless its name matches
-// an exclude pattern. Under a directory, exclude patterns apply to the path
-// relative to that directory, so a directory above the root cannot exclude
-// the whole tree; a directory that matches is not walked. Unless
-// includeTests is set, the files a language names as test files are left
-// out under the same relative-path rule.
-func collectFiles(paths []string, exclude []string, includeTests bool) ([]string, error) {
+// collectedFile is one source file found under a CLI path.
+type collectedFile struct {
+	// path is the file as the caller named it: the argument joined with the
+	// walk-relative remainder. Reports use this spelling so Go and JS agree
+	// when the target is outside cwd.
+	path string
+	// abs is the absolute path used to read the file. Dedup keys on abs.
+	abs string
+	// rel is the path relative to that walk root. Test-file gating uses rel
+	// so a root whose parent is named tests/ does not empty Rust/C++ results.
+	rel string
+}
+
+// collectFiles returns, sorted and without duplicates, the files of a
+// supported language under paths. A path that is a file is taken as given
+// when its language is supported, unless its name matches an exclude
+// pattern. Under a directory, exclude patterns apply to the path relative
+// to that directory, so a directory above the root cannot exclude the whole
+// tree; a directory that matches is not walked. Unless includeTests is set,
+// the files a language names as test files are left out under the same
+// relative-path rule. Walk and stat use the absolute path; the stored path
+// keeps the caller's spelling.
+func collectFiles(paths []string, exclude []string, includeTests bool) ([]collectedFile, error) {
 	seen := map[string]bool{}
-	var files []string
-	add := func(path, rel string) {
-		language, ok := lang.ByPath(path)
-		if !ok || seen[path] || pathmatch.Matches(rel, exclude) {
+	var files []collectedFile
+	add := func(stored, abs, rel string) {
+		language, ok := lang.ByPath(abs)
+		if !ok || seen[abs] || pathmatch.Matches(rel, exclude) {
 			return
 		}
 		if !includeTests && language.IsTestFile(rel) {
 			return
 		}
-		seen[path] = true
-		files = append(files, path)
+		seen[abs] = true
+		files = append(files, collectedFile{path: stored, abs: abs, rel: rel})
 	}
 	for _, p := range paths {
 		root, err := filepath.Abs(p)
@@ -62,7 +76,7 @@ func collectFiles(paths []string, exclude []string, includeTests bool) ([]string
 			return nil, err
 		}
 		if !info.IsDir() {
-			add(root, filepath.Base(root))
+			add(p, root, filepath.Base(p))
 			continue
 		}
 		err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -82,13 +96,21 @@ func collectFiles(paths []string, exclude []string, includeTests bool) ([]string
 				}
 				return nil
 			}
-			add(path, rel)
+			add(filepath.Join(p, rel), path, rel)
 			return nil
 		})
 		if err != nil {
 			return nil, err
 		}
 	}
-	sort.Strings(files)
+	sort.Slice(files, func(i, j int) bool { return files[i].path < files[j].path })
 	return files, nil
+}
+
+func collectPaths(files []collectedFile) []string {
+	out := make([]string, len(files))
+	for i, f := range files {
+		out[i] = f.path
+	}
+	return out
 }
