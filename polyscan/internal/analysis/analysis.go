@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/ludo-technologies/polyscan/core/domain"
@@ -153,13 +152,13 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 	coupling := newCouplingBuilder()
 
 	for _, file := range files {
-		language, ok := lang.ByPath(file)
+		language, ok := lang.ByPath(file.abs)
 		if !ok {
 			// collectFiles only returns registered extensions.
-			panic(fmt.Sprintf("no language for %s", file))
+			panic(fmt.Sprintf("no language for %s", file.path))
 		}
-		display := displayPath(file)
-		result, content, err := analyzeFile(language, file)
+		display := file.path
+		result, content, err := analyzeFile(language, file.abs)
 		if err != nil {
 			report.Files.Skipped++
 			report.Errors = append(report.Errors, fmt.Sprintf("%s: %v", display, err))
@@ -182,7 +181,7 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 				report.Complexity.Functions = append(report.Complexity.Functions, newFunction(fn, language, display))
 			}
 		}
-		if options.Clones && !language.IsTestFile(display) {
+		if options.Clones && !language.IsTestFile(file.rel) {
 			cloneLines += lines
 			cloneFiles++
 			detector, ok := detectors[language]
@@ -198,8 +197,9 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 		}
 		// Test files stay out for the same reason as in clone detection: a
 		// test's types are fixtures, and a test may add helper methods to
-		// a type its package declares.
-		if options.LCOM && language.HasCohesion() && !language.IsTestFile(display) {
+		// a type its package declares. Gate on the walk-relative path so a
+		// root whose parent is named tests/ is not dropped.
+		if options.LCOM && language.HasCohesion() && !language.IsTestFile(file.rel) {
 			cohesionFiles++
 			// Record the type declarations alongside the methods, so the
 			// cohesion result can attribute a type to its declaring file
@@ -211,8 +211,8 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 				}
 			}
 		}
-		if options.CBO && language.HasCoupling() && !language.IsTestFile(display) {
-			if err := coupling.add(language, display, file, content, result); err != nil {
+		if options.CBO && language.HasCoupling() && !language.IsTestFile(file.rel) {
+			if err := coupling.add(language, display, file.abs, content, result); err != nil {
 				return nil, err
 			}
 		}
@@ -249,17 +249,17 @@ func withoutTests(functions []engine.Function) []engine.Function {
 
 // analyzeDeps builds the dependency graph of the Go files among files. Test
 // files stay out of it: their imports describe the tests, not the package.
-func analyzeDeps(report *Report, files []string) error {
+func analyzeDeps(report *Report, files []collectedFile) error {
 	var goFiles []string
 	for _, file := range files {
-		if language, ok := lang.ByPath(file); ok && language == golang.Language && !language.IsTestFile(file) {
-			goFiles = append(goFiles, file)
+		if language, ok := lang.ByPath(file.abs); ok && language == golang.Language && !language.IsTestFile(file.rel) {
+			goFiles = append(goFiles, file.path)
 		}
 	}
 	if len(goFiles) == 0 {
 		return nil
 	}
-	deps, warnings, err := godeps.Analyze(goFiles, displayPath)
+	deps, warnings, err := godeps.Analyze(goFiles, func(s string) string { return s })
 	if err != nil {
 		return err
 	}
@@ -458,18 +458,4 @@ func summarize(functions []Function) ComplexitySummary {
 	}
 	summary.AverageComplexity = float64(total) / float64(len(functions))
 	return summary
-}
-
-// displayPath shortens an absolute path to one relative to the working
-// directory when the file lies under it.
-func displayPath(path string) string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return path
-	}
-	rel, err := filepath.Rel(cwd, path)
-	if err != nil || !filepath.IsLocal(rel) {
-		return path
-	}
-	return rel
 }

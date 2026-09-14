@@ -69,7 +69,8 @@ type Server struct{ s Store }
 `,
 	})
 
-	report, err := Analyze([]string{dir}, Options{CBO: true, IncludeTests: true}, nil)
+	t.Chdir(dir)
+	report, err := Analyze([]string{"."}, Options{CBO: true, IncludeTests: true}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -84,7 +85,7 @@ type Server struct{ s Store }
 	}
 	got := map[string][]string{}
 	for _, class := range report.Coupling.Classes {
-		got[strings.TrimPrefix(class.FilePath, dir+"/")+":"+class.Name] = class.DependentClasses
+		got[class.FilePath+":"+class.Name] = class.DependentClasses
 	}
 	want := map[string][]string{
 		"server.go:Server":      {"Config", "Handler", "Logger", "model.User", "st.Store"},
