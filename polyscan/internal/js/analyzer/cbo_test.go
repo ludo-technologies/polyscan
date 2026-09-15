@@ -575,3 +575,44 @@ const utils = require('./utils');
 		t.Errorf("Expected 2 import dependencies, got %d", result.Metrics.ImportDependencies)
 	}
 }
+
+// TestCBOTypeHintsAreBreakdownOnly: a type annotation is a declaration, not
+// a use. Annotated types show in the type_hint_dependencies breakdown but never
+// count toward the coupling score, since TypeScript erases them at compile time.
+func TestCBOTypeHintsAreBreakdownOnly(t *testing.T) {
+	source := `
+import { Cart } from './cart';
+import { Logger } from './logger';
+
+export function total(cart: Cart, logger?: Logger): number {
+  return 0;
+}
+`
+	p := parser.NewTypeScriptParser()
+	defer p.Close()
+
+	ast, err := p.ParseFile("test.ts", []byte(source))
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	config := DefaultCBOAnalyzerConfig()
+	config.IncludeBuiltins = true
+	result, err := NewCBOAnalyzer(config).AnalyzeFile(ast, "test.ts")
+	if err != nil {
+		t.Fatalf("Failed to analyze: %v", err)
+	}
+
+	if result.Metrics.TypeHintDependencies != 2 {
+		t.Errorf("TypeHintDependencies = %d, want 2", result.Metrics.TypeHintDependencies)
+	}
+	if result.Metrics.CouplingCount != 2 || result.Metrics.ImportDependencies != 2 {
+		t.Errorf("CouplingCount = %d with %d imports, want the 2 imported modules and nothing else",
+			result.Metrics.CouplingCount, result.Metrics.ImportDependencies)
+	}
+	for _, dep := range result.Metrics.DependentClasses {
+		if dep == "Cart" || dep == "Logger" {
+			t.Errorf("annotation-only name %q counted as a dependency: %v", dep, result.Metrics.DependentClasses)
+		}
+	}
+}
