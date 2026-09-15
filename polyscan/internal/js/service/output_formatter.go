@@ -111,6 +111,7 @@ type DepsResponseJSON struct {
 
 // AnalyzeResponseJSON represents the unified analysis response for JSON output
 type AnalyzeResponseJSON struct {
+	SchemaVersion int                           `json:"schema_version"`
 	Version       string                        `json:"version"`
 	GeneratedAt   string                        `json:"generated_at"`
 	DurationMs    int64                         `json:"duration_ms"`
@@ -147,6 +148,7 @@ func newAnalyzeResponseJSON(
 	now time.Time,
 ) AnalyzeResponseJSON {
 	response := AnalyzeResponseJSON{
+		SchemaVersion: domain.AnalyzeSchemaVersion,
 		Version:       version.Version,
 		GeneratedAt:   now.Format(time.RFC3339),
 		DurationMs:    duration.Milliseconds(),
