@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The analyze JSON document carries a top-level `schema_version`, currently `1`, that changes only when a documented key is renamed, removed or changes type
+
+### Changed
+
+- JavaScript/TypeScript coupling (CBO) reports the names a file's type annotations reference in `type_hint_dependencies`, and those names stay out of `coupling_count` and the risk level. TypeScript erases a type annotation at compile time, so it declares a dependency without exercising one. Before, the breakdown was always 0 because the annotations were never read
+
 ### Fixed
 
+- A JavaScript/TypeScript selection that parses but declares no function, such as a directory of type declarations, is a normal empty complexity result. Before, the whole complexity section was dropped with "no functions found to analyze"
+- Every collection in the analyze JSON document is present even when empty, as `[]` or `{}`. Before, `dead_code.files`, the coupling summary, `base_classes`, the dependency cycle and coupling lists, `longest_chains`, and each module's `direct_dependencies`, `dependents` and `public_interface` were `null` when there was nothing to list, and `public_interface` was never filled in; it now lists the module's exports. The never-populated `most_depended_upon_classes` key is gone from the coupling summary
 - Go methods declared on a type-alias receiver (`type Alias = Base`; `func (a *Alias) M()`) are attributed to the aliased type in the coupling (CBO) analysis, and a field or parameter typed by an alias credits that type too. Before, the alias was not a declared type, the methods were dropped, and `Base` reported no coupling (#133)
 
 ## [0.3.3] - 2026-09-12
