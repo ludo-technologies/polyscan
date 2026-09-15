@@ -90,7 +90,7 @@ func (d *CircularDependencyDetector) DetectCycles(graph *domain.DependencyGraph)
 	})
 
 	// Filter to only SCCs with more than one node (actual cycles)
-	var cycles []domain.CircularDependency
+	cycles := []domain.CircularDependency{}
 	var modulesInCycles = make(map[string]bool)
 	var coreInfrastructure = make(map[string]int) // module -> count of cycles it's in
 
@@ -105,7 +105,7 @@ func (d *CircularDependencyDetector) DetectCycles(graph *domain.DependencyGraph)
 	}
 
 	// Find core infrastructure (modules in multiple cycles)
-	var coreModules []string
+	coreModules := []string{}
 	for module, count := range coreInfrastructure {
 		if count > 1 {
 			coreModules = append(coreModules, module)
@@ -129,7 +129,7 @@ func (d *CircularDependencyDetector) DetectCycles(graph *domain.DependencyGraph)
 // buildCycleInfo creates a CircularDependency from an SCC
 func (d *CircularDependencyDetector) buildCycleInfo(scc []string, graph *domain.DependencyGraph) domain.CircularDependency {
 	// Find the cycle path (edges forming the cycle)
-	var paths []domain.DependencyPath
+	paths := []domain.DependencyPath{}
 	sccSet := make(map[string]bool)
 	for _, module := range scc {
 		sccSet[module] = true
@@ -206,7 +206,7 @@ func (d *CircularDependencyDetector) generateCycleDescription(scc []string) stri
 
 // suggestCycleBreaking generates suggestions for breaking cycles
 func (d *CircularDependencyDetector) suggestCycleBreaking(cycles []domain.CircularDependency, graph *domain.DependencyGraph) []string {
-	var suggestions []string
+	suggestions := []string{}
 
 	for _, cycle := range cycles {
 		if len(cycle.Modules) == 0 {

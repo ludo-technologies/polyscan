@@ -98,6 +98,7 @@ func (c *CouplingMetricsCalculator) CalculateMetrics(graph *domain.DependencyGra
 			RiskLevel:              riskLevel,
 			DirectDependencies:     directDeps,
 			Dependents:             dependents,
+			PublicInterface:        node.Exports,
 			TransitiveDependencies: []string{}, // Can be computed separately if needed
 		}
 	}
@@ -117,13 +118,13 @@ func (c *CouplingMetricsCalculator) CalculateCouplingAnalysis(graph *domain.Depe
 	var totalInstability float64
 	var totalDistance float64
 	couplingDist := make(map[int]int)
-	var highlyCoupled []string
-	var looselyCoupled []string
-	var stableModules []string
-	var unstableModules []string
-	var zoneOfPain []string
-	var zoneOfUselessness []string
-	var mainSequence []string
+	highlyCoupled := []string{}
+	looselyCoupled := []string{}
+	stableModules := []string{}
+	unstableModules := []string{}
+	zoneOfPain := []string{}
+	zoneOfUselessness := []string{}
+	mainSequence := []string{}
 
 	// Walk modules in a fixed order: floating-point sums are order-dependent, so
 	// map iteration order would otherwise perturb the averages below.

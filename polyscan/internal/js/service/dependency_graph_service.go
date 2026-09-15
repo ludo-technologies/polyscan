@@ -187,8 +187,8 @@ func buildAnalysisResult(
 	chainFinder *coregraph.ChainFinder,
 ) *domain.DependencyAnalysisResult {
 	// Find root and leaf modules
-	var rootModules []string
-	var leafModules []string
+	rootModules := []string{}
+	leafModules := []string{}
 
 	for nodeID, node := range graph.Nodes {
 		if node.IsEntryPoint {
@@ -240,11 +240,11 @@ const maxReportedChains = 5
 // which is linear in the graph size — an exhaustive simple-path search would be
 // exponential on the cyclic import graphs real projects produce.
 func findLongestChains(graph *domain.DependencyGraph, finder *coregraph.ChainFinder, maxDepth int) []domain.DependencyPath {
+	chains := []domain.DependencyPath{}
 	if maxDepth == 0 || finder == nil {
-		return nil
+		return chains
 	}
 
-	var chains []domain.DependencyPath
 	for _, nodeID := range graph.NodeIDs() {
 		node := graph.GetNode(nodeID)
 		if node == nil || !node.IsEntryPoint {

@@ -141,15 +141,21 @@ func (b *DependencyGraphBuilder) createModuleNode(filePath string, info *domain.
 	id := b.normalizeModuleID(filePath)
 	name := moduleDisplayName(filePath)
 
-	// Extract export names
-	var exports []string
+	// Extract export names. A declaration and its specifier can name the same
+	// export, so each name is listed once.
+	exports := []string{}
+	seen := make(map[string]bool)
+	addExport := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			exports = append(exports, name)
+		}
+	}
 	if info != nil {
 		for _, exp := range info.Exports {
-			if exp.Name != "" {
-				exports = append(exports, exp.Name)
-			}
+			addExport(exp.Name)
 			for _, spec := range exp.Specifiers {
-				exports = append(exports, spec.Exported)
+				addExport(spec.Exported)
 			}
 		}
 	}

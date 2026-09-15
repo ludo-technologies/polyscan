@@ -98,9 +98,6 @@ type CBOSummary struct {
 
 	// Most coupled classes (top 10)
 	MostCoupledClasses []ClassCoupling `json:"most_coupled_classes" yaml:"most_coupled_classes"`
-
-	// Classes with highest impact (most depended upon)
-	MostDependedUponClasses []string `json:"most_depended_upon_classes" yaml:"most_depended_upon_classes"`
 }
 
 // CBOResponse represents the complete CBO analysis result

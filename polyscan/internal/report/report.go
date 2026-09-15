@@ -323,8 +323,9 @@ func genericCoupling(report *analysis.Report) *domain.CBOResponse {
 				TypeHintDependencies:    class.TypeHint,
 				DependentClasses:        class.DependentClasses,
 			},
-			RiskLevel:  domain.RiskLevel(class.RiskLevel),
-			IsAbstract: class.IsAbstract,
+			RiskLevel:   domain.RiskLevel(class.RiskLevel),
+			IsAbstract:  class.IsAbstract,
+			BaseClasses: []string{},
 		})
 	}
 	return &domain.CBOResponse{

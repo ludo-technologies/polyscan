@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -672,4 +673,48 @@ func TestAnalyzeOutputPathError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAnalyzeJSONHasNoNull locks the empty-collection contract: a section with
+// nothing to report serializes as [] or {}, never null, so consumers need no
+// null guards. The declaration-only TypeScript directory also covers a parsed
+// population without a single function.
+func TestAnalyzeJSONHasNoNull(t *testing.T) {
+	declarations := t.TempDir()
+	if err := os.WriteFile(filepath.Join(declarations, "types.ts"), []byte("export const x: number = 1;\nexport type T = { a: string };\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{"../../testdata/go", "../../testdata/javascript/simple", declarations} {
+		out, err := run(t, "analyze", "--format", "json", target)
+		if err != nil {
+			t.Fatalf("analyze %s: %v\n%s", target, err, out)
+		}
+		var doc any
+		if err := json.NewDecoder(strings.NewReader(out)).Decode(&doc); err != nil {
+			t.Fatalf("invalid JSON for %s: %v\n%s", target, err, out)
+		}
+		if nulls := nullPaths(doc, "$"); len(nulls) > 0 {
+			t.Errorf("%s: null values at %s", target, strings.Join(nulls, ", "))
+		}
+	}
+}
+
+func nullPaths(value any, path string) []string {
+	switch v := value.(type) {
+	case nil:
+		return []string{path}
+	case map[string]any:
+		var paths []string
+		for key, child := range v {
+			paths = append(paths, nullPaths(child, path+"."+key)...)
+		}
+		return paths
+	case []any:
+		var paths []string
+		for i, child := range v {
+			paths = append(paths, nullPaths(child, path+"["+strconv.Itoa(i)+"]")...)
+		}
+		return paths
+	}
+	return nil
 }

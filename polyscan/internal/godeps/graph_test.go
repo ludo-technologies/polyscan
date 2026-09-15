@@ -47,7 +47,7 @@ func TestBuildFixture(t *testing.T) {
 	wantEdges := map[string][]string{
 		"example.com/godeps/app":   {"example.com/godeps/lib", "example.com/godeps/model"},
 		"example.com/godeps/lib":   {"example.com/godeps/model"},
-		"example.com/godeps/model": nil,
+		"example.com/godeps/model": {},
 	}
 	if !reflect.DeepEqual(edges, wantEdges) {
 		t.Errorf("edges = %v, want %v", edges, wantEdges)
