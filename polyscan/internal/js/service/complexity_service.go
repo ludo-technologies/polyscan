@@ -52,7 +52,7 @@ func (s *ComplexityServiceImpl) buildResponse(ctx context.Context, results []fil
 		return nil, fmt.Errorf("complexity analysis cancelled: %w", ctx.Err())
 	}
 
-	var allFunctions []domain.FunctionComplexity
+	allFunctions := []domain.FunctionComplexity{}
 	var warnings []string
 	var errors []string
 	var analyzedPaths []string
@@ -71,10 +71,6 @@ func (s *ComplexityServiceImpl) buildResponse(ctx context.Context, results []fil
 		filePath := paths[index]
 		analyzedPaths = append(analyzedPaths, filePath)
 		linesOfCode[filepath.Clean(filePath)] = result.value.linesOfCode
-	}
-
-	if len(allFunctions) == 0 {
-		return nil, domain.NewAnalysisError("no functions found to analyze", nil)
 	}
 
 	// Roll up per module before filtering: the rollups describe the analyzed
@@ -124,6 +120,9 @@ func moduleComplexityRollups(functions []domain.FunctionComplexity, linesOfCode 
 // aggregateDirectoryComplexity reports the directory rollups relative to the
 // deepest directory that contains every analyzed file.
 func aggregateDirectoryComplexity(functions []domain.FunctionComplexity, analyzedPaths []string) (domain.DirectoryComplexityMetricsList, error) {
+	if len(analyzedPaths) == 0 {
+		return domain.DirectoryComplexityMetricsList{}, nil
+	}
 	projectRoot, err := domain.ComplexityDirectoryRoot(analyzedPaths)
 	if err != nil {
 		return nil, err
@@ -227,7 +226,7 @@ func (s *ComplexityServiceImpl) analyzeProjectFile(projectFile *ProjectFile) fil
 // a reporting decision: the summary and the directory rollups are computed over
 // the unfiltered population, so nothing dropped here moves a metric.
 func (s *ComplexityServiceImpl) filterFunctions(functions []domain.FunctionComplexity, req domain.ComplexityRequest) []domain.FunctionComplexity {
-	var filtered []domain.FunctionComplexity
+	filtered := make([]domain.FunctionComplexity, 0, len(functions))
 
 	for _, fn := range functions {
 		// Skip unchanged (complexity = 1) if requested
