@@ -616,3 +616,52 @@ export function total(cart: Cart, logger?: Logger): number {
 		}
 	}
 }
+
+// TestCBOTypeHintsSkipDeclaredNames: property names of inline object types and
+// parameter names of function types are declarations inside the annotation,
+// not type references, and stay out of the type-hint breakdown.
+func TestCBOTypeHintsSkipDeclaredNames(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+		want   int
+	}{
+		{
+			name: "primitive members only",
+			source: `export function run(
+  options: { label: string; count: number },
+  callback: (value: string) => void
+): void {}
+`,
+			want: 0,
+		},
+		{
+			name: "type references inside members, generics and optional parameters",
+			source: `export function run(
+  options: { label: string; cb(x: Foo): Bar },
+  m: Map<string, Baz>,
+  n?: Qux
+): void {}
+`,
+			want: 4,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.NewTypeScriptParser()
+			defer p.Close()
+			ast, err := p.ParseFile("test.ts", []byte(tc.source))
+			if err != nil {
+				t.Fatalf("Failed to parse: %v", err)
+			}
+			result, err := NewCBOAnalyzer(DefaultCBOAnalyzerConfig()).AnalyzeFile(ast, "test.ts")
+			if err != nil {
+				t.Fatalf("Failed to analyze: %v", err)
+			}
+			if result.Metrics.TypeHintDependencies != tc.want || result.Metrics.CouplingCount != 0 {
+				t.Errorf("TypeHintDependencies = %d, CouplingCount = %d, want %d and 0",
+					result.Metrics.TypeHintDependencies, result.Metrics.CouplingCount, tc.want)
+			}
+		})
+	}
+}

@@ -198,18 +198,32 @@ func (ca *CBOAnalyzer) extractTypesFromNode(node *parser.Node, deps *ClassDepend
 	if node == nil {
 		return
 	}
-
-	// Walk through the node to find identifier types
-	node.Walk(func(n *parser.Node) bool {
-		if n.Type == parser.NodeIdentifier && n.Name != "" {
-			typeName := n.Name
-			// Skip primitive types and common utility types
-			if !isPrimitiveType(typeName) && !isBuiltinType(typeName) {
-				deps.TypeHintDependencies[typeName] = true
-			}
+	if node.Type == parser.NodeIdentifier {
+		if node.Name != "" && !isPrimitiveType(node.Name) && !isBuiltinType(node.Name) {
+			deps.TypeHintDependencies[node.Name] = true
 		}
-		return true
-	})
+		return
+	}
+	declaresName := typeMemberDeclarations[string(node.Type)]
+	for _, child := range parser.OrderedChildren(node) {
+		// The declared name of a property, method or parameter is an
+		// identifier too, but it names a member, not a type.
+		if declaresName && child.Type == parser.NodeIdentifier {
+			continue
+		}
+		ca.extractTypesFromNode(child, deps)
+	}
+}
+
+// typeMemberDeclarations are the grammar nodes inside a type annotation whose
+// first identifier child declares a member or parameter name rather than
+// referencing a type: object type members and function type parameters.
+var typeMemberDeclarations = map[string]bool{
+	"property_signature": true,
+	"method_signature":   true,
+	"required_parameter": true,
+	"optional_parameter": true,
+	"rest_parameter":     true,
 }
 
 // extractAttributeAccessDependencies extracts dependencies from method calls and property access
