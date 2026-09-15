@@ -92,7 +92,7 @@ func (s *DeadCodeServiceImpl) analyzeFile(ctx context.Context, filePath string, 
 	}
 
 	// Analyze dead code for each function
-	var functions []domain.FunctionDeadCode
+	functions := make([]domain.FunctionDeadCode, 0, len(cfgs))
 	totalFindings := 0
 	affectedFunctions := 0
 
@@ -131,7 +131,7 @@ func (s *DeadCodeServiceImpl) analyzeFile(ctx context.Context, filePath string, 
 
 // convertToFunctionDeadCode converts internal dead code result to domain model
 func (s *DeadCodeServiceImpl) convertToFunctionDeadCode(result *analyzer.DeadCodeResult, functionName string, req domain.DeadCodeRequest) domain.FunctionDeadCode {
-	var findings []domain.DeadCodeFinding
+	findings := make([]domain.DeadCodeFinding, 0, len(result.Findings))
 
 	for _, finding := range result.Findings {
 		severity := domain.DeadCodeSeverity(finding.Severity)
@@ -177,11 +177,11 @@ func (s *DeadCodeServiceImpl) convertToFunctionDeadCode(result *analyzer.DeadCod
 
 // filterFiles filters files based on request criteria
 func (s *DeadCodeServiceImpl) filterFiles(files []domain.FileDeadCode, req domain.DeadCodeRequest) []domain.FileDeadCode {
-	var filtered []domain.FileDeadCode
+	filtered := make([]domain.FileDeadCode, 0, len(files))
 
 	for _, file := range files {
 		// Filter functions within file
-		var filteredFunctions []domain.FunctionDeadCode
+		filteredFunctions := make([]domain.FunctionDeadCode, 0, len(file.Functions))
 		for _, fn := range file.Functions {
 			// Check if function has findings at required severity
 			if fn.HasFindingsAtSeverity(req.MinSeverity) {

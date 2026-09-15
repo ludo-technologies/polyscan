@@ -575,3 +575,93 @@ const utils = require('./utils');
 		t.Errorf("Expected 2 import dependencies, got %d", result.Metrics.ImportDependencies)
 	}
 }
+
+// TestCBOTypeHintsAreBreakdownOnly: a type annotation is a declaration, not
+// a use. Annotated types show in the type_hint_dependencies breakdown but never
+// count toward the coupling score, since TypeScript erases them at compile time.
+func TestCBOTypeHintsAreBreakdownOnly(t *testing.T) {
+	source := `
+import { Cart } from './cart';
+import { Logger } from './logger';
+
+export function total(cart: Cart, logger?: Logger): number {
+  return 0;
+}
+`
+	p := parser.NewTypeScriptParser()
+	defer p.Close()
+
+	ast, err := p.ParseFile("test.ts", []byte(source))
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	config := DefaultCBOAnalyzerConfig()
+	config.IncludeBuiltins = true
+	result, err := NewCBOAnalyzer(config).AnalyzeFile(ast, "test.ts")
+	if err != nil {
+		t.Fatalf("Failed to analyze: %v", err)
+	}
+
+	if result.Metrics.TypeHintDependencies != 2 {
+		t.Errorf("TypeHintDependencies = %d, want 2", result.Metrics.TypeHintDependencies)
+	}
+	if result.Metrics.CouplingCount != 2 || result.Metrics.ImportDependencies != 2 {
+		t.Errorf("CouplingCount = %d with %d imports, want the 2 imported modules and nothing else",
+			result.Metrics.CouplingCount, result.Metrics.ImportDependencies)
+	}
+	for _, dep := range result.Metrics.DependentClasses {
+		if dep == "Cart" || dep == "Logger" {
+			t.Errorf("annotation-only name %q counted as a dependency: %v", dep, result.Metrics.DependentClasses)
+		}
+	}
+}
+
+// TestCBOTypeHintsSkipDeclaredNames: property names of inline object types and
+// parameter names of function types are declarations inside the annotation,
+// not type references, and stay out of the type-hint breakdown.
+func TestCBOTypeHintsSkipDeclaredNames(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+		want   int
+	}{
+		{
+			name: "primitive members only",
+			source: `export function run(
+  options: { label: string; count: number },
+  callback: (value: string) => void
+): void {}
+`,
+			want: 0,
+		},
+		{
+			name: "type references inside members, generics and optional parameters",
+			source: `export function run(
+  options: { label: string; cb(x: Foo): Bar },
+  m: Map<string, Baz>,
+  n?: Qux
+): void {}
+`,
+			want: 4,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.NewTypeScriptParser()
+			defer p.Close()
+			ast, err := p.ParseFile("test.ts", []byte(tc.source))
+			if err != nil {
+				t.Fatalf("Failed to parse: %v", err)
+			}
+			result, err := NewCBOAnalyzer(DefaultCBOAnalyzerConfig()).AnalyzeFile(ast, "test.ts")
+			if err != nil {
+				t.Fatalf("Failed to analyze: %v", err)
+			}
+			if result.Metrics.TypeHintDependencies != tc.want || result.Metrics.CouplingCount != 0 {
+				t.Errorf("TypeHintDependencies = %d, CouplingCount = %d, want %d and 0",
+					result.Metrics.TypeHintDependencies, result.Metrics.CouplingCount, tc.want)
+			}
+		})
+	}
+}

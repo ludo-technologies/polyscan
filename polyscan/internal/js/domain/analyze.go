@@ -8,6 +8,12 @@ import (
 	coredomain "github.com/ludo-technologies/polyscan/core/domain"
 )
 
+// AnalyzeSchemaVersion identifies the key layout of the analyze JSON report.
+// Bump it on any breaking change to the documented keys (rename, removal,
+// type change) so consumers can detect the change; additive changes do not
+// bump it.
+const AnalyzeSchemaVersion = 1
+
 // Health Score Calculation Constants
 const (
 	// Complexity thresholds and penalties

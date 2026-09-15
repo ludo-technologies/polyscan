@@ -130,7 +130,7 @@ func aggregateDeadCodeScans(ctx context.Context, scanned []fileAnalysis[*scanned
 		sortBy = domain.DeadCodeSortBySeverity
 	}
 
-	var files []domain.FileDeadCode
+	files := []domain.FileDeadCode{}
 	fileIndexMap := make(map[string]int)
 	type fileMetrics struct {
 		totalFunctions    int
@@ -206,7 +206,7 @@ func aggregateDeadCodeScans(ctx context.Context, scanned []fileAnalysis[*scanned
 			allModuleInfos[filePath] = moduleInfo
 		}
 
-		var fileFunctions []domain.FunctionDeadCode
+		fileFunctions := []domain.FunctionDeadCode{}
 		var fileLevelFindings []domain.DeadCodeFinding
 		fileTotalFunctions := 0
 		fileDeadBlocks := 0
@@ -261,7 +261,7 @@ func aggregateDeadCodeScans(ctx context.Context, scanned []fileAnalysis[*scanned
 			fileDeadBlocks += result.DeadBlocks
 			rollup.add(filePath, len(result.Findings), result.DeadBlocks)
 
-			var findings []domain.DeadCodeFinding
+			findings := make([]domain.DeadCodeFinding, 0, len(result.Findings))
 			for _, finding := range result.Findings {
 				severity := domain.DeadCodeSeverity(finding.Severity)
 				if !severity.IsAtLeast(minSeverity) {

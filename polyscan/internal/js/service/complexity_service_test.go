@@ -28,6 +28,9 @@ func TestNewComplexityService(t *testing.T) {
 	}
 }
 
+// TestComplexityService_Analyze_EmptyPaths pins the service contract shared
+// with dead code and coupling: an empty selection is an empty response, not
+// an error. The CLI rejects an empty file set before any service runs.
 func TestComplexityService_Analyze_EmptyPaths(t *testing.T) {
 	cfg := &config.ComplexityConfig{
 		LowThreshold:    5,
@@ -42,12 +45,18 @@ func TestComplexityService_Analyze_EmptyPaths(t *testing.T) {
 		Paths: []string{},
 	}
 
-	_, err := service.Analyze(context.Background(), req)
-	if err == nil {
-		t.Error("Should return error for empty paths")
+	response, err := service.Analyze(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if response.Summary.TotalFiles != 0 || len(response.Functions) != 0 || len(response.ByDirectory) != 0 {
+		t.Errorf("response = %+v, want an empty population", response.Summary)
 	}
 }
 
+// TestComplexityService_Analyze_NonexistentFile: a file that cannot be read is
+// a parse gap the summary discloses and the health score charges, not a
+// failure of the whole analysis.
 func TestComplexityService_Analyze_NonexistentFile(t *testing.T) {
 	cfg := &config.ComplexityConfig{
 		LowThreshold:    5,
@@ -62,9 +71,12 @@ func TestComplexityService_Analyze_NonexistentFile(t *testing.T) {
 		Paths: []string{"/nonexistent/file.js"},
 	}
 
-	_, err := service.Analyze(context.Background(), req)
-	if err == nil {
-		t.Error("Should return error for nonexistent file")
+	response, err := service.Analyze(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if response.Summary.TotalFiles != 1 || response.Summary.SkippedFiles != 1 || len(response.Errors) != 1 {
+		t.Errorf("summary = %+v, errors = %v, want 1 skipped file with one error", response.Summary, response.Errors)
 	}
 }
 
@@ -635,5 +647,31 @@ func TestComplexityService_Analyze_ResponseFields(t *testing.T) {
 
 	if resp.Config == nil {
 		t.Error("Config should not be nil")
+	}
+}
+
+// TestComplexityService_Analyze_NoFunctions: a parsed population without a
+// single function is a normal empty result. Before, the whole complexity
+// section was dropped with "no functions found to analyze".
+func TestComplexityService_Analyze_NoFunctions(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "types.ts")
+	if err := os.WriteFile(path, []byte("export const x: number = 1;\nexport type T = { a: string };\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	service := NewComplexityService(&config.ComplexityConfig{LowThreshold: 5, MediumThreshold: 10, Enabled: true, ReportUnchanged: true})
+
+	response, err := service.Analyze(context.Background(), domain.ComplexityRequest{Paths: []string{path}})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if response.Summary.TotalFiles != 1 || response.Summary.SkippedFiles != 0 || response.Summary.TotalFunctions != 0 {
+		t.Errorf("summary = %+v, want 1 analyzed file with 0 functions", response.Summary)
+	}
+	if response.Functions == nil || len(response.Errors) != 0 {
+		t.Errorf("functions = %v, errors = %v, want an empty list and no errors", response.Functions, response.Errors)
+	}
+	if response.ByDirectory == nil || len(response.ModuleRollups) != 1 {
+		t.Errorf("rollups = %v / %v, want a directory list and one module entry", response.ByDirectory, response.ModuleRollups)
 	}
 }

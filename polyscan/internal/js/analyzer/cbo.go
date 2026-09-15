@@ -80,12 +80,13 @@ func NewClassDependencies() *ClassDependencies {
 func (ca *CBOAnalyzer) AnalyzeFile(ast *parser.Node, filePath string) (*domain.ClassCoupling, error) {
 	if ast == nil {
 		return &domain.ClassCoupling{
-			Name:      extractModuleName(filePath),
-			FilePath:  filePath,
-			StartLine: 1,
-			EndLine:   1,
-			Metrics:   domain.CBOMetrics{},
-			RiskLevel: domain.RiskLevelLow,
+			Name:        extractModuleName(filePath),
+			FilePath:    filePath,
+			StartLine:   1,
+			EndLine:     1,
+			Metrics:     domain.CBOMetrics{},
+			RiskLevel:   domain.RiskLevelLow,
+			BaseClasses: []string{},
 		}, nil
 	}
 
@@ -113,12 +114,13 @@ func (ca *CBOAnalyzer) AnalyzeFile(ast *parser.Node, filePath string) (*domain.C
 	startLine, endLine := ca.getFileExtent(ast)
 
 	return &domain.ClassCoupling{
-		Name:      extractModuleName(filePath),
-		FilePath:  filePath,
-		StartLine: startLine,
-		EndLine:   endLine,
-		Metrics:   metrics,
-		RiskLevel: riskLevel,
+		Name:        extractModuleName(filePath),
+		FilePath:    filePath,
+		StartLine:   startLine,
+		EndLine:     endLine,
+		Metrics:     metrics,
+		RiskLevel:   riskLevel,
+		BaseClasses: []string{},
 	}, nil
 }
 
@@ -169,7 +171,9 @@ func (ca *CBOAnalyzer) extractTypeHintDependencies(ast *parser.Node, deps *Class
 
 	ast.Walk(func(node *parser.Node) bool {
 		switch node.Type {
-		case parser.NodeTypeAnnotation:
+		// The AST builder keeps type annotations under the raw grammar name,
+		// as it does new_expression.
+		case parser.NodeTypeAnnotation, "type_annotation":
 			ca.extractTypesFromNode(node, deps)
 
 		case parser.NodeAsExpression:
@@ -185,24 +189,41 @@ func (ca *CBOAnalyzer) extractTypeHintDependencies(ast *parser.Node, deps *Class
 	})
 }
 
-// extractTypesFromNode extracts type names from a type annotation node
+// extractTypesFromNode records the type names a type annotation references.
+// A type annotation is a declaration, not a use: TypeScript erases it at
+// compile time and nothing in the module breaks when the annotated type's
+// internals change. The names feed the type_hint_dependencies breakdown only
+// and never count toward CouplingCount or the risk level (pyscn #757).
 func (ca *CBOAnalyzer) extractTypesFromNode(node *parser.Node, deps *ClassDependencies) {
 	if node == nil {
 		return
 	}
-
-	// Walk through the node to find identifier types
-	node.Walk(func(n *parser.Node) bool {
-		if n.Type == parser.NodeIdentifier && n.Name != "" {
-			typeName := n.Name
-			// Skip primitive types and common utility types
-			if !isPrimitiveType(typeName) && !isBuiltinType(typeName) {
-				deps.TypeHintDependencies[typeName] = true
-				deps.DependentClasses[typeName] = true
-			}
+	if node.Type == parser.NodeIdentifier {
+		if node.Name != "" && !isPrimitiveType(node.Name) && !isBuiltinType(node.Name) {
+			deps.TypeHintDependencies[node.Name] = true
 		}
-		return true
-	})
+		return
+	}
+	declaresName := typeMemberDeclarations[string(node.Type)]
+	for _, child := range parser.OrderedChildren(node) {
+		// The declared name of a property, method or parameter is an
+		// identifier too, but it names a member, not a type.
+		if declaresName && child.Type == parser.NodeIdentifier {
+			continue
+		}
+		ca.extractTypesFromNode(child, deps)
+	}
+}
+
+// typeMemberDeclarations are the grammar nodes inside a type annotation whose
+// first identifier child declares a member or parameter name rather than
+// referencing a type: object type members and function type parameters.
+var typeMemberDeclarations = map[string]bool{
+	"property_signature": true,
+	"method_signature":   true,
+	"required_parameter": true,
+	"optional_parameter": true,
+	"rest_parameter":     true,
 }
 
 // extractAttributeAccessDependencies extracts dependencies from method calls and property access

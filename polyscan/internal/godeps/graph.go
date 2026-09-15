@@ -104,6 +104,7 @@ func Build(files []string, display func(string) string) (*domain.DependencyGraph
 			FilePath:     p.dir,
 			ModuleType:   domain.ModuleTypePackage,
 			Abstractness: abstractness(p),
+			Exports:      []string{},
 		})
 	}
 	for _, from := range graph.NodeIDs() {

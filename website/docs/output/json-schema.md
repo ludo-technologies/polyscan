@@ -1,4 +1,6 @@
 # JSON Schema
+| `schema_version` | integer | The key layout of this document, currently `1`. It changes only when a documented key is renamed, removed or changes type; new keys do not change it |
+| `version` | string | The polyscan version. `dev` for a locally built binary |
 
 `polyscan analyze --format json` writes a single document to standard output, covering every analyzed language. This page describes its structure. The score summary is written to standard error, so redirecting standard output gives you valid JSON with nothing else mixed in.
 
@@ -10,6 +12,7 @@ polyscan analyze --format json src/ > report.json
 
 ```json
 {
+  "schema_version": 1,
   "version": "0.1.0",
   "generated_at": "2026-08-04T16:20:39+09:00",
   "duration_ms": 5,
@@ -38,7 +41,7 @@ polyscan analyze --format json src/ > report.json
 | `module_quality` | array | Per-file rollups joined across the analyses that ran |
 | `summary` | object | Always present |
 
-The six analysis keys are omitted entirely when `--select` excludes them or when no analyzed language has them, so consumers should check for their presence rather than assume it.
+The six analysis keys are omitted entirely when `--select` excludes them or when no analyzed language has them, so consumers should check for their presence rather than assume it. Every other collection is present even when empty: a section with nothing to report carries `[]` or `{}`, never `null`.
 
 ## `summary`
 
@@ -333,11 +336,11 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
   },
   "risk_level": "low",
   "is_abstract": false,
-  "base_classes": null
+  "base_classes": []
 }
 ```
 
-`coupling_count` is the CBO value. `dependent_classes` names what this class or module depends on, and the `*_dependencies` counters break the total down by how the dependency was formed. A Go or Rust entry is one type and carries a `language` field (`"Go"` or `"Rust"`), which a JavaScript/TypeScript entry, whose unit is the file, omits; its `dependent_classes` name only types declared in the analyzed tree, and it uses `inheritance_dependencies` for embedded types and implemented traits and `type_hint_dependencies` for every other reference.
+`coupling_count` is the CBO value. `dependent_classes` names what this class or module depends on, and the `*_dependencies` counters break the total down by how the dependency was formed. A Go or Rust entry is one type and carries a `language` field (`"Go"` or `"Rust"`), which a JavaScript/TypeScript entry, whose unit is the file, omits; its `dependent_classes` name only types declared in the analyzed tree, and it uses `inheritance_dependencies` for embedded types and implemented traits and `type_hint_dependencies` for every other reference. For a JavaScript/TypeScript file, `type_hint_dependencies` counts the names its type annotations reference, and those names stay out of `coupling_count` and `dependent_classes`: TypeScript erases a type annotation at compile time, so it declares a dependency without exercising one.
 
 ## `lcom`
 

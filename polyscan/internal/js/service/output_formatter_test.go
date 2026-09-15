@@ -302,6 +302,9 @@ func TestOutputFormatterWriteAnalyzeJSON(t *testing.T) {
 	if result.Summary.ComplexityEnabled != true {
 		t.Error("Expected complexity to be enabled in summary")
 	}
+	if result.SchemaVersion != domain.AnalyzeSchemaVersion || !strings.Contains(buf.String(), `"schema_version": 1`) {
+		t.Errorf("schema_version = %d, want %d in the document", result.SchemaVersion, domain.AnalyzeSchemaVersion)
+	}
 }
 
 func TestOutputFormatterWriteAnalyzeJSON_CloneErrorIncluded(t *testing.T) {

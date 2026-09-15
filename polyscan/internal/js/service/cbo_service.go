@@ -86,7 +86,7 @@ func (s *CBOServiceImpl) buildResponse(ctx context.Context, results []fileAnalys
 		return nil, fmt.Errorf("CBO analysis cancelled: %w", ctx.Err())
 	}
 
-	var allClasses []domain.ClassCoupling
+	allClasses := []domain.ClassCoupling{}
 	var warnings []string
 	var errors []string
 	filesProcessed := 0
@@ -160,7 +160,7 @@ func (s *CBOServiceImpl) analyzeProjectFile(cboAnalyzer *analyzer.CBOAnalyzer, f
 
 // filterClasses filters classes based on request criteria
 func (s *CBOServiceImpl) filterClasses(classes []domain.ClassCoupling, req domain.CBORequest) []domain.ClassCoupling {
-	var filtered []domain.ClassCoupling
+	filtered := make([]domain.ClassCoupling, 0, len(classes))
 
 	for _, class := range classes {
 		// Filter by minimum CBO
@@ -244,10 +244,11 @@ func classPrecedes(a, b domain.ClassCoupling) bool {
 // most coupled classes.
 func SummarizeCoupling(classes []domain.ClassCoupling, filesProcessed int) domain.CBOSummary {
 	summary := domain.CBOSummary{
-		TotalClasses:    len(classes),
-		ClassesAnalyzed: len(classes),
-		FilesAnalyzed:   filesProcessed,
-		CBODistribution: make(map[string]int),
+		TotalClasses:       len(classes),
+		ClassesAnalyzed:    len(classes),
+		FilesAnalyzed:      filesProcessed,
+		CBODistribution:    make(map[string]int),
+		MostCoupledClasses: []domain.ClassCoupling{},
 	}
 
 	if len(classes) == 0 {

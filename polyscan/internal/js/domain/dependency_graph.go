@@ -154,10 +154,6 @@ func (g *DependencyGraph) NodeIDs() []string {
 // intentionally preserved because jscan coupling counts import statements.
 func (g *DependencyGraph) Successors(nodeID string) []string {
 	edges := g.Edges[nodeID]
-	if len(edges) == 0 {
-		return nil
-	}
-
 	ids := make([]string, 0, len(edges))
 	for _, edge := range edges {
 		if edge != nil {
@@ -172,10 +168,6 @@ func (g *DependencyGraph) Successors(nodeID string) []string {
 // are intentionally preserved because jscan coupling counts import statements.
 func (g *DependencyGraph) Predecessors(nodeID string) []string {
 	edges := g.ReverseEdges[nodeID]
-	if len(edges) == 0 {
-		return nil
-	}
-
 	ids := make([]string, 0, len(edges))
 	for _, edge := range edges {
 		if edge != nil {
