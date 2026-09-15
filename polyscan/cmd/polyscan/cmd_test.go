@@ -684,7 +684,7 @@ func TestAnalyzeJSONHasNoNull(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(declarations, "types.ts"), []byte("export const x: number = 1;\nexport type T = { a: string };\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for _, target := range []string{"../../testdata/go", "../../testdata/javascript/simple", declarations} {
+	for _, target := range []string{"../../testdata/go", "../../testdata/godeps", "../../testdata/javascript/simple", declarations} {
 		out, err := run(t, "analyze", "--format", "json", target)
 		if err != nil {
 			t.Fatalf("analyze %s: %v\n%s", target, err, out)
