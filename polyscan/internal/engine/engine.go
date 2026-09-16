@@ -47,7 +47,12 @@ type Language struct {
 	// Decisions is a tree-sitter query in which every capture is one
 	// decision point. The point is attributed to the innermost function
 	// that contains it and counted under the capture's name, so the capture
-	// names double as the breakdown reported next to the complexity.
+	// names double as the breakdown reported next to the complexity. The
+	// name @case is reserved for the arm of a switch-like construct: such a
+	// capture must span the whole arm, body included, and the arms of one
+	// construct must be siblings, so that a dispatch whose arms hold no
+	// decision points of their own can be collapsed for
+	// Function.EffectiveComplexity.
 	Decisions string
 	// Members is an optional tree-sitter query for what a method does with
 	// its own type: @field captures the name of a field it reads or writes
@@ -173,6 +178,13 @@ type Function struct {
 	// counts one per case with the default excluded, and each short-circuit
 	// operator counts one.
 	Complexity int
+	// EffectiveComplexity is the complexity with flat dispatch collapsed:
+	// a switch-like construct whose every arm holds no decision point of
+	// its own counts one rather than one per arm, because such a construct
+	// is a lookup table rather than branching logic. It is the value the
+	// risk level is derived from; Complexity itself stays comparable with
+	// gocyclo and the other cyclomatic complexity tools.
+	EffectiveComplexity int
 	// Decisions breaks the decision points down by the name of the capture
 	// that produced them.
 	Decisions map[string]int
@@ -207,6 +219,20 @@ type Function struct {
 	endByte   uint32
 	hasError  bool
 	self      string
+	// points are the function's decision points, which
+	// EffectiveComplexity needs beyond the per-capture counts.
+	points []decisionPoint
+}
+
+// decisionPoint is one decision point of a function: the span of the node
+// it was captured on, and the dispatch it belongs to when it is a switch
+// arm.
+type decisionPoint struct {
+	start, end uint32
+	// dispatch identifies the switch-like construct a @case arm belongs
+	// to, which is the node holding the arms. It is zero for every other
+	// kind of decision point.
+	dispatch uintptr
 }
 
 // Type is one named type of a source file, with every reference to another
@@ -259,6 +285,7 @@ const (
 	bindingCapture      = "binding"
 	declarationCapture  = "declaration"
 	continuationCapture = "continuation"
+	caseCapture         = "case"
 	typeCapture         = "type"
 	abstractCapture     = "abstract"
 	implCapture         = "impl"
@@ -362,6 +389,7 @@ func (l *Language) Analyze(source []byte) (*Result, error) {
 		for _, count := range functions[i].Decisions {
 			functions[i].Complexity += count
 		}
+		functions[i].EffectiveComplexity = functions[i].effectiveComplexity()
 	}
 	for _, fn := range functions {
 		if !fn.hasError {
@@ -581,13 +609,68 @@ func countCodeLines(content string) int {
 func (l *Language) countDecisions(root *sitter.Node, source []byte, functions []Function) {
 	ForEachMatch(l.decisions, root, source, func(match *sitter.QueryMatch) {
 		for _, capture := range match.Captures {
-			fn := innermost(functions, capture.Node.StartByte(), capture.Node.EndByte())
+			node := capture.Node
+			fn := innermost(functions, node.StartByte(), node.EndByte())
 			if fn == nil {
 				continue
 			}
-			fn.Decisions[l.decisions.CaptureNameForId(capture.Index)]++
+			name := l.decisions.CaptureNameForId(capture.Index)
+			fn.Decisions[name]++
+			point := decisionPoint{start: node.StartByte(), end: node.EndByte()}
+			// The arms of one switch are siblings, so their parent, the
+			// switch itself or the block holding them, identifies it.
+			if name == caseCapture {
+				if parent := node.Parent(); parent != nil {
+					point.dispatch = parent.ID()
+				}
+			}
+			fn.points = append(fn.points, point)
 		}
 	})
+}
+
+// effectiveComplexity is the function's complexity with every flat
+// dispatch collapsed to a single decision point. A dispatch is flat when
+// no arm of it holds a decision point of its own: every arm is then
+// straight-line code, and the arm count measures the width of a lookup
+// table rather than the branching the risk level is meant to describe.
+// An arm that branches, loops or holds a nested switch leaves its whole
+// dispatch counted arm by arm.
+func (fn *Function) effectiveComplexity() int {
+	complexity := 1
+	arms := map[uintptr][]int{}
+	for i, point := range fn.points {
+		if point.dispatch == 0 {
+			complexity++
+			continue
+		}
+		arms[point.dispatch] = append(arms[point.dispatch], i)
+	}
+	for _, dispatch := range arms {
+		if fn.isFlatDispatch(dispatch) {
+			complexity++
+			continue
+		}
+		complexity += len(dispatch)
+	}
+	return complexity
+}
+
+// isFlatDispatch reports that no arm of the dispatch, given as indexes
+// into the function's decision points, contains another decision point.
+func (fn *Function) isFlatDispatch(dispatch []int) bool {
+	for _, i := range dispatch {
+		arm := fn.points[i]
+		for j, point := range fn.points {
+			if j == i {
+				continue
+			}
+			if point.start >= arm.start && point.end <= arm.end {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // measureNesting sets each function's NestingDepth to the deepest chain of

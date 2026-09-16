@@ -388,3 +388,34 @@ mod tests { struct Fixture; impl Fixture { fn f(&self) -> Bar {} } impl Foo { fn
 		}
 	}
 }
+
+func TestEffectiveComplexityCollapsesFlatDispatch(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		// want is the complexity, effective the value the risk level uses.
+		want, effective int
+	}{
+		{"flat match", `match n { 1 => 1, 2 => 2, 3 => 3, _ => 0 }`, 4, 2},
+		{"flat match with blocks", `match n { 1 => { f(1); 1 } 2 => { f(2); 2 } _ => 0 }`, 3, 2},
+		{"a branching arm keeps every arm", `match n { 1 => 1, 2 => if a { 2 } else { 0 }, 3 => 3, _ => 0 }`, 5, 5},
+		{"a looping arm keeps every arm", `match n { 1 => 1, 2 => { for i in 0..3 { } 2 } 3 => 3, _ => 0 }`, 5, 5},
+		{"a guarded arm keeps every arm", `match n { 1 if a => 1, 2 => 2, 3 => 3, _ => 0 }`, 5, 5},
+		{"an arm with a question mark keeps every arm", `match n { 1 => 1, 2 => { r?; 2 } _ => 0 }`, 4, 4},
+		{"a closure in an arm keeps every arm", `match n { 1 => 1, 2 => { let f = |x| if x { 1 } else { 0 }; f(a) } _ => 0 }`, 4, 4},
+		{"the outer match of a nested dispatch is kept", `match n { 1 => match n { 2 => 2, 3 => 3, _ => 0 }, 4 => match n { 5 => 5, _ => 0 }, _ => 0 }`, 6, 5},
+		{"matches are collapsed one by one", `match n { 1 => 1, 2 => 2, _ => 0 }; match n { 3 => 3, 4 => 4, _ => 0 }`, 5, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			source := "fn f(x: i32) -> i32 { x }\n\nfn g(a: bool, n: i32, r: Result<i32, ()>) -> i32 {\n\t" + tc.body + "\n}\n"
+			fn := analyze(t, source)["g"]
+			if fn.Complexity != tc.want {
+				t.Errorf("complexity = %d, want %d", fn.Complexity, tc.want)
+			}
+			if fn.EffectiveComplexity != tc.effective {
+				t.Errorf("effective complexity = %d, want %d", fn.EffectiveComplexity, tc.effective)
+			}
+		})
+	}
+}

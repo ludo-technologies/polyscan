@@ -135,6 +135,56 @@ func TestRiskLevel(t *testing.T) {
 	}
 }
 
+// A key handler whose arms all delegate reports its full cyclomatic
+// complexity but is not medium risk: the arm count measures the width of
+// the key table, not branching.
+func TestRiskLevelFollowsCollapsedDispatch(t *testing.T) {
+	dir := t.TempDir()
+	source := `package p
+
+func Dispatch(key int) int {
+	switch key {
+	case 1:
+		return one()
+	case 2:
+		return two()
+	case 3:
+		return three()
+	case 4:
+		return four()
+	case 5:
+		return five()
+	case 6:
+		return six()
+	case 7:
+		return seven()
+	case 8:
+		return eight()
+	case 9:
+		return nine()
+	}
+	return 0
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "dispatch.go"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Analyze([]string{dir}, Options{Complexity: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	fn := report.Complexity.Functions[0]
+	if fn.Complexity != 10 {
+		t.Errorf("complexity = %d, want 10", fn.Complexity)
+	}
+	if fn.RiskLevel != domain.RiskLevelLow {
+		t.Errorf("risk level = %s, want %s", fn.RiskLevel, domain.RiskLevelLow)
+	}
+	if report.Complexity.Summary.MaxComplexity != 10 || report.Complexity.Summary.MediumRiskFunctions != 0 {
+		t.Errorf("summary = %+v, want max complexity 10 and no medium-risk function", report.Complexity.Summary)
+	}
+}
+
 func TestAnalyzeRust(t *testing.T) {
 	report, err := Analyze([]string{"../../testdata/rust"}, Options{Complexity: true, Clones: true}, nil)
 	if err != nil {

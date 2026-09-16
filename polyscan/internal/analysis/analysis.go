@@ -54,8 +54,13 @@ type Function struct {
 	Decisions map[string]int `json:"decisions"`
 	// NestingDepth is the deepest chain of nested control structures, with
 	// the function body at 0.
-	NestingDepth int              `json:"nesting_depth"`
-	RiskLevel    domain.RiskLevel `json:"risk_level"`
+	NestingDepth int `json:"nesting_depth"`
+	// RiskLevel classifies the function. It is derived from the complexity
+	// with flat dispatch collapsed, not from Complexity itself: a switch
+	// whose every arm is straight-line code is a lookup table, and its arm
+	// count would otherwise carry a key handler or a state dispatcher over
+	// the threshold on its width alone.
+	RiskLevel domain.RiskLevel `json:"risk_level"`
 }
 
 // ComplexitySummary aggregates every analyzed function. Report filters only
@@ -313,7 +318,7 @@ func newFunction(fn engine.Function, language *engine.Language, display string) 
 		Complexity:   fn.Complexity,
 		Decisions:    fn.Decisions,
 		NestingDepth: fn.NestingDepth,
-		RiskLevel:    RiskLevel(fn.Complexity),
+		RiskLevel:    RiskLevel(fn.EffectiveComplexity),
 	}
 }
 
