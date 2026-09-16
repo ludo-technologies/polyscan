@@ -610,6 +610,7 @@ func TestEffectiveComplexityCollapsesReturnedPredicate(t *testing.T) {
 		{"each returned chain collapses on its own", `if a { return b && c && d }; return a && b && c`, 6, 4},
 		{"a closure's returned chain collapses on its own", `return func() bool { return a && b && c }()`, 3, 2},
 		{"a branch in the returned expression keeps every operator", `return a && b && func() bool { if c { return a }; return d }()`, 4, 4},
+		{"a closure's own statements stay outside the returned expression", `return func() bool { e := a && b && c; return e }()`, 3, 3},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -622,5 +623,14 @@ func TestEffectiveComplexityCollapsesReturnedPredicate(t *testing.T) {
 				t.Errorf("effective complexity = %d, want %d", fn.EffectiveComplexity, tc.effective)
 			}
 		})
+	}
+}
+
+// Each value a function returns is an expression of its own, so operators
+// that belong to different values are not collapsed together.
+func TestEffectiveComplexityGroupsEachReturnedValue(t *testing.T) {
+	fn := analyze(t, "package p\n\nfunc F(a, b, c, d bool) (bool, bool) {\n\treturn a && b, c && d\n}\n")["F"]
+	if fn.Complexity != 3 || fn.EffectiveComplexity != 3 {
+		t.Errorf("complexity = %d and effective complexity = %d, want 3 and 3", fn.Complexity, fn.EffectiveComplexity)
 	}
 }

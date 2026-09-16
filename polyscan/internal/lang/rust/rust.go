@@ -141,12 +141,27 @@ var Language = &engine.Language{
 `,
 	// A Rust function returns the tail expression of its body, and an
 	// expression-bodied closure its whole body, as much as it returns what
-	// a return expression names. The tail of an inner block is that block's
-	// value rather than the function's, and is left out.
+	// a return expression names. A tail is read this way when it is itself
+	// a boolean expression, parentheses and a negation included, so that
+	// wrapping a predicate does not change what it counts. The tail of an
+	// inner block is that block's value rather than the function's, and is
+	// left out. The statements of a block-bodied closure belong to the
+	// function that holds it, while its tail is read the way a function
+	// body's is.
 	Returns: `
 (return_expression) @return
-(function_item body: (block (binary_expression) @return .))
+(function_item body: (block [
+  (binary_expression)
+  (parenthesized_expression)
+  (unary_expression)
+] @return .))
 (closure_expression body: (binary_expression) @return)
+(closure_expression body: (block) @closure)
+(closure_expression body: (block [
+  (binary_expression)
+  (parenthesized_expression)
+  (unary_expression)
+] @return .))
 `,
 	// An if in the else arm of another if continues that if's chain. The
 	// else block of a let-else is one level deep, as it branches.

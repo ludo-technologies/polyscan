@@ -66,8 +66,12 @@ var Language = &engine.Language{
 (catch_clause) @exception
 (binary_expression operator: ["&&" "||"]) @logical_operator
 `,
+	// A lambda is not a definition, so its body holds statements of the
+	// function that contains it rather than of the expression the lambda
+	// sits in.
 	Returns: `
 (return_statement) @return
+(lambda_expression body: (compound_statement) @closure)
 `,
 	// An if in the else arm of another if continues that if's chain, also
 	// when an attribute such as [[likely]] wraps it in an

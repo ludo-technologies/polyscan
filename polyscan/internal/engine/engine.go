@@ -63,7 +63,11 @@ type Language struct {
 	// are not paths through the function, which the expression leaves by
 	// its one exit whichever operand decides the value. An expression that
 	// holds a decision point of another kind keeps every operator counted,
-	// and so does a language without a Returns query.
+	// and so does a language without a Returns query. A @closure capture
+	// marks the body of a function expression that is not a definition of
+	// its own, such as a Go function literal or a C++ lambda: a returned
+	// expression does not reach past one into the statements of the body it
+	// holds, whose own returns the query captures separately.
 	Returns string
 	// Members is an optional tree-sitter query for what a method does with
 	// its own type: @field captures the name of a field it reads or writes
@@ -305,6 +309,7 @@ const (
 	continuationCapture = "continuation"
 	caseCapture         = "case"
 	operatorCapture     = "logical_operator"
+	returnCapture       = "return"
 	typeCapture         = "type"
 	abstractCapture     = "abstract"
 	implCapture         = "impl"
@@ -656,39 +661,57 @@ func (l *Language) countDecisions(root *sitter.Node, source []byte, functions []
 				}
 			case operatorCapture:
 				// The operators of one returned expression, including the
-				// ones nested in its operands, share that expression.
-				point.group = innermostSpanOf(returns, at)
+				// ones nested in its operands, share that expression. An
+				// operator the query places in a closure body instead
+				// belongs to a statement of that body, not to the
+				// expression the body sits in.
+				if enclosing := innermostSpanOf(returns, at); enclosing.returns {
+					point.group = enclosing.span
+				}
 			}
 			fn.points = append(fn.points, point)
 		}
 	})
 }
 
+// returnSpan is one span the Returns query captures: a returned expression
+// or, when returns is false, the body of a closure a returned expression
+// does not reach into.
+type returnSpan struct {
+	span
+	returns bool
+}
+
 // returnSpans returns the spans the Returns query captures. A returned
 // expression inside another one, as a closure's is, gives a span of its
 // own, so the operators of each belong to the expression they are part of.
-func (l *Language) returnSpans(root *sitter.Node, source []byte) []span {
+func (l *Language) returnSpans(root *sitter.Node, source []byte) []returnSpan {
 	if l.returns == nil {
 		return nil
 	}
-	var spans []span
+	var spans []returnSpan
 	ForEachMatch(l.returns, root, source, func(match *sitter.QueryMatch) {
 		for _, capture := range match.Captures {
-			spans = append(spans, span{capture.Node.StartByte(), capture.Node.EndByte()})
+			spans = append(spans, returnSpan{
+				span:    span{capture.Node.StartByte(), capture.Node.EndByte()},
+				returns: l.returns.CaptureNameForId(capture.Index) == returnCapture,
+			})
 		}
 	})
 	return spans
 }
 
 // innermostSpanOf returns the tightest span that contains at, or the zero
-// span when none does.
-func innermostSpanOf(spans []span, at span) span {
-	var found span
+// span when none does. A closure body and the expression it sits in are
+// told apart by which of them is the tighter fit, so an operator inside
+// the body belongs to the body.
+func innermostSpanOf(spans []returnSpan, at span) returnSpan {
+	var found returnSpan
 	for _, candidate := range spans {
 		if !candidate.contains(at.start, at.end) {
 			continue
 		}
-		if found == (span{}) || found.contains(candidate.start, candidate.end) {
+		if found.span == (span{}) || found.contains(candidate.start, candidate.end) {
 			found = candidate
 		}
 	}

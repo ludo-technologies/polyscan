@@ -280,6 +280,7 @@ func TestEffectiveComplexityCollapsesReturnedPredicate(t *testing.T) {
 		{"each returned chain collapses on its own", `if (a) return b && n > 0 && n < 9; return a && b && n > 0;`, 6, 4},
 		{"a lambda's returned chain collapses on its own", `auto f = [&]() { return a && b && n > 0; }; return f();`, 3, 2},
 		{"a ternary in the returned expression keeps every operator", `return a && b && (n > 0 ? a : b);`, 4, 4},
+		{"a lambda's own statements stay outside the returned expression", `auto g = [&]() { bool c = a && b && n > 0; return c; }; return g() && a;`, 4, 4},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

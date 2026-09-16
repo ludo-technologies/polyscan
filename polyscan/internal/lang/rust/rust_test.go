@@ -434,6 +434,10 @@ func TestEffectiveComplexityCollapsesReturnedPredicate(t *testing.T) {
 		{"operators in a condition still count", `if a && b { return true; } false`, 3, 3},
 		{"the tail of an inner block is not a return", `let c = { a && b && n > 0 }; c`, 3, 3},
 		{"a closure's chain counts once", `xs.iter().filter(|x| a && b && *x > 0).count() > 0`, 3, 2},
+		{"a parenthesized tail chain counts once", `(a && b && n > 0)`, 3, 2},
+		{"a negated tail chain counts once", `!(a && b && n > 0)`, 3, 2},
+		{"a closure's own statements stay outside the returned expression", `a && xs.iter().any(|_| { let c = b && n > 0 && n < 9; c })`, 4, 4},
+		{"a block closure's tail chain counts once", `a && xs.iter().any(|_| { b && n > 0 && n < 9 })`, 4, 3},
 		{"a question mark in the returned expression keeps every operator", `return a && b && f(r?);`, 4, 4},
 	}
 	for _, tc := range cases {
