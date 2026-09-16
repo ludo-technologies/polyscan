@@ -3,6 +3,7 @@ package analyzer
 import (
 	"log"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
@@ -834,6 +835,49 @@ func TestCFGBuilder_Build_Class(t *testing.T) {
 
 	if cfg.Name != "Calculator" {
 		t.Errorf("CFG name should be 'Calculator', got %s", cfg.Name)
+	}
+}
+
+func TestCFGBuilder_BuildAll_NestedFunctionDeclarations(t *testing.T) {
+	// Repro for nested function declarations dropped (inside a named
+	// function) or duplicated as name_<line> (inside arrows/methods).
+	code := `
+const arrow = () => {
+  function inArrow(x) { if (x) { return 1; } return 0; }
+  return inArrow(1);
+};
+class K {
+  m() {
+    function inMethod(x) { if (x) { return 1; } return 0; }
+    return inMethod(1);
+  }
+}
+function named() {
+  function inNamed(x) { if (x) { return 1; } return 0; }
+  return inNamed(1);
+}
+`
+	ast := parseJS(t, code)
+	builder := NewCFGBuilder()
+	cfgs, err := builder.BuildAll(ast)
+	if err != nil {
+		t.Fatalf("BuildAll failed: %v", err)
+	}
+
+	names := make([]string, 0, len(cfgs))
+	for name := range cfgs {
+		names = append(names, name)
+	}
+
+	for _, want := range []string{"inArrow", "inMethod", "inNamed", "m", "named"} {
+		if cfgs[want] == nil {
+			t.Errorf("missing CFG %q; have %v", want, names)
+		}
+	}
+	for _, name := range names {
+		if strings.HasPrefix(name, "inArrow_") || strings.HasPrefix(name, "inMethod_") || strings.HasPrefix(name, "inNamed_") {
+			t.Errorf("duplicate suffixed CFG %q; have %v", name, names)
+		}
 	}
 }
 

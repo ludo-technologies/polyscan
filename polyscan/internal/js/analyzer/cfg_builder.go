@@ -127,6 +127,40 @@ func resolveFunctionName(node *parser.Node) string {
 	return fmt.Sprintf("anonymous_%d", node.Location.StartLine)
 }
 
+func functionLocationKey(n *parser.Node) string {
+	return fmt.Sprintf("%d:%d", n.Location.StartLine, n.Location.StartCol)
+}
+
+func recordFunctionLocations(cfgs map[string]*CFG, discovered map[string]bool) {
+	for _, cfg := range cfgs {
+		if cfg == nil {
+			continue
+		}
+		for _, block := range cfg.Blocks {
+			for _, value := range block.Statements {
+				stmt, ok := jsNode(value)
+				if !ok {
+					continue
+				}
+				if stmt.IsFunction() {
+					discovered[functionLocationKey(stmt)] = true
+				}
+			}
+		}
+	}
+}
+
+func (b *CFGBuilder) mergeNestedFunctionCFGs(src *CFGBuilder) {
+	if src == nil {
+		return
+	}
+	for name, cfg := range src.functionCFGs {
+		if _, exists := b.functionCFGs[name]; !exists {
+			b.functionCFGs[name] = cfg
+		}
+	}
+}
+
 // BuildAll builds CFGs for all functions in the AST
 func (b *CFGBuilder) BuildAll(node *parser.Node) (map[string]*CFG, error) {
 	if node == nil {
@@ -151,20 +185,7 @@ func (b *CFGBuilder) BuildAll(node *parser.Node) (map[string]*CFG, error) {
 	// Scan all blocks (not just Entry) because processStatement may place
 	// function nodes inside control-flow blocks (if_then, loop_body, etc.).
 	discoveredLocations := make(map[string]bool)
-	for _, cfg := range allCFGs {
-		for _, block := range cfg.Blocks {
-			for _, value := range block.Statements {
-				stmt, ok := jsNode(value)
-				if !ok {
-					continue
-				}
-				if stmt.IsFunction() {
-					key := fmt.Sprintf("%d:%d", stmt.Location.StartLine, stmt.Location.StartCol)
-					discoveredLocations[key] = true
-				}
-			}
-		}
-	}
+	recordFunctionLocations(allCFGs, discoveredLocations)
 
 	// Discover functions nested inside expressions (variable declarations,
 	// assignments, callbacks, object methods, etc.) that processStatement
@@ -179,10 +200,12 @@ func (b *CFGBuilder) BuildAll(node *parser.Node) (map[string]*CFG, error) {
 
 		funcName := resolveFunctionName(n)
 
-		// Skip if already discovered
+		// Skip if already discovered. Return false so we do not re-walk
+		// the body: nested declarations were merged from the builder that
+		// first produced this CFG (processStatement / earlier walk).
 		locationKey := fmt.Sprintf("%d:%d", n.Location.StartLine, n.Location.StartCol)
 		if discoveredLocations[locationKey] {
-			return true
+			return false
 		}
 		discoveredLocations[locationKey] = true
 
@@ -208,6 +231,8 @@ func (b *CFGBuilder) BuildAll(node *parser.Node) (map[string]*CFG, error) {
 					allCFGs[nestedName] = nestedCFG
 				}
 			}
+			recordFunctionLocations(map[string]*CFG{funcName: funcCFG}, discoveredLocations)
+			recordFunctionLocations(funcBuilder.functionCFGs, discoveredLocations)
 		}
 		return false // Don't descend into this function's body (Build handles it)
 	})
@@ -253,6 +278,7 @@ func (b *CFGBuilder) buildClass(node *parser.Node) {
 			if err == nil {
 				fullName := node.Name + "." + methodName
 				b.functionCFGs[fullName] = methodCFG
+				b.mergeNestedFunctionCFGs(funcBuilder)
 			}
 		}
 	}
@@ -300,6 +326,10 @@ func (b *CFGBuilder) processStatement(node *parser.Node) {
 		funcCFG, err := funcBuilder.Build(node)
 		if err == nil {
 			b.functionCFGs[funcName] = funcCFG
+			// Keep declarations nested inside this function; otherwise
+			// BuildAll marks their locations as discovered from Statements
+			// and never rebuilds them.
+			b.mergeNestedFunctionCFGs(funcBuilder)
 		}
 
 		// Add function expression as statement in current block

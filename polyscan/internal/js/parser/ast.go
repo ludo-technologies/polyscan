@@ -222,7 +222,9 @@ func (n *Node) AddChild(child *Node) {
 }
 
 // Walk traverses the AST depth-first and calls the visitor function for each node
-// If the visitor returns false, traversal of that branch is stopped
+// If the visitor returns false, traversal of that branch is stopped.
+// The same child pointer is not visited twice: ast_builder stores some
+// statements on both Children and Body (and similar overlapping fields).
 func (n *Node) Walk(visitor func(*Node) bool) {
 	if n == nil {
 		return
@@ -232,80 +234,59 @@ func (n *Node) Walk(visitor func(*Node) bool) {
 		return
 	}
 
-	for _, child := range n.Children {
+	seen := map[*Node]struct{}{}
+	walk := func(child *Node) {
+		if child == nil {
+			return
+		}
+		if _, ok := seen[child]; ok {
+			return
+		}
+		seen[child] = struct{}{}
 		child.Walk(visitor)
 	}
+
+	for _, child := range n.Children {
+		walk(child)
+	}
 	for _, param := range n.Params {
-		param.Walk(visitor)
+		walk(param)
 	}
 	for _, stmt := range n.Body {
-		stmt.Walk(visitor)
+		walk(stmt)
 	}
 	for _, caseNode := range n.Cases {
-		caseNode.Walk(visitor)
+		walk(caseNode)
 	}
 	for _, handler := range n.Handlers {
-		handler.Walk(visitor)
+		walk(handler)
 	}
 	for _, arg := range n.Arguments {
-		arg.Walk(visitor)
+		walk(arg)
 	}
 	for _, decl := range n.Declarations {
-		decl.Walk(visitor)
+		walk(decl)
 	}
 	for _, spec := range n.Specifiers {
-		spec.Walk(visitor)
+		walk(spec)
 	}
 
-	// Walk individual nodes
-	if n.Test != nil {
-		n.Test.Walk(visitor)
-	}
-	if n.Consequent != nil {
-		n.Consequent.Walk(visitor)
-	}
-	if n.Alternate != nil {
-		n.Alternate.Walk(visitor)
-	}
-	if n.Init != nil {
-		n.Init.Walk(visitor)
-	}
-	if n.Update != nil {
-		n.Update.Walk(visitor)
-	}
-	if n.Handler != nil {
-		n.Handler.Walk(visitor)
-	}
-	if n.Finalizer != nil {
-		n.Finalizer.Walk(visitor)
-	}
-	if n.Left != nil {
-		n.Left.Walk(visitor)
-	}
-	if n.Right != nil {
-		n.Right.Walk(visitor)
-	}
-	if n.Argument != nil {
-		n.Argument.Walk(visitor)
-	}
-	if n.Callee != nil {
-		n.Callee.Walk(visitor)
-	}
-	if n.Object != nil {
-		n.Object.Walk(visitor)
-	}
-	if n.Property != nil {
-		n.Property.Walk(visitor)
-	}
-	if n.Source != nil {
-		n.Source.Walk(visitor)
-	}
-	if n.Declaration != nil {
-		n.Declaration.Walk(visitor)
-	}
-	if n.TypeAnnotation != nil {
-		n.TypeAnnotation.Walk(visitor)
-	}
+	walk(n.Test)
+	walk(n.Consequent)
+	walk(n.Alternate)
+	walk(n.Init)
+	walk(n.Update)
+	walk(n.Handler)
+	walk(n.Finalizer)
+	walk(n.Left)
+	walk(n.Right)
+	walk(n.Argument)
+	walk(n.Callee)
+	walk(n.Object)
+	walk(n.Property)
+	walk(n.Source)
+	walk(n.Declaration)
+	walk(n.TypeAnnotation)
 }
 
 // GetChildren returns all child nodes in the parser's canonical order.
