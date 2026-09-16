@@ -1845,8 +1845,9 @@
 </span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="nt">"lcom"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">},</span>
 </span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span><span class="nt">"deps"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">},</span>
 </span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span><span class="nt">"module_quality"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">],</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="nt">"summary"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span>
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="p">}</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span><span class="nt">"diagnostics"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="p">],</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">  </span><span class="nt">"summary"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="p">}</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -1906,6 +1907,11 @@
 <td><code>module_quality</code></td>
 <td>array</td>
 <td>Per-file rollups joined across the analyses that ran</td>
+</tr>
+<tr>
+<td><code>diagnostics</code></td>
+<td>array</td>
+<td>One record per file the run could not read or parse. Omitted when every file was analyzed</td>
 </tr>
 <tr>
 <td><code>summary</code></td>
@@ -1968,7 +1974,7 @@
 <p><code>cbo_classes</code>, <code>high_coupling_classes</code>, and <code>medium_coupling_classes</code> count Go and Rust types and JavaScript/TypeScript modules together; for the latter the unit is the file despite the names. See <a href="../../cli/analyze/#cbo">the analyze reference</a>.</p>
 <p><code>arch_enabled</code> is always <code>false</code> and <code>architecture_score</code> is always <code>0</code>, because architecture validation is not implemented in polyscan. Ignore both.</p>
 <p><code>grade</code> is one of <code>A</code>, <code>B</code>, <code>C</code>, <code>D</code>, <code>F</code>, or <code>N/A</code>. The last appears only when the summary failed validation, in which case <code>health_score</code> is 0 as well.</p>
-<p><code>total_files</code>, <code>analyzed_files</code> and <code>skipped_files</code> describe the whole run, whichever analyses were selected: a file that could not be read or parsed is counted as skipped and charged the parse-error penalty even when complexity analysis did not run. The complexity object below carries its own file counts, which cover only the files that analysis saw, and <code>dead_code_files</code> counts the JavaScript/TypeScript files the dead code analysis covered, which is the divisor of the dead code penalty.</p>
+<p><code>total_files</code>, <code>analyzed_files</code> and <code>skipped_files</code> describe the whole run, whichever analyses were selected: a file that could not be read or parsed is counted as skipped and charged the parse-error penalty even when complexity analysis did not run. The top-level <code>diagnostics</code> array names each skipped file with a <code>code</code> of <code>read_error</code> or <code>parse_error</code> and a <code>message</code>, so a consumer can tell the two apart without parsing the <code>errors</code> strings of the individual analyses. The complexity object below carries its own file counts, which cover only the files that analysis saw, and <code>dead_code_files</code> counts the JavaScript/TypeScript files the dead code analysis covered, which is the divisor of the dead code penalty.</p>
 <p><code>project_scale</code> is a size label derived from <code>analyzed_files</code>. See <a href="../health-score/#project-scale">Project scale</a> for the thresholds. <code>total_loc</code> is the number of lines the clone analysis read, so it is <code>0</code> when clone analysis is turned off.</p>
 <h2 id="complexity"><code>complexity</code><a class="headerlink" href="#complexity" title="Permanent link">&para;</a></h2>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
