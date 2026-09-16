@@ -233,15 +233,15 @@ func TestNewProjectSnapshot_AccountsForFilesWhileReleasingThem(t *testing.T) {
 		t.Errorf("summary = %+v, want 1 analyzed and 2 skipped", response.Summary)
 	}
 
-	accounting := snapshot.Accounting()
-	if accounting.Total != 3 || accounting.Skipped != 2 || len(accounting.Errors) != 2 {
-		t.Fatalf("accounting = %+v, want 3 files with 2 skipped", accounting)
+	coverage := snapshot.Coverage()
+	if coverage.TotalFiles != 3 || coverage.AnalyzedFiles != 1 || coverage.SkippedFiles != 2 || len(coverage.Diagnostics) != 2 {
+		t.Fatalf("coverage = %+v, want 3 files with 2 skipped", coverage)
 	}
-	if !strings.HasPrefix(accounting.Errors[0], broken+": syntax error") {
-		t.Errorf("parse failure not reported per file: %q", accounting.Errors[0])
+	if parse := coverage.Diagnostics[0]; parse.FilePath != broken || parse.Code != domain.DiagnosticCodeParse || !strings.HasPrefix(parse.Message, "syntax error") {
+		t.Errorf("parse failure not reported per file: %+v", parse)
 	}
-	if !strings.HasPrefix(accounting.Errors[1], missing+": ") {
-		t.Errorf("read failure not reported per file: %q", accounting.Errors[1])
+	if read := coverage.Diagnostics[1]; read.FilePath != missing || read.Code != domain.DiagnosticCodeRead || read.Message == "" {
+		t.Errorf("read failure not reported per file: %+v", read)
 	}
 	for _, file := range snapshot.Files {
 		if file.AST != nil || file.Content != nil {
@@ -266,23 +266,23 @@ func TestNewProjectSnapshot_RejectsASecondAnalysis(t *testing.T) {
 	}
 }
 
-func TestProjectSnapshot_AccountingBeforeAnalysisPanics(t *testing.T) {
+func TestProjectSnapshot_CoverageBeforeAnalysisPanics(t *testing.T) {
 	snapshot := NewProjectSnapshot([]string{"unloaded.js"})
 	defer func() {
 		if recover() == nil {
-			t.Error("accounting before the analysis loaded the files must panic")
+			t.Error("coverage before the analysis loaded the files must panic")
 		}
 	}()
-	snapshot.Accounting()
+	snapshot.Coverage()
 }
 
-func TestBuildProjectSnapshot_AccountingIsAvailableAfterBuild(t *testing.T) {
+func TestBuildProjectSnapshot_CoverageIsAvailableAfterBuild(t *testing.T) {
 	valid := writeSnapshotFixture(t, "a.js", `function a() { return 1; }`)
 	broken := writeSnapshotFixture(t, "b.js", brokenSnapshotFixture)
 
-	accounting := BuildProjectSnapshot(context.Background(), []string{valid, broken}).Accounting()
+	coverage := BuildProjectSnapshot(context.Background(), []string{valid, broken}).Coverage()
 
-	if accounting.Total != 2 || accounting.Skipped != 1 {
-		t.Errorf("accounting = %+v, want 2 files with 1 skipped", accounting)
+	if coverage.TotalFiles != 2 || coverage.AnalyzedFiles != 1 || coverage.SkippedFiles != 1 {
+		t.Errorf("coverage = %+v, want 2 files with 1 skipped", coverage)
 	}
 }

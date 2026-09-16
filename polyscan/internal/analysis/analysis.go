@@ -109,8 +109,8 @@ type Report struct {
 	FileLines map[string]int `json:"-"`
 	// Warnings lists, per partial file, its syntax error.
 	Warnings []string `json:"warnings,omitempty"`
-	// Errors lists, per skipped file, why it was skipped.
-	Errors []string `json:"errors,omitempty"`
+	// Diagnostics say, per skipped file, why it was skipped.
+	Diagnostics []jsdomain.AnalysisDiagnostic `json:"diagnostics,omitempty"`
 }
 
 // ErrNoFiles reports that the paths hold no file of any language the
@@ -158,10 +158,10 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 			panic(fmt.Sprintf("no language for %s", file.path))
 		}
 		display := file.path
-		result, content, err := analyzeFile(language, file.abs)
-		if err != nil {
+		result, content, diagnostic := analyzeFile(language, file.abs, display)
+		if diagnostic != nil {
 			report.Files.Skipped++
-			report.Errors = append(report.Errors, fmt.Sprintf("%s: %v", display, err))
+			report.Diagnostics = append(report.Diagnostics, *diagnostic)
 			continue
 		}
 		lines := countLines(content)
@@ -276,14 +276,16 @@ func analyzeDeps(report *Report, files []collectedFile) error {
 
 // analyzeFile reads and analyzes one file, returning its contents as well
 // for the analyses that read more of it than the engine extracts.
-func analyzeFile(language *engine.Language, path string) (*engine.Result, []byte, error) {
+// analyzeFile reads and analyzes one file. A file that cannot be read or
+// parsed yields a diagnostic naming it by display path instead of a result.
+func analyzeFile(language *engine.Language, path, display string) (*engine.Result, []byte, *jsdomain.AnalysisDiagnostic) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, &jsdomain.AnalysisDiagnostic{FilePath: display, Code: jsdomain.DiagnosticCodeRead, Message: err.Error()}
 	}
 	result, err := language.Analyze(content)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, &jsdomain.AnalysisDiagnostic{FilePath: display, Code: jsdomain.DiagnosticCodeParse, Message: err.Error()}
 	}
 	return result, content, nil
 }

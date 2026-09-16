@@ -131,15 +131,15 @@ func collectSnapshotASTs(ctx context.Context, snapshot *ProjectSnapshot) (map[st
 	var errors []string
 
 	for _, file := range snapshot.Files {
-		if file.ReadErr != nil {
-			errors = append(errors, fmt.Sprintf("Failed to read %s: %v", file.Path, file.ReadErr))
-			continue
+		diagnostic, skipped := file.Diagnostic()
+		switch {
+		case !skipped:
+			asts[file.Path] = file.AST
+		case diagnostic.Code == domain.DiagnosticCodeRead:
+			errors = append(errors, diagnostic.String())
+		default:
+			warnings = append(warnings, diagnostic.String())
 		}
-		if file.ParseErr != nil {
-			warnings = append(warnings, fmt.Sprintf("Failed to parse %s: %v", file.Path, file.ParseErr))
-			continue
-		}
-		asts[file.Path] = file.AST
 	}
 
 	if ctx.Err() != nil {

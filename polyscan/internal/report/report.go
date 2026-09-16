@@ -42,10 +42,11 @@ func Combine(generic *analysis.Report, javascript *js.Result) (domain.AnalysisRe
 		if err != nil {
 			return domain.AnalysisResults{}, err
 		}
-		results.Files.Add(domain.FileAccounting{
-			Total:   generic.Files.Total,
-			Skipped: generic.Files.Skipped,
-			Errors:  generic.Errors,
+		results.Files.Add(domain.AnalysisCoverage{
+			TotalFiles:    generic.Files.Total,
+			AnalyzedFiles: generic.Files.Analyzed,
+			SkippedFiles:  generic.Files.Skipped,
+			Diagnostics:   generic.Diagnostics,
 		})
 		results.Complexity = mergeComplexity(complexity, results.Complexity)
 		results.Clone = mergeClones(genericClones(generic), results.Clone)
@@ -164,7 +165,7 @@ func genericComplexity(report *analysis.Report) (*domain.ComplexityResponse, err
 			ComplexityDistribution: distribution,
 		},
 		Warnings:    append([]string{}, report.Warnings...),
-		Errors:      append([]string{}, report.Errors...),
+		Errors:      domain.DiagnosticMessages(report.Diagnostics),
 		GeneratedAt: time.Now().Format(time.RFC3339),
 		Version:     version.Version,
 		// The generic engine classifies risk with the shared defaults; the

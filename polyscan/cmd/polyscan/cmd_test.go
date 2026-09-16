@@ -35,8 +35,13 @@ type analyzeJSON struct {
 			SkippedFiles   int `json:"skipped_files"`
 		} `json:"summary"`
 	} `json:"complexity"`
-	DeadCode json.RawMessage `json:"dead_code"`
-	CBO      *struct {
+	DeadCode    json.RawMessage `json:"dead_code"`
+	Diagnostics []struct {
+		FilePath string `json:"file_path"`
+		Code     string `json:"code"`
+		Message  string `json:"message"`
+	} `json:"diagnostics"`
+	CBO *struct {
 		Classes []struct {
 			Name     string `json:"name"`
 			Language string `json:"language"`
@@ -444,7 +449,11 @@ func TestAnalyzeChargesParseErrorsWithoutComplexity(t *testing.T) {
 	if doc.Summary.HealthScore >= 100 {
 		t.Errorf("health score = %d, want the parse-error penalty applied", doc.Summary.HealthScore)
 	}
-	for _, want := range []string{"1 of 2 files skipped (parse errors)", "broken.js: syntax error"} {
+	if len(doc.Diagnostics) != 1 || doc.Diagnostics[0].Code != "parse_error" ||
+		!strings.HasSuffix(doc.Diagnostics[0].FilePath, "broken.js") || !strings.HasPrefix(doc.Diagnostics[0].Message, "syntax error") {
+		t.Errorf("diagnostics = %+v, want the broken file's parse error", doc.Diagnostics)
+	}
+	for _, want := range []string{"1 of 2 files skipped (parse errors)", "broken.js] parse_error: syntax error"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output lacks %q:\n%s", want, out)
 		}

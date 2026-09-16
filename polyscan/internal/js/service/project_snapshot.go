@@ -135,27 +135,28 @@ func (s *ProjectSnapshot) Paths() []string {
 	return paths
 }
 
-// Accounting reports the run's file set the way the health score charges it:
-// every file the run covered, and those no analysis could use. It reads what
-// the analyses learned about each file, so it must be called once they have
-// finished; calling it earlier is a programming error and panics.
-func (s *ProjectSnapshot) Accounting() domain.FileAccounting {
-	accounting := domain.FileAccounting{Total: len(s.Files)}
+// Coverage reports the run's file set the way the health score charges it:
+// every file the run covered, those no analysis could use, and a typed
+// diagnostic per skipped file. It reads what the analyses learned about each
+// file, so it must be called once they have finished; calling it earlier is a
+// programming error and panics.
+func (s *ProjectSnapshot) Coverage() domain.AnalysisCoverage {
+	coverage := domain.AnalysisCoverage{
+		TotalFiles:  len(s.Files),
+		Diagnostics: make([]domain.AnalysisDiagnostic, 0),
+	}
 	for _, file := range s.Files {
 		if !file.loaded {
-			panic(fmt.Sprintf("file accounting requested before %s was analyzed", file.Path))
+			panic(fmt.Sprintf("file coverage requested before %s was analyzed", file.Path))
 		}
-		err := file.ReadErr
-		if err == nil {
-			err = file.ParseErr
-		}
-		if err == nil {
+		if diagnostic, skipped := file.Diagnostic(); skipped {
+			coverage.SkippedFiles++
+			coverage.Diagnostics = append(coverage.Diagnostics, diagnostic)
 			continue
 		}
-		accounting.Skipped++
-		accounting.Errors = append(accounting.Errors, fmt.Sprintf("%s: %v", file.Path, err))
+		coverage.AnalyzedFiles++
 	}
-	return accounting
+	return coverage
 }
 
 // validateRequest guards the AnalyzeSnapshot entry points. The snapshot
@@ -227,6 +228,19 @@ func (f *ProjectFile) release() {
 	f.Content = nil
 	f.AST = nil
 	f.cfgs = nil
+}
+
+// Diagnostic reports why the file cannot be analyzed, and false when it can.
+// It is the one place a read or parse failure is classified, so every
+// analysis and the run's coverage describe a skipped file the same way.
+func (f *ProjectFile) Diagnostic() (domain.AnalysisDiagnostic, bool) {
+	if f.ReadErr != nil {
+		return domain.AnalysisDiagnostic{FilePath: f.Path, Code: domain.DiagnosticCodeRead, Message: f.ReadErr.Error()}, true
+	}
+	if f.ParseErr != nil {
+		return domain.AnalysisDiagnostic{FilePath: f.Path, Code: domain.DiagnosticCodeParse, Message: f.ParseErr.Error()}, true
+	}
+	return domain.AnalysisDiagnostic{}, false
 }
 
 // Parsed reports whether the file has a valid parse tree to analyze.

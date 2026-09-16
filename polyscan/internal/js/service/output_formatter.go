@@ -122,7 +122,10 @@ type AnalyzeResponseJSON struct {
 	LCOM          *LCOMResponseJSON             `json:"lcom,omitempty"`
 	Deps          *DepsResponseJSON             `json:"deps,omitempty"`
 	ModuleQuality []domain.ModuleQualityMetrics `json:"module_quality,omitempty"`
-	Summary       *domain.AnalyzeSummary        `json:"summary,omitempty"`
+	// Diagnostics lists, per file the run could not read or parse, why. It
+	// describes the whole run, whichever analyses were selected.
+	Diagnostics []domain.AnalysisDiagnostic `json:"diagnostics,omitempty"`
+	Summary     *domain.AnalyzeSummary      `json:"summary,omitempty"`
 }
 
 // newComplexityResponseJSON is the single place the complexity payload is
@@ -153,6 +156,7 @@ func newAnalyzeResponseJSON(
 		GeneratedAt:   now.Format(time.RFC3339),
 		DurationMs:    duration.Milliseconds(),
 		ModuleQuality: BuildModuleQuality(results.Complexity, results.DeadCode, results.Deps),
+		Diagnostics:   results.Files.Diagnostics,
 		Summary:       BuildAnalyzeSummary(results),
 	}
 
@@ -289,9 +293,9 @@ func (f *OutputFormatterImpl) writeDeadCodeJSON(response *domain.DeadCodeRespons
 // so the parse-error penalty charges unparsable files whichever analyses ran.
 func BuildAnalyzeSummary(results domain.AnalysisResults) *domain.AnalyzeSummary {
 	summary := &domain.AnalyzeSummary{
-		TotalFiles:    results.Files.Total,
-		AnalyzedFiles: results.Files.Total - results.Files.Skipped,
-		SkippedFiles:  results.Files.Skipped,
+		TotalFiles:    results.Files.TotalFiles,
+		AnalyzedFiles: results.Files.AnalyzedFiles,
+		SkippedFiles:  results.Files.SkippedFiles,
 	}
 
 	if results.Complexity != nil {
@@ -374,7 +378,7 @@ func FormatProjectScale(summary *domain.AnalyzeSummary) string {
 // FormatCLISummary formats an AnalyzeSummary as a compact CLI string (pyscn-style).
 // skipped names the files no analysis could use; the summary carries their count,
 // but a count alone says the report is incomplete without saying what to fix.
-func FormatCLISummary(summary *domain.AnalyzeSummary, duration time.Duration, skipped []string) string {
+func FormatCLISummary(summary *domain.AnalyzeSummary, duration time.Duration, diagnostics []domain.AnalysisDiagnostic) string {
 	w := &strings.Builder{}
 
 	fmt.Fprintf(w, "\n\U0001F4CA Analysis Summary:\n")
@@ -383,8 +387,8 @@ func FormatCLISummary(summary *domain.AnalyzeSummary, duration time.Duration, sk
 	if summary.SkippedFiles > 0 {
 		fmt.Fprintf(w, "⚠️  %d of %d files skipped (parse errors) - excluded from every score below\n",
 			summary.SkippedFiles, summary.TotalFiles)
-		for _, entry := range skipped {
-			fmt.Fprintf(w, "    %s\n", entry)
+		for _, diagnostic := range diagnostics {
+			fmt.Fprintf(w, "    %s\n", diagnostic)
 		}
 	}
 	fmt.Fprintf(w, "Total time: %dms\n", duration.Milliseconds())

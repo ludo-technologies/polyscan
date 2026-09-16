@@ -166,11 +166,13 @@ func TestRun_AccountsForSkippedFilesWhicheverAnalysesRan(t *testing.T) {
 		"deadcode and clones": {DeadCode: true, Clones: true},
 	} {
 		result := Run(context.Background(), files, config.DefaultConfig(), selected)
-		if result.Files.Total != 2 || result.Files.Skipped != 1 {
+		if result.Files.TotalFiles != 2 || result.Files.AnalyzedFiles != 1 || result.Files.SkippedFiles != 1 {
 			t.Errorf("%s: files = %+v, want 2 files with 1 skipped", name, result.Files)
 		}
-		if len(result.Files.Errors) != 1 || !strings.HasPrefix(result.Files.Errors[0], broken+": syntax error") {
-			t.Errorf("%s: errors = %v, want the broken file named", name, result.Files.Errors)
+		diagnostics := result.Files.Diagnostics
+		if len(diagnostics) != 1 || diagnostics[0].FilePath != broken || diagnostics[0].Code != domain.DiagnosticCodeParse ||
+			!strings.HasPrefix(diagnostics[0].Message, "syntax error") {
+			t.Errorf("%s: diagnostics = %+v, want the broken file's parse error", name, diagnostics)
 		}
 	}
 }

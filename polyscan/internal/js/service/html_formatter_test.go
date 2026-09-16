@@ -405,7 +405,7 @@ func TestWriteHTMLRendersTheOverviewFromAnalysisData(t *testing.T) {
 
 	var buf bytes.Buffer
 	formatter := NewOutputFormatter()
-	results := domain.AnalysisResults{Files: domain.FileAccounting{Total: 4, Skipped: 1}, Complexity: complexity}
+	results := domain.AnalysisResults{Files: domain.AnalysisCoverage{TotalFiles: 4, AnalyzedFiles: 3, SkippedFiles: 1}, Complexity: complexity}
 	if err := formatter.WriteHTML(results, &buf, 1200*time.Millisecond); err != nil {
 		t.Fatalf("WriteHTML failed: %v", err)
 	}

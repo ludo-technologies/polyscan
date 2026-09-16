@@ -24,16 +24,8 @@ type scannedFile struct {
 // only reads its configuration, so several files can be scanned at once.
 func scanFileForDeadCode(moduleAnalyzer *analyzer.ModuleAnalyzer, file *ProjectFile) fileAnalysis[*scannedFile] {
 	filePath := file.Path
-	if file.ReadErr != nil {
-		return fileAnalysis[*scannedFile]{
-			errors: []string{fmt.Sprintf("[%s] failed to read file: %v", filePath, file.ReadErr)},
-		}
-	}
-
-	if file.ParseErr != nil {
-		return fileAnalysis[*scannedFile]{
-			errors: []string{fmt.Sprintf("[%s] failed to parse file: %v", filePath, file.ParseErr)},
-		}
+	if diagnostic, skipped := file.Diagnostic(); skipped {
+		return fileAnalysis[*scannedFile]{errors: []string{diagnostic.String()}}
 	}
 	ast := file.AST
 

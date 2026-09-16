@@ -23,6 +23,7 @@ polyscan analyze --format json src/ > report.json
   "lcom": { },
   "deps": { },
   "module_quality": [ ],
+  "diagnostics": [ ],
   "summary": { }
 }
 ```
@@ -39,6 +40,7 @@ polyscan analyze --format json src/ > report.json
 | `lcom` | object | Present only when cohesion analysis ran (Go, Rust) |
 | `deps` | object | Present only when dependency analysis ran (Go, JavaScript/TypeScript) |
 | `module_quality` | array | Per-file rollups joined across the analyses that ran |
+| `diagnostics` | array | One record per file the run could not read or parse. Omitted when every file was analyzed |
 | `summary` | object | Always present |
 
 The six analysis keys are omitted entirely when `--select` excludes them or when no analyzed language has them, so consumers should check for their presence rather than assume it. Every other collection is present even when empty: a section with nothing to report carries `[]` or `{}`, never `null`.
@@ -106,7 +108,7 @@ The `*_enabled` flags say which dimensions actually ran and therefore which the 
 
 `grade` is one of `A`, `B`, `C`, `D`, `F`, or `N/A`. The last appears only when the summary failed validation, in which case `health_score` is 0 as well.
 
-`total_files`, `analyzed_files` and `skipped_files` describe the whole run, whichever analyses were selected: a file that could not be read or parsed is counted as skipped and charged the parse-error penalty even when complexity analysis did not run. The complexity object below carries its own file counts, which cover only the files that analysis saw, and `dead_code_files` counts the JavaScript/TypeScript files the dead code analysis covered, which is the divisor of the dead code penalty.
+`total_files`, `analyzed_files` and `skipped_files` describe the whole run, whichever analyses were selected: a file that could not be read or parsed is counted as skipped and charged the parse-error penalty even when complexity analysis did not run. The top-level `diagnostics` array names each skipped file with a `code` of `read_error` or `parse_error` and a `message`, so a consumer can tell the two apart without parsing the `errors` strings of the individual analyses. The complexity object below carries its own file counts, which cover only the files that analysis saw, and `dead_code_files` counts the JavaScript/TypeScript files the dead code analysis covered, which is the divisor of the dead code penalty.
 
 `project_scale` is a size label derived from `analyzed_files`. See [Project scale](health-score.md#project-scale) for the thresholds. `total_loc` is the number of lines the clone analysis read, so it is `0` when clone analysis is turned off.
 
