@@ -265,3 +265,31 @@ func TestEffectiveComplexityCollapsesFlatDispatch(t *testing.T) {
 		})
 	}
 }
+
+func TestEffectiveComplexityCollapsesReturnedPredicate(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		// want is the complexity, effective the value the risk level uses.
+		want, effective int
+	}{
+		{"a returned chain counts once", `return a && b && n > 0 && n < 9;`, 4, 2},
+		{"a guard and a returned chain", `if (!a || !b) return false; return a && n > 0 && n < 9;`, 5, 4},
+		{"operators in a condition still count", `if (a && b) return true; return false;`, 3, 3},
+		{"operators outside a return still count", `bool c = a && b && n > 0; return c;`, 3, 3},
+		{"each returned chain collapses on its own", `if (a) return b && n > 0 && n < 9; return a && b && n > 0;`, 6, 4},
+		{"a lambda's returned chain collapses on its own", `auto f = [&]() { return a && b && n > 0; }; return f();`, 3, 2},
+		{"a ternary in the returned expression keeps every operator", `return a && b && (n > 0 ? a : b);`, 4, 4},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fn := analyze(t, "bool f(bool a, bool b, int n) {\n\t"+tc.body+"\n}\n")["f"]
+			if fn.Complexity != tc.want {
+				t.Errorf("complexity = %d, want %d", fn.Complexity, tc.want)
+			}
+			if fn.EffectiveComplexity != tc.effective {
+				t.Errorf("effective complexity = %d, want %d", fn.EffectiveComplexity, tc.effective)
+			}
+		})
+	}
+}

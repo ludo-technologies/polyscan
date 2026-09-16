@@ -139,6 +139,15 @@ var Language = &engine.Language{
 (let_chain "&&" @logical_operator)
 (try_expression) @try_operator
 `,
+	// A Rust function returns the tail expression of its body, and an
+	// expression-bodied closure its whole body, as much as it returns what
+	// a return expression names. The tail of an inner block is that block's
+	// value rather than the function's, and is left out.
+	Returns: `
+(return_expression) @return
+(function_item body: (block (binary_expression) @return .))
+(closure_expression body: (binary_expression) @return)
+`,
 	// An if in the else arm of another if continues that if's chain. The
 	// else block of a let-else is one level deep, as it branches.
 	Nesting: `

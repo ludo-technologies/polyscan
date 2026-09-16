@@ -133,6 +133,9 @@ var Language = &engine.Language{
 (communication_case) @case
 (binary_expression operator: ["&&" "||"]) @logical_operator
 `,
+	Returns: `
+(return_statement) @return
+`,
 	// An if in the else arm of another if continues that if's chain.
 	Nesting: `
 (if_statement) @nesting

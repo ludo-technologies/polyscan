@@ -66,6 +66,9 @@ var Language = &engine.Language{
 (catch_clause) @exception
 (binary_expression operator: ["&&" "||"]) @logical_operator
 `,
+	Returns: `
+(return_statement) @return
+`,
 	// An if in the else arm of another if continues that if's chain, also
 	// when an attribute such as [[likely]] wraps it in an
 	// attributed_statement. A catch clause is part of the try statement

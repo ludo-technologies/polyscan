@@ -185,6 +185,42 @@ func Dispatch(key int) int {
 	}
 }
 
+// A validation predicate reports its full cyclomatic complexity but is not
+// medium risk: the operators of the expression it returns decide a value,
+// not a path through the function.
+func TestRiskLevelFollowsCollapsedReturnedPredicate(t *testing.T) {
+	dir := t.TempDir()
+	source := `package p
+
+func Valid(s Spec) bool {
+	if s.Name == "" || s.Owner == "" {
+		return false
+	}
+	return s.Min >= 0 && s.Max >= s.Min && s.Step > 0 &&
+		s.Start >= s.Min && s.Start <= s.Max &&
+		s.Retries >= 0 && s.Retries <= 10 &&
+		len(s.Tags) > 0 && len(s.Tags) <= 8
+}
+`
+	if err := os.WriteFile(filepath.Join(dir, "valid.go"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report, err := Analyze([]string{dir}, Options{Complexity: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	fn := report.Complexity.Functions[0]
+	if fn.Complexity != 11 {
+		t.Errorf("complexity = %d, want 11", fn.Complexity)
+	}
+	if fn.RiskLevel != domain.RiskLevelLow {
+		t.Errorf("risk level = %s, want %s", fn.RiskLevel, domain.RiskLevelLow)
+	}
+	if report.Complexity.Summary.MaxComplexity != 11 || report.Complexity.Summary.MediumRiskFunctions != 0 {
+		t.Errorf("summary = %+v, want max complexity 11 and no medium-risk function", report.Complexity.Summary)
+	}
+}
+
 func TestAnalyzeRust(t *testing.T) {
 	report, err := Analyze([]string{"../../testdata/rust"}, Options{Complexity: true, Clones: true}, nil)
 	if err != nil {

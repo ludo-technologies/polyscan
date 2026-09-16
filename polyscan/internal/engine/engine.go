@@ -47,13 +47,24 @@ type Language struct {
 	// Decisions is a tree-sitter query in which every capture is one
 	// decision point. The point is attributed to the innermost function
 	// that contains it and counted under the capture's name, so the capture
-	// names double as the breakdown reported next to the complexity. The
-	// name @case is reserved for the arm of a switch-like construct: such a
-	// capture must span the whole arm, body included, and the arms of one
-	// construct must be siblings, so that a dispatch whose arms hold no
-	// decision points of their own can be collapsed for
-	// Function.EffectiveComplexity.
+	// names double as the breakdown reported next to the complexity. Two
+	// names are reserved, so that a construct holding no decision point of
+	// its own can be collapsed for Function.EffectiveComplexity: @case is
+	// the arm of a switch-like construct, and must span the whole arm, body
+	// included, with the arms of one construct as siblings; @logical_operator
+	// is a short-circuit operator, and is collapsed per returned expression
+	// the Returns query captures.
 	Decisions string
+	// Returns is an optional tree-sitter query whose @return captures an
+	// expression a function hands back, be it a return statement or the
+	// tail expression a language returns implicitly. The short-circuit
+	// operators inside one such expression count as a single decision point
+	// for Function.EffectiveComplexity: the operands of a boolean predicate
+	// are not paths through the function, which the expression leaves by
+	// its one exit whichever operand decides the value. An expression that
+	// holds a decision point of another kind keeps every operator counted,
+	// and so does a language without a Returns query.
+	Returns string
 	// Members is an optional tree-sitter query for what a method does with
 	// its own type: @field captures the name of a field it reads or writes
 	// and @call the name of a sibling method it calls. A match may also
@@ -122,6 +133,7 @@ type Language struct {
 	compileErr  error
 	definitions *sitter.Query
 	decisions   *sitter.Query
+	returns     *sitter.Query
 	nesting     *sitter.Query
 	scopes      *sitter.Query
 	members     *sitter.Query
@@ -178,12 +190,15 @@ type Function struct {
 	// counts one per case with the default excluded, and each short-circuit
 	// operator counts one.
 	Complexity int
-	// EffectiveComplexity is the complexity with flat dispatch collapsed:
-	// a switch-like construct whose every arm holds no decision point of
-	// its own counts one rather than one per arm, because such a construct
-	// is a lookup table rather than branching logic. It is the value the
-	// risk level is derived from; Complexity itself stays comparable with
-	// gocyclo and the other cyclomatic complexity tools.
+	// EffectiveComplexity is the complexity with every flat construct
+	// collapsed: a switch-like construct whose every arm holds no decision
+	// point of its own counts one rather than one per arm, because such a
+	// construct is a lookup table rather than branching logic, and the
+	// short-circuit operators of a returned expression that holds nothing
+	// else count one rather than one each, because such an expression is a
+	// boolean predicate rather than a choice between paths. It is the value
+	// the risk level is derived from; Complexity itself stays comparable
+	// with gocyclo and the other cyclomatic complexity tools.
 	EffectiveComplexity int
 	// Decisions breaks the decision points down by the name of the capture
 	// that produced them.
@@ -225,16 +240,17 @@ type Function struct {
 }
 
 // decisionPoint is one decision point of a function: the span of the node
-// it was captured on, and the dispatch it belongs to when it is a switch
-// arm.
+// it was captured on, and the construct it is one counting of when it is a
+// switch arm or a short-circuit operator.
 type decisionPoint struct {
 	at span
-	// dispatch spans the switch-like construct a @case arm belongs to,
-	// which is the node holding its arms. It identifies the construct, no
-	// two of which span the same bytes, and bounds the code that decides
-	// whether the construct is flat. It is the zero span for every other
-	// kind of decision point.
-	dispatch span
+	// group spans the construct this point is counted as part of: the
+	// switch-like construct a @case arm belongs to, which is the node
+	// holding its arms, or the returned expression a @logical_operator sits
+	// in. It identifies the construct, no two of which span the same bytes,
+	// and bounds the code that decides whether the construct is flat. It is
+	// the zero span for every other kind of decision point.
+	group span
 }
 
 // Type is one named type of a source file, with every reference to another
@@ -288,6 +304,7 @@ const (
 	declarationCapture  = "declaration"
 	continuationCapture = "continuation"
 	caseCapture         = "case"
+	operatorCapture     = "logical_operator"
 	typeCapture         = "type"
 	abstractCapture     = "abstract"
 	implCapture         = "impl"
@@ -415,6 +432,14 @@ func (l *Language) compile() error {
 		if err != nil {
 			l.compileErr = fmt.Errorf("%s decisions query: %w", l.Name, err)
 			return
+		}
+		if l.Returns != "" {
+			returns, err := sitter.NewQuery([]byte(l.Returns), l.Grammar)
+			if err != nil {
+				l.compileErr = fmt.Errorf("%s returns query: %w", l.Name, err)
+				return
+			}
+			l.returns = returns
 		}
 		if l.Nesting != "" {
 			nesting, err := sitter.NewQuery([]byte(l.Nesting), l.Grammar)
@@ -609,6 +634,7 @@ func countCodeLines(content string) int {
 }
 
 func (l *Language) countDecisions(root *sitter.Node, source []byte, functions []Function) {
+	returns := l.returnSpans(root, source)
 	ForEachMatch(l.decisions, root, source, func(match *sitter.QueryMatch) {
 		for _, capture := range match.Captures {
 			node := capture.Node
@@ -618,38 +644,78 @@ func (l *Language) countDecisions(root *sitter.Node, source []byte, functions []
 			}
 			name := l.decisions.CaptureNameForId(capture.Index)
 			fn.Decisions[name]++
-			point := decisionPoint{at: span{node.StartByte(), node.EndByte()}}
-			// The arms of one switch are siblings, so their parent, the
-			// switch itself or the block holding them, is the construct.
-			if name == caseCapture {
+			at := span{node.StartByte(), node.EndByte()}
+			point := decisionPoint{at: at}
+			switch name {
+			case caseCapture:
+				// The arms of one switch are siblings, so their parent,
+				// the switch itself or the block holding them, is the
+				// construct.
 				if parent := node.Parent(); parent != nil {
-					point.dispatch = span{parent.StartByte(), parent.EndByte()}
+					point.group = span{parent.StartByte(), parent.EndByte()}
 				}
+			case operatorCapture:
+				// The operators of one returned expression, including the
+				// ones nested in its operands, share that expression.
+				point.group = innermostSpanOf(returns, at)
 			}
 			fn.points = append(fn.points, point)
 		}
 	})
 }
 
+// returnSpans returns the spans the Returns query captures. A returned
+// expression inside another one, as a closure's is, gives a span of its
+// own, so the operators of each belong to the expression they are part of.
+func (l *Language) returnSpans(root *sitter.Node, source []byte) []span {
+	if l.returns == nil {
+		return nil
+	}
+	var spans []span
+	ForEachMatch(l.returns, root, source, func(match *sitter.QueryMatch) {
+		for _, capture := range match.Captures {
+			spans = append(spans, span{capture.Node.StartByte(), capture.Node.EndByte()})
+		}
+	})
+	return spans
+}
+
+// innermostSpanOf returns the tightest span that contains at, or the zero
+// span when none does.
+func innermostSpanOf(spans []span, at span) span {
+	var found span
+	for _, candidate := range spans {
+		if !candidate.contains(at.start, at.end) {
+			continue
+		}
+		if found == (span{}) || found.contains(candidate.start, candidate.end) {
+			found = candidate
+		}
+	}
+	return found
+}
+
 // effectiveComplexity is the function's complexity with every flat
-// dispatch collapsed to a single decision point. A dispatch is flat when
-// it holds no decision point beyond its own arms: every arm is then
-// straight-line code, and the arm count measures the width of a lookup
-// table rather than the branching the risk level is meant to describe. An
-// arm that branches, loops or holds a nested switch leaves its whole
-// dispatch counted arm by arm.
+// construct collapsed to a single decision point. A construct is flat when
+// it holds no decision point beyond the ones it is counted by: the arms of
+// a switch are then straight-line code and their count measures the width
+// of a lookup table rather than branching, and the short-circuit operators
+// of a returned expression are then a boolean predicate whose operands
+// decide a value rather than a path. An arm that branches, loops or holds
+// a nested switch, and a returned expression that holds a branch of any
+// other kind, leave their construct counted point by point.
 func (fn *Function) effectiveComplexity() int {
 	complexity := 1
-	arms := map[span]int{}
+	groups := map[span]int{}
 	for _, point := range fn.points {
-		if point.dispatch == (span{}) {
+		if point.group == (span{}) {
 			complexity++
 			continue
 		}
-		arms[point.dispatch]++
+		groups[point.group]++
 	}
-	for dispatch, count := range arms {
-		if fn.isFlatDispatch(dispatch) {
+	for group, count := range groups {
+		if fn.isFlat(group) {
 			complexity++
 			continue
 		}
@@ -658,17 +724,17 @@ func (fn *Function) effectiveComplexity() int {
 	return complexity
 }
 
-// isFlatDispatch reports that the construct holds no decision point other
-// than the arms it is counted by. Testing the whole construct rather than
-// each arm covers the arms cyclomatic complexity leaves uncounted, the
+// isFlat reports that the construct holds no decision point other than the
+// ones it is counted by. Testing the whole construct rather than each of
+// those points covers what cyclomatic complexity leaves uncounted, the
 // default of a Go or C++ switch and the last arm of a Rust match, whose
 // branching says as much about the construct as any other arm's.
-func (fn *Function) isFlatDispatch(dispatch span) bool {
+func (fn *Function) isFlat(group span) bool {
 	for _, point := range fn.points {
-		if point.dispatch == dispatch {
+		if point.group == group {
 			continue
 		}
-		if dispatch.contains(point.at.start, point.at.end) {
+		if group.contains(point.at.start, point.at.end) {
 			return false
 		}
 	}
