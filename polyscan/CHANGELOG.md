@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-17
+
 ### Added
 
 - The analyze JSON document carries a top-level `schema_version`, currently `1`, that changes only when a documented key is renamed, removed or changes type
+- The analyze JSON document carries a top-level `diagnostics` array, one record per file the run could not read or parse, each with a `code` of `read_error` or `parse_error`, the file path and a message. The key is omitted when every file was analyzed. Before, a consumer had to parse the `errors` strings of the individual analyses to tell a read failure from a parse failure (#140)
 
 ### Changed
 
@@ -23,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go and Rust cohesion (LCOM4) no longer counts a stub method as a group of its own. A method that touches no field, calls no sibling method and is called by none, such as a constant return an interface requires or a placeholder that only panics, is listed in `excluded_methods` instead. Before, a type implementing a four-method interface with one stateful method reported `lcom4: 4` (#139)
 - A JavaScript/TypeScript selection that parses but declares no function, such as a directory of type declarations, is a normal empty complexity result. Before, the whole complexity section was dropped with "no functions found to analyze"
 - Every collection in the analyze JSON document is present even when empty, as `[]` or `{}`. Before, `dead_code.files`, the coupling summary, `base_classes`, the dependency cycle and coupling lists, `longest_chains`, and each module's `direct_dependencies`, `dependents` and `public_interface` were `null` when there was nothing to list, and `public_interface` was never filled in; it now lists the module's exports. The never-populated `most_depended_upon_classes` key is gone from the coupling summary
+- File paths in a report are spelled the way the analyzed path was given on the command line, for every language. Before, when the target resolved outside the working directory, Go, Rust and C++ findings carried an absolute path while JavaScript/TypeScript findings carried the relative one, so a single report held two spellings of the same file (#136)
 - Go methods declared on a type-alias receiver (`type Alias = Base`; `func (a *Alias) M()`) are attributed to the aliased type in the coupling (CBO) analysis, and a field or parameter typed by an alias credits that type too. Before, the alias was not a declared type, the methods were dropped, and `Base` reported no coupling (#133)
 
 ## [0.3.3] - 2026-09-12
