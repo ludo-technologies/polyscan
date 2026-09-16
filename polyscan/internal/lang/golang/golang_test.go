@@ -595,3 +595,42 @@ func TestEffectiveComplexityCollapsesFlatDispatch(t *testing.T) {
 		})
 	}
 }
+
+func TestEffectiveComplexityCollapsesReturnedPredicate(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		// want is the complexity, effective the value the risk level uses.
+		want, effective int
+	}{
+		{"a returned chain counts once", `return a && b && c && d`, 4, 2},
+		{"a guard and a returned chain", `if !a || !b { return false }; return b && c && d`, 5, 4},
+		{"operators in a condition still count", `if a && b { return c }; return d`, 3, 3},
+		{"operators outside a return still count", `e := a && b && c; return e`, 3, 3},
+		{"each returned chain collapses on its own", `if a { return b && c && d }; return a && b && c`, 6, 4},
+		{"a closure's returned chain collapses on its own", `return func() bool { return a && b && c }()`, 3, 2},
+		{"a branch in the returned expression keeps every operator", `return a && b && func() bool { if c { return a }; return d }()`, 4, 4},
+		{"a closure's own statements stay outside the returned expression", `return func() bool { e := a && b && c; return e }()`, 3, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			source := "package p\n\nvar a, b, c, d bool\n\nfunc F() bool {\n\t" + tc.body + "\n}\n"
+			fn := analyze(t, source)["F"]
+			if fn.Complexity != tc.want {
+				t.Errorf("complexity = %d, want %d", fn.Complexity, tc.want)
+			}
+			if fn.EffectiveComplexity != tc.effective {
+				t.Errorf("effective complexity = %d, want %d", fn.EffectiveComplexity, tc.effective)
+			}
+		})
+	}
+}
+
+// Each value a function returns is an expression of its own, so operators
+// that belong to different values are not collapsed together.
+func TestEffectiveComplexityGroupsEachReturnedValue(t *testing.T) {
+	fn := analyze(t, "package p\n\nfunc F(a, b, c, d bool) (bool, bool) {\n\treturn a && b, c && d\n}\n")["F"]
+	if fn.Complexity != 3 || fn.EffectiveComplexity != 3 {
+		t.Errorf("complexity = %d and effective complexity = %d, want 3 and 3", fn.Complexity, fn.EffectiveComplexity)
+	}
+}

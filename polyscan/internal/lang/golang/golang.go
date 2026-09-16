@@ -133,6 +133,14 @@ var Language = &engine.Language{
 (communication_case) @case
 (binary_expression operator: ["&&" "||"]) @logical_operator
 `,
+	// Each returned value is an expression of its own, so the operators of
+	// one do not combine with the operators of another. A function literal
+	// is not a definition, so its body holds statements of the function
+	// that contains it rather than of the expression the literal sits in.
+	Returns: `
+(return_statement (expression_list (_) @return))
+(func_literal body: (block) @closure)
+`,
 	// An if in the else arm of another if continues that if's chain.
 	Nesting: `
 (if_statement) @nesting
