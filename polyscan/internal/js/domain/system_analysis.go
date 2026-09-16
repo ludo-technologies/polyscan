@@ -117,18 +117,19 @@ type DependencyAnalysisResult struct {
 	MaxDepth      int              `json:"max_depth" yaml:"max_depth"`           // Maximum dependency depth
 }
 
-// ModuleDependencyMetrics contains dependency metrics for a single module
+// ModuleDependencyMetrics contains dependency metrics for a single module.
+//
+// It carries only what the dependency graph itself measures. Size metrics are
+// reported per file in module_quality, which is built from the complexity
+// records, and the full edge set is in dependency_matrix, so a consumer that
+// wants the transitive closure can walk it there.
 type ModuleDependencyMetrics struct {
 	// Basic information
 	ModuleName string `json:"module_name" yaml:"module_name"` // Module name
-	Package    string `json:"package" yaml:"package"`         // Package name
 	FilePath   string `json:"file_path" yaml:"file_path"`     // File path
 	IsPackage  bool   `json:"is_package" yaml:"is_package"`   // True if this is a package
 
-	// Size metrics
-	LinesOfCode     int      `json:"lines_of_code" yaml:"lines_of_code"`       // Total lines of code
-	FunctionCount   int      `json:"function_count" yaml:"function_count"`     // Number of functions
-	ClassCount      int      `json:"class_count" yaml:"class_count"`           // Number of classes
+	// Public interface
 	PublicInterface []string `json:"public_interface" yaml:"public_interface"` // Public names exported
 
 	// Coupling metrics (Robert Martin's metrics)
@@ -139,14 +140,11 @@ type ModuleDependencyMetrics struct {
 	Distance         float64 `json:"distance" yaml:"distance"`                   // D - distance from main sequence
 
 	// Quality metrics
-	Maintainability float64   `json:"maintainability" yaml:"maintainability"` // Maintainability index (0-100)
-	TechnicalDebt   float64   `json:"technical_debt" yaml:"technical_debt"`   // Estimated technical debt in hours
-	RiskLevel       RiskLevel `json:"risk_level" yaml:"risk_level"`           // Overall risk assessment
+	RiskLevel RiskLevel `json:"risk_level" yaml:"risk_level"` // Overall risk assessment
 
 	// Dependencies
-	DirectDependencies     []string `json:"direct_dependencies" yaml:"direct_dependencies"`         // Modules this directly depends on
-	TransitiveDependencies []string `json:"transitive_dependencies" yaml:"transitive_dependencies"` // All transitive dependencies
-	Dependents             []string `json:"dependents" yaml:"dependents"`                           // Modules that depend on this one
+	DirectDependencies []string `json:"direct_dependencies" yaml:"direct_dependencies"` // Modules this directly depends on
+	Dependents         []string `json:"dependents" yaml:"dependents"`                   // Modules that depend on this one
 }
 
 // CircularDependencyAnalysis contains circular dependency analysis results
