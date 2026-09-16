@@ -376,7 +376,7 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
 }
 ```
 
-`lcom4` is the number of groups the type's methods fall into when two methods are connected by a shared field or a call between them; `method_groups` lists them. `excluded_methods` counts methods without a receiver parameter, which cannot reach instance state. `summary` carries `total_classes`, `average_lcom`, `max_lcom`, `min_lcom` and the `low_risk_classes`, `medium_risk_classes` and `high_risk_classes` counts.
+`lcom4` is the number of groups the type's methods fall into when two methods are connected by a shared field or a call between them; `method_groups` lists them. `excluded_methods` counts the methods that stay out of the graph: methods without a receiver parameter, which cannot reach instance state, and stub methods that touch no field, call no sibling method and are called by none, such as the constant returns an interface requires or a placeholder that only panics. `summary` carries `total_classes`, `average_lcom`, `max_lcom`, `min_lcom` and the `low_risk_classes`, `medium_risk_classes` and `high_risk_classes` counts.
 
 ## `deps`
 

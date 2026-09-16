@@ -26,8 +26,11 @@ type Class struct {
 	// other.
 	LCOM4 int `json:"lcom4"`
 	// TotalMethods counts every method of the type; ExcludedMethods the
-	// ones without a receiver parameter, which cannot reach instance state
-	// and stay out of the graph.
+	// ones that stay out of the graph: methods without a receiver
+	// parameter, which cannot reach instance state, and stubs that touch
+	// no field, call no sibling and are called by none, such as
+	// interface-mandated constant returns or panicking placeholders,
+	// which would each stand as a component of their own.
 	TotalMethods      int              `json:"total_methods"`
 	ExcludedMethods   int              `json:"excluded_methods"`
 	InstanceVariables []string         `json:"instance_variables"`
@@ -172,7 +175,8 @@ func (b *cohesionBuilder) build() *Cohesion {
 
 // measure computes the class's LCOM4. A call whose name is not a sibling
 // method, such as a call of a function-typed field, is an access to that
-// field.
+// field. A method that reaches no field and takes part in no sibling call
+// is a stub and is excluded rather than counted as its own component.
 func (c *classMethods) measure() Class {
 	sort.SliceStable(c.methods, func(i, j int) bool {
 		if c.methods[i].file != c.methods[j].file {
@@ -184,6 +188,14 @@ func (c *classMethods) measure() Class {
 	names := map[string]bool{}
 	for _, method := range c.methods {
 		names[strings.TrimPrefix(method.Name, prefix)] = true
+	}
+	called := map[string]bool{}
+	for _, method := range c.methods {
+		for call := range method.Calls {
+			if names[call] {
+				called[call] = true
+			}
+		}
 	}
 
 	class := Class{
@@ -198,12 +210,13 @@ func (c *classMethods) measure() Class {
 		if method.file == class.FilePath {
 			class.EndLine = max(class.EndLine, method.EndLine)
 		}
-		if !method.HasSelf {
+		name := strings.TrimPrefix(method.Name, prefix)
+		if !method.HasSelf || (len(method.Fields) == 0 && len(method.Calls) == 0 && !called[name]) {
 			class.ExcludedMethods++
 			continue
 		}
 		access := lcom.MethodAccess{
-			MethodName:   strings.TrimPrefix(method.Name, prefix),
+			MethodName:   name,
 			InstanceVars: map[string]bool{},
 			Calls:        map[string]bool{},
 		}
