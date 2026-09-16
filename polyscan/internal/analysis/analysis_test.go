@@ -9,6 +9,7 @@ import (
 
 	"github.com/ludo-technologies/polyscan/core/domain"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/clone"
+	jsdomain "github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 )
 
 // fixtures copies the Go fixtures into a temporary directory and adds a
@@ -46,8 +47,9 @@ func TestAnalyzeComplexity(t *testing.T) {
 	if len(report.Warnings) != 1 || !strings.Contains(report.Warnings[0], "broken.go: syntax error at line 4") {
 		t.Errorf("warnings = %v, want the broken file's syntax error", report.Warnings)
 	}
-	if len(report.Errors) != 1 || !strings.Contains(report.Errors[0], "unreadable.go") {
-		t.Errorf("errors = %v, want the unreadable file", report.Errors)
+	if len(report.Diagnostics) != 1 || report.Diagnostics[0].Code != jsdomain.DiagnosticCodeRead ||
+		!strings.HasSuffix(report.Diagnostics[0].FilePath, "unreadable.go") {
+		t.Errorf("diagnostics = %+v, want the unreadable file's read error", report.Diagnostics)
 	}
 	if report.Clones != nil {
 		t.Error("clones were not selected but are present")

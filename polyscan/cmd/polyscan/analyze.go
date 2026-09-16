@@ -124,7 +124,7 @@ Examples:
 			}
 			summarize := func(w io.Writer) {
 				summary := service.BuildAnalyzeSummary(results)
-				fmt.Fprint(w, service.FormatCLISummary(summary, duration, results.Files.Errors))
+				fmt.Fprint(w, service.FormatCLISummary(summary, duration, results.Files.Diagnostics))
 			}
 
 			writeOutput := func() error {

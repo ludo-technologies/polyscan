@@ -135,16 +135,8 @@ func (s *CBOServiceImpl) AnalyzeFile(ctx context.Context, filePath string, req d
 // analyzeProjectFile performs CBO analysis on a single parsed file
 func (s *CBOServiceImpl) analyzeProjectFile(cboAnalyzer *analyzer.CBOAnalyzer, file *ProjectFile) fileAnalysis[*domain.ClassCoupling] {
 	filePath := file.Path
-	if file.ReadErr != nil {
-		return fileAnalysis[*domain.ClassCoupling]{
-			errors: []string{fmt.Sprintf("[%s] Failed to read file: %v", filePath, file.ReadErr)},
-		}
-	}
-
-	if file.ParseErr != nil {
-		return fileAnalysis[*domain.ClassCoupling]{
-			errors: []string{fmt.Sprintf("[%s] Failed to parse: %v", filePath, file.ParseErr)},
-		}
+	if diagnostic, skipped := file.Diagnostic(); skipped {
+		return fileAnalysis[*domain.ClassCoupling]{errors: []string{diagnostic.String()}}
 	}
 
 	// Analyze CBO

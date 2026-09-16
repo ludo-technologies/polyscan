@@ -51,7 +51,7 @@ func (s Selection) count() int {
 // accounting of the files it covered and could not use, kept apart from the
 // analyses so it is complete whichever of them ran.
 type Result struct {
-	Files         domain.FileAccounting
+	Files         domain.AnalysisCoverage
 	Complexity    *domain.ComplexityResponse
 	ComplexityErr error
 	DeadCode      *domain.DeadCodeResponse
@@ -221,7 +221,7 @@ func Run(ctx context.Context, files []string, cfg *config.Config, selected Selec
 	}
 
 	wg.Wait()
-	result.Files = snapshot.Accounting()
+	result.Files = snapshot.Coverage()
 	return result
 }
 

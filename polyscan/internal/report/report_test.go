@@ -45,8 +45,8 @@ func genericReport() *analysis.Report {
 				LinesAnalyzed: 140, FilesAnalyzed: 2,
 			},
 		},
-		FileLines: map[string]int{"a.go": 100, "b.go": 40},
-		Errors:    []string{"c.go: read error"},
+		FileLines:   map[string]int{"a.go": 100, "b.go": 40},
+		Diagnostics: []domain.AnalysisDiagnostic{{FilePath: "c.go", Code: domain.DiagnosticCodeRead, Message: "read error"}},
 	}
 }
 
@@ -104,7 +104,9 @@ func TestCombineGenericOnly(t *testing.T) {
 	if responses.DeadCode != nil || responses.CBO != nil || responses.Deps != nil {
 		t.Error("the generic engine has no dead code, CBO or dependency analysis")
 	}
-	if !reflect.DeepEqual(responses.Files, domain.FileAccounting{Total: 3, Skipped: 1, Errors: []string{"c.go: read error"}}) {
+	want := domain.AnalysisCoverage{TotalFiles: 3, AnalyzedFiles: 2, SkippedFiles: 1,
+		Diagnostics: []domain.AnalysisDiagnostic{{FilePath: "c.go", Code: domain.DiagnosticCodeRead, Message: "read error"}}}
+	if !reflect.DeepEqual(responses.Files, want) {
 		t.Errorf("files = %+v", responses.Files)
 	}
 }
@@ -119,7 +121,7 @@ func javascriptResult() *js.Result {
 		Location: &domain.CloneLocation{FilePath: "app.js", StartLine: 20, EndLine: 31},
 	}
 	return &js.Result{
-		Files: domain.FileAccounting{Total: 1},
+		Files: domain.AnalysisCoverage{TotalFiles: 1, AnalyzedFiles: 1},
 		Complexity: &domain.ComplexityResponse{
 			Functions: []domain.FunctionComplexity{{
 				Name: "handler", FilePath: "app.js", Language: "JavaScript", StartLine: 1, EndLine: 30,
@@ -170,7 +172,7 @@ func TestCombineMergesLanguages(t *testing.T) {
 	if summary.TotalFunctions != 3 || summary.TotalFiles != 4 || summary.FilesAnalyzed != 3 || summary.SkippedFiles != 1 {
 		t.Errorf("summary = %+v", summary)
 	}
-	if responses.Files.Total != 4 || responses.Files.Skipped != 1 {
+	if responses.Files.TotalFiles != 4 || responses.Files.AnalyzedFiles != 3 || responses.Files.SkippedFiles != 1 {
 		t.Errorf("files = %+v, want both languages' files counted", responses.Files)
 	}
 	if want := (7.0*2 + 5.0) / 3; summary.AverageComplexity != want {
@@ -243,7 +245,7 @@ func TestCombineSelectionWithoutComplexity(t *testing.T) {
 	if responses.Clone == nil {
 		t.Error("the clone response must survive without complexity")
 	}
-	if responses.Files.Skipped != 1 {
+	if responses.Files.SkippedFiles != 1 {
 		t.Errorf("files = %+v, want the skipped file charged without complexity", responses.Files)
 	}
 }
@@ -252,7 +254,8 @@ func TestCombineSelectionWithoutComplexity(t *testing.T) {
 // JavaScript side: a dead-code-only run still carries its unparsable files.
 func TestCombineJavaScriptSkippedFilesWithoutComplexity(t *testing.T) {
 	javascript := &js.Result{
-		Files:    domain.FileAccounting{Total: 2, Skipped: 1, Errors: []string{"broken.js: syntax error at line 1"}},
+		Files: domain.AnalysisCoverage{TotalFiles: 2, AnalyzedFiles: 1, SkippedFiles: 1,
+			Diagnostics: []domain.AnalysisDiagnostic{{FilePath: "broken.js", Code: domain.DiagnosticCodeParse, Message: "syntax error at line 1"}}},
 		DeadCode: &domain.DeadCodeResponse{},
 	}
 	responses, err := Combine(nil, javascript)

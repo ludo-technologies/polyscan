@@ -45,16 +45,8 @@ type extractedFragments struct {
 // for several files at once.
 func extractFileFragments(detector *analyzer.CloneDetector, file *ProjectFile) fileAnalysis[*extractedFragments] {
 	filePath := file.Path
-	if file.ReadErr != nil {
-		return fileAnalysis[*extractedFragments]{
-			errors: []string{fmt.Sprintf("[%s] Failed to read file: %v", filePath, file.ReadErr)},
-		}
-	}
-
-	if file.ParseErr != nil {
-		return fileAnalysis[*extractedFragments]{
-			errors: []string{fmt.Sprintf("[%s] Failed to parse: %v", filePath, file.ParseErr)},
-		}
+	if diagnostic, skipped := file.Diagnostic(); skipped {
+		return fileAnalysis[*extractedFragments]{errors: []string{diagnostic.String()}}
 	}
 
 	extracted := &extractedFragments{

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -63,7 +64,7 @@ func TestBuildAnalyzeSummary_WiresProjectScale(t *testing.T) {
 	}}
 
 	summary := BuildAnalyzeSummary(domain.AnalysisResults{
-		Files:      domain.FileAccounting{Total: 123},
+		Files:      domain.AnalysisCoverage{TotalFiles: 123, AnalyzedFiles: 123},
 		Complexity: complexityResponse,
 		Clone:      cloneResponse,
 	})
@@ -88,7 +89,7 @@ func TestFormatProjectScale_OmitsLOCWhenUnavailable(t *testing.T) {
 	// Clone analysis is what supplies the line count, so a run without it
 	// reports files and functions only.
 	summary := BuildAnalyzeSummary(domain.AnalysisResults{
-		Files:      domain.FileAccounting{Total: 4},
+		Files:      domain.AnalysisCoverage{TotalFiles: 4, AnalyzedFiles: 4},
 		Complexity: &domain.ComplexityResponse{Summary: domain.ComplexitySummary{TotalFunctions: 6}},
 	})
 
@@ -304,6 +305,34 @@ func TestOutputFormatterWriteAnalyzeJSON(t *testing.T) {
 	}
 	if result.SchemaVersion != domain.AnalyzeSchemaVersion || !strings.Contains(buf.String(), `"schema_version": 1`) {
 		t.Errorf("schema_version = %d, want %d in the document", result.SchemaVersion, domain.AnalyzeSchemaVersion)
+	}
+	if strings.Contains(buf.String(), `"diagnostics"`) {
+		t.Error("a run without skipped files must not emit a diagnostics key")
+	}
+}
+
+// TestOutputFormatterWriteAnalyzeJSON_Diagnostics pins the top-level
+// diagnostics key: one typed record per file the run could not read or parse,
+// whichever analyses ran.
+func TestOutputFormatterWriteAnalyzeJSON_Diagnostics(t *testing.T) {
+	files := domain.AnalysisCoverage{TotalFiles: 2, AnalyzedFiles: 1, SkippedFiles: 1, Diagnostics: []domain.AnalysisDiagnostic{
+		{FilePath: "broken.js", Code: domain.DiagnosticCodeParse, Message: "syntax error at line 1"},
+	}}
+
+	var buf bytes.Buffer
+	if err := NewOutputFormatter().WriteAnalyze(domain.AnalysisResults{Files: files, DeadCode: &domain.DeadCodeResponse{}}, domain.OutputFormatJSON, &buf, time.Second); err != nil {
+		t.Fatalf("WriteAnalyze failed: %v", err)
+	}
+
+	var result AnalyzeResponseJSON
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("Failed to parse output as JSON: %v", err)
+	}
+	if !reflect.DeepEqual(result.Diagnostics, files.Diagnostics) {
+		t.Errorf("diagnostics = %+v, want %+v", result.Diagnostics, files.Diagnostics)
+	}
+	if !strings.Contains(buf.String(), `"code": "parse_error"`) {
+		t.Errorf("diagnostic code not serialized as its wire name:\n%s", buf.String())
 	}
 }
 
@@ -571,7 +600,9 @@ func TestComplexityFunctionsHeading(t *testing.T) {
 // accounting, so a run that left complexity out still reports and charges the
 // files it could not parse.
 func TestBuildAnalyzeSummary_ChargesSkippedFilesWithoutComplexity(t *testing.T) {
-	files := domain.FileAccounting{Total: 2, Skipped: 1, Errors: []string{"broken.js: syntax error at line 1"}}
+	files := domain.AnalysisCoverage{TotalFiles: 2, AnalyzedFiles: 1, SkippedFiles: 1, Diagnostics: []domain.AnalysisDiagnostic{
+		{FilePath: "broken.js", Code: domain.DiagnosticCodeParse, Message: "syntax error at line 1"},
+	}}
 	deadCode := &domain.DeadCodeResponse{Summary: domain.DeadCodeSummary{TotalFiles: 2}}
 
 	summary := BuildAnalyzeSummary(domain.AnalysisResults{Files: files, DeadCode: deadCode})
@@ -583,13 +614,13 @@ func TestBuildAnalyzeSummary_ChargesSkippedFilesWithoutComplexity(t *testing.T) 
 	if summary.HealthScore >= 100 {
 		t.Errorf("HealthScore = %d, want the parse-error penalty applied", summary.HealthScore)
 	}
-	clean := BuildAnalyzeSummary(domain.AnalysisResults{Files: domain.FileAccounting{Total: 2}, DeadCode: deadCode})
+	clean := BuildAnalyzeSummary(domain.AnalysisResults{Files: domain.AnalysisCoverage{TotalFiles: 2, AnalyzedFiles: 2}, DeadCode: deadCode})
 	if clean.HealthScore != 100 {
 		t.Errorf("clean HealthScore = %d, want 100", clean.HealthScore)
 	}
 
-	cli := FormatCLISummary(summary, time.Second, files.Errors)
-	for _, want := range []string{"1 of 2 files skipped (parse errors)", "broken.js: syntax error at line 1"} {
+	cli := FormatCLISummary(summary, time.Second, files.Diagnostics)
+	for _, want := range []string{"1 of 2 files skipped (parse errors)", "[broken.js] parse_error: syntax error at line 1"} {
 		if !strings.Contains(cli, want) {
 			t.Errorf("CLI summary lacks %q:\n%s", want, cli)
 		}
@@ -603,9 +634,9 @@ func TestBuildAnalyzeSummary_DeadCodeRateUsesDeadCodeFiles(t *testing.T) {
 	deadCode := &domain.DeadCodeResponse{Summary: domain.DeadCodeSummary{
 		TotalFiles: 1, TotalFindings: 1, CriticalFindings: 1,
 	}}
-	alone := BuildAnalyzeSummary(domain.AnalysisResults{Files: domain.FileAccounting{Total: 1}, DeadCode: deadCode})
+	alone := BuildAnalyzeSummary(domain.AnalysisResults{Files: domain.AnalysisCoverage{TotalFiles: 1, AnalyzedFiles: 1}, DeadCode: deadCode})
 	mixed := BuildAnalyzeSummary(domain.AnalysisResults{
-		Files:    domain.FileAccounting{Total: 100},
+		Files:    domain.AnalysisCoverage{TotalFiles: 100, AnalyzedFiles: 100},
 		DeadCode: deadCode,
 		Clone:    &domain.CloneResponse{Statistics: &domain.CloneStatistics{}},
 	})

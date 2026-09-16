@@ -164,19 +164,10 @@ func (s *ComplexityServiceImpl) analyzeProjectFile(projectFile *ProjectFile) fil
 	var file fileComplexity
 
 	filePath := projectFile.Path
-	if projectFile.ReadErr != nil {
-		return fileAnalysis[fileComplexity]{
-			errors: []string{fmt.Sprintf("[%s] Failed to read file: %v", filePath, projectFile.ReadErr)},
-		}
+	if diagnostic, skipped := projectFile.Diagnostic(); skipped {
+		return fileAnalysis[fileComplexity]{errors: []string{diagnostic.String()}}
 	}
 	file.linesOfCode = countSourceLines(projectFile.Content)
-
-	if projectFile.ParseErr != nil {
-		return fileAnalysis[fileComplexity]{
-			value:  file,
-			errors: []string{fmt.Sprintf("[%s] Failed to parse: %v", filePath, projectFile.ParseErr)},
-		}
-	}
 
 	// Build (or reuse) the CFGs for all functions
 	cfgs, err := projectFile.CFGs()
