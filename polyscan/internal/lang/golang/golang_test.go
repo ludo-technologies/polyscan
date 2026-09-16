@@ -558,3 +558,40 @@ func (a *Alias) Use(d *Dep) {}
 		t.Errorf("Base = %+v, want a declared type", byName["Base"])
 	}
 }
+
+func TestEffectiveComplexityCollapsesFlatDispatch(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		// want is the complexity, effective the value the risk level uses.
+		want, effective int
+	}{
+		{"flat switch", `switch n { case 1: a(); case 2: b(); case 3: c() }`, 4, 2},
+		{"flat switch with default", `switch n { case 1: a(); case 2: b(); default: c() }`, 3, 2},
+		{"flat type switch", `switch v.(type) { case int: a(); case string: b(); case bool: c() }`, 4, 2},
+		{"flat select", `select { case <-ch: a(); case <-ch: b() }`, 3, 2},
+		{"several statements per arm stay flat", `switch n { case 1: a(); return; case 2: b(); return }`, 3, 2},
+		{"a branching arm keeps every arm", `switch n { case 1: a(); case 2: if a { b() }; case 3: c() }`, 5, 5},
+		{"a looping arm keeps every arm", `switch n { case 1: a(); case 2: for range xs { b() }; case 3: c() }`, 5, 5},
+		{"an arm with a short circuit keeps every arm", `switch n { case 1: a(); case 2: _ = a && b; case 3: c() }`, 5, 5},
+		{"a closure in an arm keeps every arm", `switch n { case 1: a(); case 2: f := func() { if a { } }; f() }`, 4, 4},
+		{"the outer switch of a nested dispatch is kept", `switch n { case 1: switch n { case 2: a(); case 3: b() }; case 4: switch n { case 5: c() } }`, 6, 5},
+		{"a branching default keeps every arm", `switch n { case 1: a(); case 2: b(); default: if a { c() } }`, 4, 4},
+		{"a branching default of a type switch keeps every arm", `switch v.(type) { case int: a(); case string: b(); default: if a { c() } }`, 4, 4},
+		{"a branching select default keeps every arm", `select { case <-ch: a(); default: if a { b() } }`, 3, 3},
+		{"an if outside the switch still counts", `if a { }; switch n { case 1: a(); case 2: b() }`, 4, 3},
+		{"switches are collapsed one by one", `switch n { case 1: a(); case 2: b() }; switch n { case 3: c(); case 4: a() }`, 5, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			source := "package p\n\nvar a, b bool\nvar n int\nvar v interface{}\nvar xs []int\nvar ch chan int\n\nfunc F() {\n\t" + tc.body + "\n}\n"
+			fn := analyze(t, source)["F"]
+			if fn.Complexity != tc.want {
+				t.Errorf("complexity = %d, want %d", fn.Complexity, tc.want)
+			}
+			if fn.EffectiveComplexity != tc.effective {
+				t.Errorf("effective complexity = %d, want %d", fn.EffectiveComplexity, tc.effective)
+			}
+		})
+	}
+}

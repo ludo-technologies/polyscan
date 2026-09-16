@@ -233,3 +233,35 @@ void lambda(bool a, bool b) {
 		}
 	}
 }
+
+func TestEffectiveComplexityCollapsesFlatDispatch(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		// want is the complexity, effective the value the risk level uses.
+		want, effective int
+	}{
+		{"flat switch", `switch (n) { case 1: return 1; case 2: return 2; case 3: return 3; } return 0;`, 4, 2},
+		{"flat switch with default", `switch (n) { case 1: return 1; case 2: return 2; default: return 0; }`, 3, 2},
+		{"fallthrough arms stay flat", `switch (n) { case 1: case 2: return 1; case 3: return 3; } return 0;`, 4, 2},
+		{"a branching arm keeps every arm", `switch (n) { case 1: return 1; case 2: if (a) return 2; return 0; case 3: return 3; } return 0;`, 5, 5},
+		{"a looping arm keeps every arm", `switch (n) { case 1: return 1; case 2: while (a) { } return 0; case 3: return 3; } return 0;`, 5, 5},
+		{"an arm with a ternary keeps every arm", `switch (n) { case 1: return 1; case 2: return a ? 2 : 0; case 3: return 3; } return 0;`, 5, 5},
+		{"an arm with a catch keeps every arm", `switch (n) { case 1: return 1; case 2: try { return 2; } catch (...) { return 0; } case 3: return 3; } return 0;`, 5, 5},
+		{"a lambda in an arm keeps every arm", `switch (n) { case 1: return 1; case 2: { auto f = [&](int z) { if (z) return z; return 0; }; return f(n); } } return 0;`, 4, 4},
+		{"a branching default keeps every arm", `switch (n) { case 1: return 1; case 2: return 2; case 3: return 3; default: if (a) return 9; return 0; }`, 5, 5},
+		{"the outer switch of a nested dispatch is kept", `switch (n) { case 1: switch (n) { case 2: return 2; case 3: return 3; } case 4: switch (n) { case 5: return 5; } } return 0;`, 6, 5},
+		{"switches are collapsed one by one", `switch (n) { case 1: return 1; case 2: return 2; } switch (n) { case 3: return 3; case 4: return 4; } return 0;`, 5, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fn := analyze(t, "int f(bool a, int n) {\n\t"+tc.body+"\n}\n")["f"]
+			if fn.Complexity != tc.want {
+				t.Errorf("complexity = %d, want %d", fn.Complexity, tc.want)
+			}
+			if fn.EffectiveComplexity != tc.effective {
+				t.Errorf("effective complexity = %d, want %d", fn.EffectiveComplexity, tc.effective)
+			}
+		})
+	}
+}

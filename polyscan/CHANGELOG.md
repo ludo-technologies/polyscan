@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The Go, Rust and C++ risk level is derived from the complexity with flat dispatch collapsed. A `switch` or `match` that holds no decision point beyond its own arms counts as a single decision point, because its arm count measures the width of a lookup table rather than branching logic; an arm that branches, loops, guards or holds a nested switch keeps the whole construct counted arm by arm, the uncounted arms included: the `default` of a Go or C++ switch and the last arm of a Rust match. The reported `complexity` is unchanged and stays comparable with gocyclo. Before, a Bubble Tea or tview key handler whose every arm delegates to a method reached medium or high risk on its arm count alone (#142)
 - JavaScript/TypeScript coupling (CBO) reports the names a file's type annotations reference in `type_hint_dependencies`, and those names stay out of `coupling_count` and the risk level. TypeScript erases a type annotation at compile time, so it declares a dependency without exercising one. Before, the breakdown was always 0 because the annotations were never read
 
 ### Fixed
