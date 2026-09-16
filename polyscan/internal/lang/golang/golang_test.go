@@ -576,6 +576,9 @@ func TestEffectiveComplexityCollapsesFlatDispatch(t *testing.T) {
 		{"an arm with a short circuit keeps every arm", `switch n { case 1: a(); case 2: _ = a && b; case 3: c() }`, 5, 5},
 		{"a closure in an arm keeps every arm", `switch n { case 1: a(); case 2: f := func() { if a { } }; f() }`, 4, 4},
 		{"the outer switch of a nested dispatch is kept", `switch n { case 1: switch n { case 2: a(); case 3: b() }; case 4: switch n { case 5: c() } }`, 6, 5},
+		{"a branching default keeps every arm", `switch n { case 1: a(); case 2: b(); default: if a { c() } }`, 4, 4},
+		{"a branching default of a type switch keeps every arm", `switch v.(type) { case int: a(); case string: b(); default: if a { c() } }`, 4, 4},
+		{"a branching select default keeps every arm", `select { case <-ch: a(); default: if a { b() } }`, 3, 3},
 		{"an if outside the switch still counts", `if a { }; switch n { case 1: a(); case 2: b() }`, 4, 3},
 		{"switches are collapsed one by one", `switch n { case 1: a(); case 2: b() }; switch n { case 3: c(); case 4: a() }`, 5, 3},
 	}

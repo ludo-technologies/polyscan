@@ -403,6 +403,7 @@ func TestEffectiveComplexityCollapsesFlatDispatch(t *testing.T) {
 		{"a guarded arm keeps every arm", `match n { 1 if a => 1, 2 => 2, 3 => 3, _ => 0 }`, 5, 5},
 		{"an arm with a question mark keeps every arm", `match n { 1 => 1, 2 => { r?; 2 } _ => 0 }`, 4, 4},
 		{"a closure in an arm keeps every arm", `match n { 1 => 1, 2 => { let f = |x| if x { 1 } else { 0 }; f(a) } _ => 0 }`, 4, 4},
+		{"a branching last arm keeps every arm", `match n { 1 => 1, 2 => 2, 3 => 3, _ => if a { 9 } else { 0 } }`, 5, 5},
 		{"the outer match of a nested dispatch is kept", `match n { 1 => match n { 2 => 2, 3 => 3, _ => 0 }, 4 => match n { 5 => 5, _ => 0 }, _ => 0 }`, 6, 5},
 		{"matches are collapsed one by one", `match n { 1 => 1, 2 => 2, _ => 0 }; match n { 3 => 3, 4 => 4, _ => 0 }`, 5, 3},
 	}

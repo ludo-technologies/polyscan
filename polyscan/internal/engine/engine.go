@@ -228,11 +228,13 @@ type Function struct {
 // it was captured on, and the dispatch it belongs to when it is a switch
 // arm.
 type decisionPoint struct {
-	start, end uint32
-	// dispatch identifies the switch-like construct a @case arm belongs
-	// to, which is the node holding the arms. It is zero for every other
+	at span
+	// dispatch spans the switch-like construct a @case arm belongs to,
+	// which is the node holding its arms. It identifies the construct, no
+	// two of which span the same bytes, and bounds the code that decides
+	// whether the construct is flat. It is the zero span for every other
 	// kind of decision point.
-	dispatch uintptr
+	dispatch span
 }
 
 // Type is one named type of a source file, with every reference to another
@@ -616,12 +618,12 @@ func (l *Language) countDecisions(root *sitter.Node, source []byte, functions []
 			}
 			name := l.decisions.CaptureNameForId(capture.Index)
 			fn.Decisions[name]++
-			point := decisionPoint{start: node.StartByte(), end: node.EndByte()}
+			point := decisionPoint{at: span{node.StartByte(), node.EndByte()}}
 			// The arms of one switch are siblings, so their parent, the
-			// switch itself or the block holding them, identifies it.
+			// switch itself or the block holding them, is the construct.
 			if name == caseCapture {
 				if parent := node.Parent(); parent != nil {
-					point.dispatch = parent.ID()
+					point.dispatch = span{parent.StartByte(), parent.EndByte()}
 				}
 			}
 			fn.points = append(fn.points, point)
@@ -631,43 +633,43 @@ func (l *Language) countDecisions(root *sitter.Node, source []byte, functions []
 
 // effectiveComplexity is the function's complexity with every flat
 // dispatch collapsed to a single decision point. A dispatch is flat when
-// no arm of it holds a decision point of its own: every arm is then
+// it holds no decision point beyond its own arms: every arm is then
 // straight-line code, and the arm count measures the width of a lookup
-// table rather than the branching the risk level is meant to describe.
-// An arm that branches, loops or holds a nested switch leaves its whole
+// table rather than the branching the risk level is meant to describe. An
+// arm that branches, loops or holds a nested switch leaves its whole
 // dispatch counted arm by arm.
 func (fn *Function) effectiveComplexity() int {
 	complexity := 1
-	arms := map[uintptr][]int{}
-	for i, point := range fn.points {
-		if point.dispatch == 0 {
+	arms := map[span]int{}
+	for _, point := range fn.points {
+		if point.dispatch == (span{}) {
 			complexity++
 			continue
 		}
-		arms[point.dispatch] = append(arms[point.dispatch], i)
+		arms[point.dispatch]++
 	}
-	for _, dispatch := range arms {
+	for dispatch, count := range arms {
 		if fn.isFlatDispatch(dispatch) {
 			complexity++
 			continue
 		}
-		complexity += len(dispatch)
+		complexity += count
 	}
 	return complexity
 }
 
-// isFlatDispatch reports that no arm of the dispatch, given as indexes
-// into the function's decision points, contains another decision point.
-func (fn *Function) isFlatDispatch(dispatch []int) bool {
-	for _, i := range dispatch {
-		arm := fn.points[i]
-		for j, point := range fn.points {
-			if j == i {
-				continue
-			}
-			if point.start >= arm.start && point.end <= arm.end {
-				return false
-			}
+// isFlatDispatch reports that the construct holds no decision point other
+// than the arms it is counted by. Testing the whole construct rather than
+// each arm covers the arms cyclomatic complexity leaves uncounted, the
+// default of a Go or C++ switch and the last arm of a Rust match, whose
+// branching says as much about the construct as any other arm's.
+func (fn *Function) isFlatDispatch(dispatch span) bool {
+	for _, point := range fn.points {
+		if point.dispatch == dispatch {
+			continue
+		}
+		if dispatch.contains(point.at.start, point.at.end) {
+			return false
 		}
 	}
 	return true

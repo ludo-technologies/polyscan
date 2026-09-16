@@ -249,6 +249,7 @@ func TestEffectiveComplexityCollapsesFlatDispatch(t *testing.T) {
 		{"an arm with a ternary keeps every arm", `switch (n) { case 1: return 1; case 2: return a ? 2 : 0; case 3: return 3; } return 0;`, 5, 5},
 		{"an arm with a catch keeps every arm", `switch (n) { case 1: return 1; case 2: try { return 2; } catch (...) { return 0; } case 3: return 3; } return 0;`, 5, 5},
 		{"a lambda in an arm keeps every arm", `switch (n) { case 1: return 1; case 2: { auto f = [&](int z) { if (z) return z; return 0; }; return f(n); } } return 0;`, 4, 4},
+		{"a branching default keeps every arm", `switch (n) { case 1: return 1; case 2: return 2; case 3: return 3; default: if (a) return 9; return 0; }`, 5, 5},
 		{"the outer switch of a nested dispatch is kept", `switch (n) { case 1: switch (n) { case 2: return 2; case 3: return 3; } case 4: switch (n) { case 5: return 5; } } return 0;`, 6, 5},
 		{"switches are collapsed one by one", `switch (n) { case 1: return 1; case 2: return 2; } switch (n) { case 3: return 3; case 4: return 4; } return 0;`, 5, 3},
 	}
