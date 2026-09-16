@@ -87,19 +87,18 @@ func (c *CouplingMetricsCalculator) CalculateMetrics(graph *domain.DependencyGra
 		dependents := c.getDependents(nodeID, graph)
 
 		metrics[nodeID] = &domain.ModuleDependencyMetrics{
-			ModuleName:             node.Name,
-			FilePath:               node.FilePath,
-			IsPackage:              node.ModuleType == domain.ModuleTypePackage,
-			AfferentCoupling:       m.Ca,
-			EfferentCoupling:       m.Ce,
-			Instability:            m.Instability,
-			Abstractness:           m.Abstractness,
-			Distance:               m.Distance,
-			RiskLevel:              riskLevel,
-			DirectDependencies:     directDeps,
-			Dependents:             dependents,
-			PublicInterface:        node.Exports,
-			TransitiveDependencies: []string{}, // Can be computed separately if needed
+			ModuleName:         node.Name,
+			FilePath:           node.FilePath,
+			IsPackage:          node.ModuleType == domain.ModuleTypePackage,
+			AfferentCoupling:   m.Ca,
+			EfferentCoupling:   m.Ce,
+			Instability:        m.Instability,
+			Abstractness:       m.Abstractness,
+			Distance:           m.Distance,
+			RiskLevel:          riskLevel,
+			DirectDependencies: directDeps,
+			Dependents:         dependents,
+			PublicInterface:    node.Exports,
 		}
 	}
 
@@ -277,28 +276,6 @@ func (c *CouplingMetricsCalculator) getCouplingBucket(coupling int) int {
 	default:
 		return 11 // 11+ bucket
 	}
-}
-
-// CalculateTransitiveDependencies calculates all transitive dependencies for a module
-func (c *CouplingMetricsCalculator) CalculateTransitiveDependencies(nodeID string, graph *domain.DependencyGraph) []string {
-	visited := make(map[string]bool)
-	var result []string
-
-	var dfs func(current string)
-	dfs = func(current string) {
-		edges := graph.GetOutgoingEdges(current)
-		for _, edge := range edges {
-			if !visited[edge.To] {
-				visited[edge.To] = true
-				result = append(result, edge.To)
-				dfs(edge.To)
-			}
-		}
-	}
-
-	dfs(nodeID)
-	sort.Strings(result)
-	return result
 }
 
 // CalculateMaxDepth calculates the maximum dependency depth in the graph,

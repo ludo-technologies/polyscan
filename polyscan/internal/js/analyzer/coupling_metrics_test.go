@@ -218,33 +218,6 @@ func TestCalculateCouplingAnalysis(t *testing.T) {
 	}
 }
 
-func TestCalculateTransitiveDependencies(t *testing.T) {
-	// A -> B -> C -> D
-	graph := domain.NewDependencyGraph()
-	graph.AddNode(&domain.ModuleNode{ID: "a"})
-	graph.AddNode(&domain.ModuleNode{ID: "b"})
-	graph.AddNode(&domain.ModuleNode{ID: "c"})
-	graph.AddNode(&domain.ModuleNode{ID: "d"})
-	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b", Weight: 1})
-	graph.AddEdge(&domain.DependencyEdge{From: "b", To: "c", Weight: 1})
-	graph.AddEdge(&domain.DependencyEdge{From: "c", To: "d", Weight: 1})
-
-	calc := NewCouplingMetricsCalculator(nil)
-	transitive := calc.CalculateTransitiveDependencies("a", graph)
-
-	if len(transitive) != 3 {
-		t.Errorf("Expected 3 transitive dependencies, got %d", len(transitive))
-	}
-
-	// Should contain b, c, d
-	expected := map[string]bool{"b": true, "c": true, "d": true}
-	for _, dep := range transitive {
-		if !expected[dep] {
-			t.Errorf("Unexpected dependency: %s", dep)
-		}
-	}
-}
-
 func TestCalculateMaxDepth(t *testing.T) {
 	// A -> B -> C -> D (depth 3)
 	graph := domain.NewDependencyGraph()
