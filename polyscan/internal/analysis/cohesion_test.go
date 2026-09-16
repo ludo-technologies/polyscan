@@ -26,9 +26,10 @@ func writeFiles(t *testing.T, files map[string]string) string {
 
 func TestAnalyzeCohesionGroupsGoMethodsByPackage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
-		// Server's methods span two files. Start/Stop share running,
-		// Log calls a function-typed field that Stop also touches, and
-		// Version touches nothing: three components in total.
+		// Server's methods span two files. Start/Stop share running and
+		// Log calls a function-typed field that Stop also touches: one
+		// component. Version has no receiver and Name touches nothing,
+		// so both are excluded.
 		"server.go": `package p
 
 type Server struct {
@@ -82,10 +83,10 @@ func (s *Server) B() {}
 	if server.Name != "Server" || server.Language != "Go" || filepath.Base(server.FilePath) != "log.go" {
 		t.Errorf("first class = %+v, want Server placed in log.go", server)
 	}
-	if server.LCOM4 != 2 || server.TotalMethods != 5 || server.ExcludedMethods != 1 {
-		t.Errorf("Server: LCOM4 %d, methods %d, excluded %d; want 2, 5, 1", server.LCOM4, server.TotalMethods, server.ExcludedMethods)
+	if server.LCOM4 != 1 || server.TotalMethods != 5 || server.ExcludedMethods != 2 {
+		t.Errorf("Server: LCOM4 %d, methods %d, excluded %d; want 1, 5, 2", server.LCOM4, server.TotalMethods, server.ExcludedMethods)
 	}
-	wantGroups := [][]string{{"Log", "Start", "Stop"}, {"Name"}}
+	wantGroups := [][]string{{"Log", "Start", "Stop"}}
 	if !reflect.DeepEqual(server.MethodGroups, wantGroups) {
 		t.Errorf("Server groups = %v, want %v", server.MethodGroups, wantGroups)
 	}
@@ -97,12 +98,12 @@ func (s *Server) B() {}
 	}
 
 	other := classes[1]
-	if other.LCOM4 != 2 || filepath.Base(filepath.Dir(other.FilePath)) != "other" {
-		t.Errorf("second class = %+v, want other.Server with LCOM4 2", other)
+	if other.LCOM4 != 1 || other.ExcludedMethods != 1 || filepath.Base(filepath.Dir(other.FilePath)) != "other" {
+		t.Errorf("second class = %+v, want other.Server with LCOM4 1 and the empty B excluded", other)
 	}
 
 	summary := report.Cohesion.Summary
-	want := CohesionSummary{TotalClasses: 2, AverageLCOM: 2, MaxLCOM: 2, MinLCOM: 2, LowRiskClasses: 2}
+	want := CohesionSummary{TotalClasses: 2, AverageLCOM: 1, MaxLCOM: 1, MinLCOM: 1, LowRiskClasses: 2}
 	if summary != want {
 		t.Errorf("summary = %+v, want %+v", summary, want)
 	}
@@ -111,17 +112,18 @@ func (s *Server) B() {}
 func TestAnalyzeCohesionRust(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
 		"lib.rs": `
-pub struct Counter { n: u32, log: Vec<String> }
+pub struct Counter { n: u32, log: Vec<String>, a: u32, b: u32, c: u32, d: u32, e: u32 }
 
 impl Counter {
-    pub fn new() -> Self { Counter { n: 0, log: vec![] } }
+    pub fn new() -> Self { Counter { n: 0, log: vec![], a: 0, b: 0, c: 0, d: 0, e: 0 } }
     pub fn inc(&mut self) { self.n += 1; self.record() }
     fn record(&mut self) { self.log.push(String::new()) }
-    pub fn a(&self) -> u32 { 1 }
-    pub fn b(&self) -> u32 { 2 }
-    pub fn c(&self) -> u32 { 3 }
-    pub fn d(&self) -> u32 { 4 }
-    pub fn e(&self) -> u32 { 5 }
+    pub fn a(&self) -> u32 { self.a }
+    pub fn b(&self) -> u32 { self.b }
+    pub fn c(&self) -> u32 { self.c }
+    pub fn d(&self) -> u32 { self.d }
+    pub fn e(&self) -> u32 { self.e }
+    pub fn kind(&self) -> &'static str { "counter" }
 }
 
 pub struct Builder;
@@ -144,8 +146,70 @@ mod tests {
 		t.Fatalf("got %d classes, want only Counter (Builder has no method with a receiver): %+v", len(classes), classes)
 	}
 	counter := classes[0]
-	if counter.Name != "Counter" || counter.LCOM4 != 6 || counter.ExcludedMethods != 1 || counter.RiskLevel != domain.RiskLevelHigh {
-		t.Errorf("Counter = %+v, want LCOM4 6 (high) with new excluded", counter)
+	if counter.Name != "Counter" || counter.LCOM4 != 6 || counter.TotalMethods != 9 || counter.ExcludedMethods != 2 || counter.RiskLevel != domain.RiskLevelHigh {
+		t.Errorf("Counter = %+v, want LCOM4 6 (high) with new and the stub kind excluded", counter)
+	}
+}
+
+func TestAnalyzeCohesionExcludesStubMethods(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		// itemDelegate implements an interface whose Height, Spacing and
+		// Update are constant returns; only Render reads focus. Placeholder
+		// panics and calls of free functions touch no state either. A
+		// stub that a sibling calls stays in the graph, since the call
+		// connects them.
+		"delegate.go": `package p
+
+type itemDelegate struct{ focus bool }
+
+func (d itemDelegate) Height() int                 { return 1 }
+func (d itemDelegate) Spacing() int                { return 0 }
+func (d itemDelegate) Update(msg any) any          { return nil }
+func (d itemDelegate) Render() string              { if d.focus { return "*" }; return "" }
+func (d itemDelegate) Reset()                      { panic("not implemented") }
+func (d itemDelegate) Log(s string)                { println(s) }
+
+type walker struct{ depth int }
+
+func (w *walker) Enter() { w.depth++; w.hook() }
+func (w *walker) Leave() { w.depth--; w.hook() }
+func (w *walker) hook()  {}
+
+type empty struct{}
+
+func (empty) A() {}
+func (e empty) B() {}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 2 {
+		t.Fatalf("got %d classes, want itemDelegate and walker (empty has only stubs): %+v", len(classes), classes)
+	}
+	var delegate, walker Class
+	for _, class := range classes {
+		switch class.Name {
+		case "itemDelegate":
+			delegate = class
+		case "walker":
+			walker = class
+		}
+	}
+	if delegate.LCOM4 != 1 || delegate.TotalMethods != 6 || delegate.ExcludedMethods != 5 {
+		t.Errorf("itemDelegate: LCOM4 %d, methods %d, excluded %d; want 1, 6, 5", delegate.LCOM4, delegate.TotalMethods, delegate.ExcludedMethods)
+	}
+	if !reflect.DeepEqual(delegate.MethodGroups, [][]string{{"Render"}}) {
+		t.Errorf("itemDelegate groups = %v, want only Render", delegate.MethodGroups)
+	}
+	if walker.LCOM4 != 1 || walker.TotalMethods != 3 || walker.ExcludedMethods != 0 {
+		t.Errorf("walker: LCOM4 %d, methods %d, excluded %d; want 1, 3, 0", walker.LCOM4, walker.TotalMethods, walker.ExcludedMethods)
+	}
+	if !reflect.DeepEqual(walker.MethodGroups, [][]string{{"Enter", "Leave", "hook"}}) {
+		t.Errorf("walker groups = %v, want Enter, Leave and hook connected", walker.MethodGroups)
 	}
 }
 
