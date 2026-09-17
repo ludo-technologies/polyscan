@@ -19,7 +19,7 @@ import (
 )
 
 // ConfigDocsURL documents which configuration keys change behavior.
-const ConfigDocsURL = "https://polyscan.codescan.dev/configuration/#which-keys-take-effect-today"
+const ConfigDocsURL = "https://docs.codescan.dev/polyscan/configuration/#which-keys-take-effect-today"
 
 // Selection selects the analyses to run.
 type Selection struct {

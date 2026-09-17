@@ -107,4 +107,4 @@ polyscan analyze --format json src/ > report.json
 
 ## Working with Python instead?
 
-The same analyses are available for Python in [pyscn](https://docs.codescan.dev/), which shares its core algorithms with polyscan. And if you are arriving from jscan, the JavaScript/TypeScript analyzer that merged into polyscan, the [migration page](getting-started/migrating-from-jscan.md) maps every old command to its replacement.
+The same analyses are available for Python in [pyscn](https://docs.codescan.dev/pyscn/), which shares its core algorithms with polyscan. And if you are arriving from jscan, the JavaScript/TypeScript analyzer that merged into polyscan, the [migration page](getting-started/migrating-from-jscan.md) maps every old command to its replacement.

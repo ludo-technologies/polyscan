@@ -1,6 +1,6 @@
 site_name: polyscan
 site_description: A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust and C++
-site_url: https://polyscan.codescan.dev/
+site_url: https://docs.codescan.dev/polyscan/
 site_author: ludo-technologies
 repo_url: https://github.com/ludo-technologies/polyscan
 repo_name: ludo-technologies/polyscan
@@ -133,3 +133,4 @@ nav:
       - Agent Skills: integrations/agent-skills.md
   - Contributing: contributing.md
   - FAQ: faq.md
+  - Python (pyscn): https://docs.codescan.dev/pyscn/

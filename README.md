@@ -113,7 +113,7 @@ Each module is tagged with a directory prefix, e.g. `core/v0.2.1`, `polyscan/v0.
 
 ## Documentation
 
-📖 **[polyscan documentation site](https://polyscan.codescan.dev/)** • **[pyscn documentation site](https://docs.codescan.dev/)**
+📖 **[polyscan documentation site](https://docs.codescan.dev/polyscan/)** • **[pyscn documentation site](https://docs.codescan.dev/pyscn/)**
 
 **[polyscan README](polyscan/README.md)** • **[core README](core/README.md)** • **[Performance](docs/performance.md)**
 

@@ -78,7 +78,7 @@ publishes the npm wrapper and builds nothing.
 
 ## Documentation site
 
-The user-facing documentation at [polyscan.codescan.dev](https://polyscan.codescan.dev/)
+The user-facing documentation at [docs.codescan.dev/polyscan](https://docs.codescan.dev/polyscan/)
 is built with MkDocs Material from `website/` at the repository root.
 
 ```bash
