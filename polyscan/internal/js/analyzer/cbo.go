@@ -148,15 +148,62 @@ func (ca *CBOAnalyzer) extractImportDependencies(ast *parser.Node, filePath stri
 	}
 }
 
+// collectImportedIdentifiers maps each import's local binding name to its module.
+// Both the instantiation and the attribute access passes need the same map, so
+// it is built once per pass here instead of being inlined at every call site.
+func (ca *CBOAnalyzer) collectImportedIdentifiers(ast *parser.Node) map[string]string {
+	imported := make(map[string]string) // local name -> module name
+	ast.Walk(func(node *parser.Node) bool {
+		if node.Type == parser.NodeImportDeclaration && node.Source != nil {
+			moduleName := ca.extractSourceValue(node.Source)
+			for _, spec := range node.Specifiers {
+				if spec.Name != "" {
+					imported[spec.Name] = moduleName
+				}
+			}
+		}
+		return true
+	})
+	return imported
+}
+
 // extractInstantiationDependencies extracts dependencies from new expressions
 func (ca *CBOAnalyzer) extractInstantiationDependencies(ast *parser.Node, deps *ClassDependencies) {
+	// First pass: collect imported identifiers to resolve constructor names
+	importedIdentifiers := ca.collectImportedIdentifiers(ast)
+
 	ast.Walk(func(node *parser.Node) bool {
 		// Check for both tree-sitter type and our AST type
 		if node.Type == parser.NodeNewExpression || node.Type == "new_expression" {
 			className := ca.extractCalleeClassName(node)
 			if className != "" && !isBuiltinClass(className) {
-				deps.InstantiationDependencies[className] = true
-				deps.DependentClasses[className] = true
+				// A constructor reached through an import resolves to that
+				// import's module: the identifier itself for a default or
+				// named binding (`new Widget()`), the object it hangs off for
+				// a namespace binding (`new ns.Widget()`).
+				moduleName, isImported := importedIdentifiers[className]
+				if !isImported {
+					if member := newExpressionMember(node); member != nil {
+						moduleName, isImported = importedIdentifiers[ca.extractObjectName(member.Object)]
+					}
+				}
+
+				if !isImported {
+					deps.InstantiationDependencies[className] = true
+					deps.DependentClasses[className] = true
+					return true
+				}
+
+				// The resolved name points at a module the import pass may
+				// have dropped as a builtin; keep it dropped here too.
+				if !ca.config.IncludeBuiltins &&
+					ca.moduleAnalyzer.classifyModuleSource(moduleName) == domain.ModuleTypeBuiltin {
+					return true
+				}
+
+				depName := normalizeModuleName(moduleName)
+				deps.InstantiationDependencies[depName] = true
+				deps.DependentClasses[depName] = true
 			}
 		}
 		return true
@@ -229,22 +276,9 @@ var typeMemberDeclarations = map[string]bool{
 // extractAttributeAccessDependencies extracts dependencies from method calls and property access
 func (ca *CBOAnalyzer) extractAttributeAccessDependencies(ast *parser.Node, deps *ClassDependencies) {
 	// Track imported identifiers for context
-	importedIdentifiers := make(map[string]string) // local name -> module name
+	importedIdentifiers := ca.collectImportedIdentifiers(ast)
 
-	// First pass: collect imported identifiers
-	ast.Walk(func(node *parser.Node) bool {
-		if node.Type == parser.NodeImportDeclaration && node.Source != nil {
-			moduleName := ca.extractSourceValue(node.Source)
-			for _, spec := range node.Specifiers {
-				if spec.Name != "" {
-					importedIdentifiers[spec.Name] = moduleName
-				}
-			}
-		}
-		return true
-	})
-
-	// Second pass: look for method calls on imported objects
+	// Look for method calls on imported objects
 	ast.Walk(func(node *parser.Node) bool {
 		if node.Type == parser.NodeCallExpression {
 			// Check for member expression calls: obj.method()
@@ -268,6 +302,23 @@ func (ca *CBOAnalyzer) extractAttributeAccessDependencies(ast *parser.Node, deps
 		}
 		return true
 	})
+}
+
+// newExpressionMember returns the member expression of a `new ns.Class()`
+// constructor, or nil for a plain identifier constructor. The AST builder only
+// fills Callee for call expressions, so for `new` the member expression sits in
+// Children as well as in Callee when the parser set it.
+func newExpressionMember(node *parser.Node) *parser.Node {
+	if node.Callee != nil &&
+		(node.Callee.Type == parser.NodeMemberExpression || node.Callee.Type == "member_expression") {
+		return node.Callee
+	}
+	for _, child := range node.Children {
+		if child.Type == parser.NodeMemberExpression || child.Type == "member_expression" {
+			return child
+		}
+	}
+	return nil
 }
 
 // extractCalleeClassName extracts the class name from a new expression
