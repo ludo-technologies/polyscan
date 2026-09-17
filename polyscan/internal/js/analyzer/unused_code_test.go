@@ -178,6 +178,65 @@ type PageMeta = Metadata;
 	}
 }
 
+func TestDetectUnusedImports_TypeScriptDeclarationReferencesCountAsUsage(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{
+			name:   "class extends imported base",
+			source: `import { Base } from './base'; export class A extends Base {}`,
+		},
+		{
+			name:   "class implements imported interface",
+			source: `import { Iface } from './base'; export class B implements Iface { m() {} }`,
+		},
+		{
+			name:   "function returns imported type",
+			source: `import { Res } from './base'; export function result(): Res { return { n: 1 }; }`,
+		},
+		{
+			name:   "class uses imported decorator",
+			source: `import { Deco } from './base'; @Deco() export class D {}`,
+		},
+		{
+			name:   "unexported class uses imported decorator",
+			source: `import { Deco } from './base'; @Deco() class D {}`,
+		},
+		{
+			name:   "method returns imported type",
+			source: `import { Res } from './base'; class A { result(): Res { return { n: 1 }; } }`,
+		},
+		{
+			name:   "method uses imported decorator",
+			source: `import { Deco } from './base'; class A { @Deco() result() {} }`,
+		},
+		{
+			name:   "arrow function returns imported type",
+			source: `import { Res } from './base'; const result = (): Res => ({ n: 1 });`,
+		},
+		{
+			name:   "function expression returns imported type",
+			source: `import { Res } from './base'; const result = function (): Res { return { n: 1 }; };`,
+		},
+		{
+			name:   "generator returns imported type",
+			source: `import { Res } from './base'; function* result(): Res { return { n: 1 }; }`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ast, info := parseAndAnalyzeTS(t, tt.source)
+			findings := DetectUnusedImports(ast, info, "test.ts", []byte(tt.source))
+
+			if len(findings) != 0 {
+				t.Fatalf("Expected 0 findings when import is referenced, got %d: %s", len(findings), findings[0].Description)
+			}
+		})
+	}
+}
+
 func TestDetectUnusedImports_ImportTypeLineSkipped(t *testing.T) {
 	tmpDir := t.TempDir()
 	filePath := filepath.Join(tmpDir, "sample.ts")
