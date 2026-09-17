@@ -17,7 +17,7 @@ also analyzes Go, Rust and C++, in one report:
 npx polyscan analyze .
 ```
 
-📖 Documentation: [polyscan.codescan.dev](https://polyscan.codescan.dev/)
+📖 Documentation: [docs.codescan.dev/polyscan](https://docs.codescan.dev/polyscan/)
 
 ## What remains in this directory
 

@@ -49,7 +49,7 @@ You do not have to memorize the split. A run that loads a file naming such a key
 ```console
 $ polyscan analyze src/
 Warning: /work/app/jscan.config.json sets 2 keys that no command reads: dead_code.context_lines, output.format
-  See https://polyscan.codescan.dev/configuration/#which-keys-take-effect-today
+  See https://docs.codescan.dev/polyscan/configuration/#which-keys-take-effect-today
 ```
 
 The same warning catches misspelled keys, since a key polyscan does not recognize is by definition one that no command reads.
