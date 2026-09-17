@@ -150,13 +150,34 @@ func (ca *CBOAnalyzer) extractImportDependencies(ast *parser.Node, filePath stri
 
 // extractInstantiationDependencies extracts dependencies from new expressions
 func (ca *CBOAnalyzer) extractInstantiationDependencies(ast *parser.Node, deps *ClassDependencies) {
+	// First pass: collect imported identifiers to resolve constructor names
+	importedIdentifiers := make(map[string]string) // local name -> module name
+	ast.Walk(func(node *parser.Node) bool {
+		if node.Type == parser.NodeImportDeclaration && node.Source != nil {
+			moduleName := ca.extractSourceValue(node.Source)
+			for _, spec := range node.Specifiers {
+				if spec.Name != "" {
+					importedIdentifiers[spec.Name] = moduleName
+				}
+			}
+		}
+		return true
+	})
+
 	ast.Walk(func(node *parser.Node) bool {
 		// Check for both tree-sitter type and our AST type
 		if node.Type == parser.NodeNewExpression || node.Type == "new_expression" {
 			className := ca.extractCalleeClassName(node)
 			if className != "" && !isBuiltinClass(className) {
-				deps.InstantiationDependencies[className] = true
-				deps.DependentClasses[className] = true
+				// If the class name is an imported identifier, resolve to the module name
+				if moduleName, ok := importedIdentifiers[className]; ok {
+					depName := normalizeModuleName(moduleName)
+					deps.InstantiationDependencies[depName] = true
+					deps.DependentClasses[depName] = true
+				} else {
+					deps.InstantiationDependencies[className] = true
+					deps.DependentClasses[className] = true
+				}
 			}
 		}
 		return true

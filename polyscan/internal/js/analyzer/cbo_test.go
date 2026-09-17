@@ -665,3 +665,38 @@ func TestCBOTypeHintsSkipDeclaredNames(t *testing.T) {
 		})
 	}
 }
+
+// TestCBOInstantiationOnImportedClassCountsOnce: new X() on an imported class
+// must add only the module name to DependentClasses, not both the module and
+// the raw constructor identifier. (issue 151)
+func TestCBOInstantiationOnImportedClassCountsOnce(t *testing.T) {
+	source := `
+import { Widget } from './dep'
+
+export function run(): string {
+  return new Widget().render()
+}
+`
+	p := parser.NewTypeScriptParser()
+	defer p.Close()
+
+	ast, err := p.ParseFile("test.ts", []byte(source))
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+
+	result, err := NewCBOAnalyzer(DefaultCBOAnalyzerConfig()).AnalyzeFile(ast, "test.ts")
+	if err != nil {
+		t.Fatalf("Failed to analyze: %v", err)
+	}
+
+	if result.Metrics.CouplingCount != 1 {
+		t.Errorf("CouplingCount = %d, want 1", result.Metrics.CouplingCount)
+	}
+	if len(result.Metrics.DependentClasses) != 1 {
+		t.Errorf("DependentClasses = %v, want exactly [dep]", result.Metrics.DependentClasses)
+	}
+	if len(result.Metrics.DependentClasses) > 0 && result.Metrics.DependentClasses[0] != "dep" {
+		t.Errorf("DependentClasses[0] = %q, want \"dep\"", result.Metrics.DependentClasses[0])
+	}
+}
