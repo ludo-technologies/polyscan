@@ -286,7 +286,6 @@ func (b *ASTBuilder) buildGeneratorFunction(tsNode *sitter.Node) *Node {
 func (b *ASTBuilder) buildMethodDefinition(tsNode *sitter.Node) *Node {
 	node := NewNode(NodeMethodDefinition)
 	node.Location = b.getLocation(tsNode)
-	b.addDecoratorChildren(node, tsNode)
 
 	// Extract method name
 	if nameNode := b.getChildByFieldName(tsNode, "name"); nameNode != nil {
