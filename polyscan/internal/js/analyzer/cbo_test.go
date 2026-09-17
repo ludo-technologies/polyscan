@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
@@ -666,37 +667,123 @@ func TestCBOTypeHintsSkipDeclaredNames(t *testing.T) {
 	}
 }
 
-// TestCBOInstantiationOnImportedClassCountsOnce: new X() on an imported class
-// must add only the module name to DependentClasses, not both the module and
-// the raw constructor identifier. (issue 151)
+// TestCBOInstantiationOnImportedClassCountsOnce: `new X()` on an imported
+// binding must add only the module name to DependentClasses, not both the
+// module and the raw constructor identifier, for every import form.
+// (issue 151)
 func TestCBOInstantiationOnImportedClassCountsOnce(t *testing.T) {
-	source := `
-import { Widget } from './dep'
+	cases := []struct {
+		name       string
+		source     string
+		wantModule string
+	}{
+		{
+			name: "default import",
+			source: `
+import Elysia from 'elysia'
+
+export function run() {
+  return new Elysia()
+}
+`,
+			wantModule: "elysia",
+		},
+		{
+			name: "named import with alias",
+			source: `
+import { Widget as W } from './dep'
 
 export function run(): string {
-  return new Widget().render()
+  return new W().render()
+}
+`,
+			wantModule: "dep",
+		},
+		{
+			name: "namespace import",
+			source: `
+import * as dep from './dep'
+
+export function run(): string {
+  return new dep.Widget().render()
+}
+`,
+			wantModule: "dep",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.NewTypeScriptParser()
+			defer p.Close()
+
+			ast, err := p.ParseFile("test.ts", []byte(tc.source))
+			if err != nil {
+				t.Fatalf("Failed to parse: %v", err)
+			}
+
+			result, err := NewCBOAnalyzer(DefaultCBOAnalyzerConfig()).AnalyzeFile(ast, "test.ts")
+			if err != nil {
+				t.Fatalf("Failed to analyze: %v", err)
+			}
+
+			if result.Metrics.CouplingCount != 1 {
+				t.Errorf("CouplingCount = %d, want 1", result.Metrics.CouplingCount)
+			}
+			if want := []string{tc.wantModule}; !slices.Equal(result.Metrics.DependentClasses, want) {
+				t.Errorf("DependentClasses = %v, want %v", result.Metrics.DependentClasses, want)
+			}
+			// The constructor resolves to the import's module, so the
+			// instantiation breakdown holds that module and not the raw name.
+			if result.Metrics.InstantiationDependencies != 1 {
+				t.Errorf("InstantiationDependencies = %d, want 1", result.Metrics.InstantiationDependencies)
+			}
+		})
+	}
+}
+
+// TestCBOInstantiationOnBuiltinImportRespectsIncludeBuiltins: resolving a
+// constructor to its module must not smuggle a builtin back in when builtins
+// are excluded, but the same code counts the builtin when they are included.
+func TestCBOInstantiationOnBuiltinImportRespectsIncludeBuiltins(t *testing.T) {
+	const source = `
+import { EventEmitter } from 'node:events'
+
+export function run() {
+  return new EventEmitter()
 }
 `
-	p := parser.NewTypeScriptParser()
-	defer p.Close()
 
-	ast, err := p.ParseFile("test.ts", []byte(source))
-	if err != nil {
-		t.Fatalf("Failed to parse: %v", err)
-	}
-
-	result, err := NewCBOAnalyzer(DefaultCBOAnalyzerConfig()).AnalyzeFile(ast, "test.ts")
-	if err != nil {
-		t.Fatalf("Failed to analyze: %v", err)
+	cases := []struct {
+		name            string
+		includeBuiltins bool
+		want            int
+	}{
+		{name: "builtins excluded", includeBuiltins: false, want: 0},
+		{name: "builtins included", includeBuiltins: true, want: 1},
 	}
 
-	if result.Metrics.CouplingCount != 1 {
-		t.Errorf("CouplingCount = %d, want 1", result.Metrics.CouplingCount)
-	}
-	if len(result.Metrics.DependentClasses) != 1 {
-		t.Errorf("DependentClasses = %v, want exactly [dep]", result.Metrics.DependentClasses)
-	}
-	if len(result.Metrics.DependentClasses) > 0 && result.Metrics.DependentClasses[0] != "dep" {
-		t.Errorf("DependentClasses[0] = %q, want \"dep\"", result.Metrics.DependentClasses[0])
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.NewTypeScriptParser()
+			defer p.Close()
+
+			ast, err := p.ParseFile("test.ts", []byte(source))
+			if err != nil {
+				t.Fatalf("Failed to parse: %v", err)
+			}
+
+			config := DefaultCBOAnalyzerConfig()
+			config.IncludeBuiltins = tc.includeBuiltins
+			result, err := NewCBOAnalyzer(config).AnalyzeFile(ast, "test.ts")
+			if err != nil {
+				t.Fatalf("Failed to analyze: %v", err)
+			}
+
+			if result.Metrics.CouplingCount != tc.want {
+				t.Errorf("CouplingCount = %d, want %d (DependentClasses: %v)",
+					result.Metrics.CouplingCount, tc.want, result.Metrics.DependentClasses)
+			}
+		})
 	}
 }
