@@ -180,6 +180,7 @@ func (b *ASTBuilder) buildFunctionDeclaration(tsNode *sitter.Node) *Node {
 	if paramsNode := b.getChildByFieldName(tsNode, "parameters"); paramsNode != nil {
 		node.Params = b.buildParameters(paramsNode)
 	}
+	b.setReturnType(node, tsNode)
 
 	// Extract body
 	if bodyNode := b.getChildByFieldName(tsNode, "body"); bodyNode != nil {
@@ -208,6 +209,7 @@ func (b *ASTBuilder) buildArrowFunction(tsNode *sitter.Node) *Node {
 		// Multiple parameters with parentheses
 		node.Params = b.buildParameters(paramsNode)
 	}
+	b.setReturnType(node, tsNode)
 
 	// Extract body
 	if bodyNode := b.getChildByFieldName(tsNode, "body"); bodyNode != nil {
@@ -239,6 +241,7 @@ func (b *ASTBuilder) buildFunctionExpression(tsNode *sitter.Node) *Node {
 	if paramsNode := b.getChildByFieldName(tsNode, "parameters"); paramsNode != nil {
 		node.Params = b.buildParameters(paramsNode)
 	}
+	b.setReturnType(node, tsNode)
 
 	// Extract body
 	if bodyNode := b.getChildByFieldName(tsNode, "body"); bodyNode != nil {
@@ -266,6 +269,7 @@ func (b *ASTBuilder) buildGeneratorFunction(tsNode *sitter.Node) *Node {
 	if paramsNode := b.getChildByFieldName(tsNode, "parameters"); paramsNode != nil {
 		node.Params = b.buildParameters(paramsNode)
 	}
+	b.setReturnType(node, tsNode)
 
 	// Extract body
 	if bodyNode := b.getChildByFieldName(tsNode, "body"); bodyNode != nil {
@@ -292,6 +296,7 @@ func (b *ASTBuilder) buildMethodDefinition(tsNode *sitter.Node) *Node {
 	if paramsNode := b.getChildByFieldName(tsNode, "parameters"); paramsNode != nil {
 		node.Params = b.buildParameters(paramsNode)
 	}
+	b.setReturnType(node, tsNode)
 
 	// Extract body
 	if bodyNode := b.getChildByFieldName(tsNode, "body"); bodyNode != nil {
@@ -308,10 +313,20 @@ func (b *ASTBuilder) buildMethodDefinition(tsNode *sitter.Node) *Node {
 func (b *ASTBuilder) buildClassDeclaration(tsNode *sitter.Node) *Node {
 	node := NewNode(NodeClass)
 	node.Location = b.getLocation(tsNode)
+	b.addDecoratorChildren(node, tsNode)
 
 	// Extract class name
 	if nameNode := b.getChildByFieldName(tsNode, "name"); nameNode != nil {
 		node.Name = nameNode.Content(b.source)
+	}
+
+	// Keep runtime `extends` and TypeScript `implements` references visible to
+	// downstream AST walks instead of treating their imports as unused.
+	for i := 0; i < int(tsNode.ChildCount()); i++ {
+		child := tsNode.Child(i)
+		if child != nil && child.Type() == "class_heritage" {
+			node.AddChild(b.buildNode(child))
+		}
 	}
 
 	// Extract class body
@@ -1087,6 +1102,7 @@ func (b *ASTBuilder) buildImportSpecifier(tsNode *sitter.Node) *Node {
 func (b *ASTBuilder) buildExportStatement(tsNode *sitter.Node) *Node {
 	node := NewNode(NodeExportNamedDeclaration)
 	node.Location = b.getLocation(tsNode)
+	b.addDecoratorChildren(node, tsNode)
 
 	// Check for default, export *, etc.
 	hasDefault := false
@@ -1205,6 +1221,27 @@ func (b *ASTBuilder) buildGenericNode(tsNode *sitter.Node) *Node {
 	}
 
 	return node
+}
+
+// addDecoratorChildren retains decorator expressions that tree-sitter attaches
+// to declarations or their export wrapper. Decorators can reference imported
+// runtime values and must therefore participate in AST walks.
+func (b *ASTBuilder) addDecoratorChildren(node *Node, tsNode *sitter.Node) {
+	for i := 0; i < int(tsNode.ChildCount()); i++ {
+		child := tsNode.Child(i)
+		if child != nil && child.Type() == "decorator" {
+			node.AddChild(b.buildNode(child))
+		}
+	}
+}
+
+// setReturnType retains TypeScript return annotations. Parameter annotations
+// are already reached through Params, but specialized function builders used
+// to drop the separate return_type field.
+func (b *ASTBuilder) setReturnType(node *Node, tsNode *sitter.Node) {
+	if returnTypeNode := b.getChildByFieldName(tsNode, "return_type"); returnTypeNode != nil {
+		node.TypeAnnotation = b.buildNode(returnTypeNode)
+	}
 }
 
 // buildParameters builds parameter list from formal_parameters node
