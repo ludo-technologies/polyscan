@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"sort"
 	"testing"
@@ -532,5 +533,134 @@ func TestWeakestFirstPairsKeepsStrongest(t *testing.T) {
 
 	if weakest := top.weakest().Similarity; weakest != 0.70 {
 		t.Errorf("weakest() = %v, want 0.70", weakest)
+	}
+}
+
+// TestClassFormsAreAllCloneCandidates covers the three spellings of a class in
+// TypeScript. Only the plain declaration used to reach a NodeClass, so the
+// abstract and expression forms were dropped before clone detection saw them.
+func TestClassFormsAreAllCloneCandidates(t *testing.T) {
+	const body = `
+  private items: number[] = [];
+  add(x: number): void {
+    if (x > 0) {
+      this.items.push(x);
+    } else {
+      this.items.push(0);
+    }
+  }
+  total(): number {
+    let sum = 0;
+    for (const i of this.items) {
+      sum += i;
+    }
+    return sum;
+  }
+`
+	cases := []struct {
+		name  string
+		open  string
+		close string
+		want  parser.NodeType
+	}{
+		{"declaration", "export class Thing {", "}", parser.NodeClass},
+		{"abstract declaration", "export abstract class Thing {", "}", parser.NodeClass},
+		{"class expression", "export const Thing = class {", "};", parser.NodeClassExpression},
+		{"named class expression", "export const Thing = class Inner {", "};", parser.NodeClassExpression},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			source := []byte(tc.open + body + tc.close)
+			ast, err := parser.ParseForLanguage("thing.ts", source)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+
+			var found []parser.NodeType
+			var walk func(node *parser.Node)
+			walk = func(node *parser.Node) {
+				if node == nil {
+					return
+				}
+				if node.Type == parser.NodeClass || node.Type == parser.NodeClassExpression {
+					found = append(found, node.Type)
+				}
+				for _, child := range parser.OrderedChildren(node) {
+					walk(child)
+				}
+			}
+			walk(ast)
+
+			if len(found) != 1 {
+				t.Fatalf("found %d class nodes %v, want exactly 1", len(found), found)
+			}
+			if found[0] != tc.want {
+				t.Errorf("class node type = %q, want %q", found[0], tc.want)
+			}
+		})
+	}
+}
+
+// TestAbstractAndExpressionClassesAreCloneDetected drives the whole pipeline,
+// since a class that never becomes a fragment candidate is invisible no matter
+// how well the builder names it.
+func TestAbstractAndExpressionClassesAreCloneDetected(t *testing.T) {
+	const body = `
+  private items: number[] = [];
+  add(x: number): void {
+    if (x > 0) {
+      this.items.push(x);
+    } else {
+      this.items.push(0);
+    }
+  }
+  total(): number {
+    let sum = 0;
+    for (const i of this.items) {
+      sum += i;
+    }
+    return sum;
+  }
+`
+	cases := []struct {
+		name     string
+		open     string
+		close    string
+		wantType parser.NodeType
+	}{
+		{"declaration", "export class %s {", "}", parser.NodeClass},
+		{"abstract declaration", "export abstract class %s {", "}", parser.NodeClass},
+		{"class expression", "export const %s = class {", "};", parser.NodeClassExpression},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			detector := NewCloneDetector(DefaultCloneDetectorConfig())
+
+			classFragments := 0
+			var fragments []*CodeFragment
+			for _, name := range []string{"Thing1", "Thing2"} {
+				source := []byte(fmt.Sprintf(tc.open, name) + body + tc.close)
+				ast, err := parser.ParseForLanguage("thing.ts", source)
+				if err != nil {
+					t.Fatalf("parse %s: %v", name, err)
+				}
+				extracted := detector.ExtractFragmentsWithSource(ast.Body, name+".ts", source)
+				for _, fragment := range extracted {
+					if fragment.ASTNode.Type == tc.wantType {
+						classFragments++
+					}
+				}
+				fragments = append(fragments, extracted...)
+			}
+
+			if classFragments != 2 {
+				t.Fatalf("extracted %d class fragments, want 2", classFragments)
+			}
+			if pairs, _ := detector.DetectClones(fragments); len(pairs) == 0 {
+				t.Fatal("detected no clone pairs, want at least one")
+			}
+		})
 	}
 }
