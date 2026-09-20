@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-20
+
+### Fixed
+
+- A JavaScript/TypeScript symbol re-exported from a barrel file counts as used, and a file reached only through a re-export counts as reachable. Both `export * from './mod.js'` and `export { named } from './mod2.js'` are followed as edges of the import graph, an aliased re-export is tracked under the name the source file declares, and `export *` does not carry a default export. Before, a library that publishes its API through an `index.ts` barrel had that whole API reported as unused exports and the files behind the barrel reported as orphans (#155)
+- Go, Rust and C++ coupling (CBO) measures the share of coupled types against every type the analysis found, not against the coupled types alone. The report still lists only the types that are coupled and carries the full population in `total_classes`, which the summary counts, places in the `0` bucket of the distribution and averages over. Before, the denominator held the problem types only, so a package of twelve decoupled types scored 100 on coupling while the same package with one coupled type added scored 0, taking the health grade from A to B (#153)
+- A JavaScript/TypeScript import used in a class heritage clause, in a decorator or in a return-type annotation counts as used. The parser keeps the identifiers of `extends` and `implements`, the decorators of a class, of a method and of an exported declaration, and the return type of every function-like declaration. Before, those identifiers never reached the internal AST and the dead code analysis reported the imports as unused, even though `extends` and a decorator reference the binding at runtime. Type-parameter declarations are still not traversed, because a type parameter that shadows an imported name would look like a use of it (#154)
+- JavaScript/TypeScript coupling (CBO) counts a method receiver only when the name it resolves to is imported. A method called on a function parameter, on a local `const` or `let`, on a destructured binding or on a module-private constant no longer records that name as a coupled class. Before, a call such as `cache.set(label, value)` on a local Map counted `cache` as coupling, so `coupling_count` was inflated on most non-trivial files and the risk level could reach high on ordinary code (#150)
+- An imported class used as a constructor counts its module once in JavaScript/TypeScript coupling (CBO). `new Widget()` on an imported `Widget` resolves to the module the name comes from, through a default, named, aliased or namespace import, and a module classified as a builtin stays excluded unless builtins are included. Before, the single import was counted twice, once under the normalized module name and once under the raw constructor identifier (#151)
+
 ## [0.4.0] - 2026-09-17
 
 ### Added
