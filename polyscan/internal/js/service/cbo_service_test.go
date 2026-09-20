@@ -93,8 +93,8 @@ func TestSummarizeCoupling_MostCoupledClassesStableAtTiedCutoff(t *testing.T) {
 		couplingClass("TieB", "src/tie_b.js", 13),
 	)
 
-	forward := SummarizeCoupling(classes, 1)
-	backward := SummarizeCoupling(reversed(classes), 1)
+	forward := SummarizeCoupling(classes, 1, 0)
+	backward := SummarizeCoupling(reversed(classes), 1, 0)
 
 	if len(forward.MostCoupledClasses) != mostCoupledClassesLimit {
 		t.Fatalf("expected %d most coupled classes, got %d", mostCoupledClassesLimit, len(forward.MostCoupledClasses))

@@ -601,8 +601,10 @@ func TestAnalyzeCoupling(t *testing.T) {
 		t.Fatalf("analyze: %v\n%s", err, out)
 	}
 	doc := decodeAnalyzeJSON(t, out)
-	if doc.CBO == nil || len(doc.CBO.Classes) != 2 || doc.CBO.Summary.TotalClasses != 2 {
-		t.Fatalf("cbo = %+v, want the Go type and the JavaScript module", doc.CBO)
+	// Config and User count toward the population, but only Server and the
+	// JavaScript module have nonzero coupling and appear in the listing.
+	if doc.CBO == nil || len(doc.CBO.Classes) != 2 || doc.CBO.Summary.TotalClasses != 4 {
+		t.Fatalf("cbo = %+v, want two listed classes and four analyzed classes", doc.CBO)
 	}
 	server := doc.CBO.Classes[0]
 	if server.Name != "Server" || server.Language != "Go" || server.Metrics.CouplingCount != 2 ||
@@ -612,8 +614,8 @@ func TestAnalyzeCoupling(t *testing.T) {
 	if module := doc.CBO.Classes[1]; module.Name != "a" || module.Language != "" {
 		t.Errorf("class = %+v, want the JavaScript module a", module)
 	}
-	if doc.Summary == nil || !doc.Summary.CBOEnabled || doc.Summary.CBOClasses != 2 {
-		t.Errorf("summary = %+v, want coupling enabled over 2 classes", doc.Summary)
+	if doc.Summary == nil || !doc.Summary.CBOEnabled || doc.Summary.CBOClasses != 4 {
+		t.Errorf("summary = %+v, want coupling enabled over 4 classes", doc.Summary)
 	}
 
 	out, err = run(t, "analyze", "--format", "text", "--select", "cbo", dir)

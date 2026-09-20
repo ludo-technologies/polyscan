@@ -1,7 +1,11 @@
 package report
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	coredomain "github.com/ludo-technologies/polyscan/core/domain"
@@ -9,7 +13,83 @@ import (
 	"github.com/ludo-technologies/polyscan/polyscan/internal/clone"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/js/service"
 )
+
+func TestCouplingScoreIncludesUncoupledTypes(t *testing.T) {
+	for _, language := range []struct {
+		name, file, prefix, dep, hub string
+	}{
+		{"Go", "main.go", "package main\n", "type Dep%d struct{}\n", "type Hub struct {\n%s}\n"},
+		{"Rust", "main.rs", "", "struct Dep%d {}\n", "struct Hub {\n%s}\n"},
+	} {
+		t.Run(language.name, func(t *testing.T) {
+			dir := t.TempDir()
+			var source, fields strings.Builder
+			source.WriteString(language.prefix)
+			for i := 0; i < 12; i++ {
+				fmt.Fprintf(&source, language.dep, i)
+				switch language.name {
+				case "Go":
+					fmt.Fprintf(&fields, "d%d Dep%d\n", i, i)
+				case "Rust":
+					fmt.Fprintf(&fields, "d%d: Dep%d,\n", i, i)
+				}
+			}
+			for _, withHub := range []bool{false, true} {
+				if withHub {
+					fmt.Fprintf(&source, language.hub, fields.String())
+				}
+				path := filepath.Join(dir, language.file)
+				if err := os.WriteFile(path, []byte(source.String()), 0600); err != nil {
+					t.Fatal(err)
+				}
+				raw, err := analysis.Analyze([]string{path}, analysis.Options{CBO: true}, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				results, err := Combine(raw, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				wantTotal, wantListed, wantScore := 12, 0, 100
+				if withHub {
+					wantTotal, wantListed, wantScore = 13, 1, 80
+				}
+				cbo := results.CBO
+				if cbo == nil {
+					t.Fatal("missing coupling response")
+				}
+				s := cbo.Summary
+				if s.TotalClasses != wantTotal || s.ClassesAnalyzed != wantTotal || len(cbo.Classes) != wantListed || s.LowRiskClasses != 12 || s.HighRiskClasses != wantListed || s.CBODistribution["0"] != 12 || s.MinCBO != 0 {
+					t.Fatalf("withHub=%v: summary=%+v, listed=%d", withHub, s, len(cbo.Classes))
+				}
+				if withHub && (s.AverageCBO != 12.0/13 || s.MaxCBO != 12 || s.CBODistribution["10+"] != 1) {
+					t.Fatalf("incorrect Hub statistics: %+v", s)
+				}
+				summary := service.BuildAnalyzeSummary(results)
+				if summary.CouplingScore != wantScore {
+					t.Fatalf("coupling score = %d, want %d", summary.CouplingScore, wantScore)
+				}
+				// Showing the omitted zeros must not change the health score.
+				visible := append([]domain.ClassCoupling{}, cbo.Classes...)
+				for i := 0; i < 12; i++ {
+					visible = append(visible, domain.ClassCoupling{Name: fmt.Sprintf("Dep%d", i), RiskLevel: domain.RiskLevelLow})
+				}
+				unfiltered := results
+				unfiltered.CBO = &domain.CBOResponse{Classes: visible, Summary: service.SummarizeCoupling(visible, 1, 0)}
+				if got := service.BuildAnalyzeSummary(unfiltered); got.HealthScore != summary.HealthScore || got.CouplingScore != summary.CouplingScore {
+					t.Fatalf("presentation changed score: filtered=%+v, visible=%+v", summary, got)
+				}
+				// A mixed-language merge must retain the hidden population too.
+				merged := mergeCoupling(cbo, &domain.CBOResponse{Classes: []domain.ClassCoupling{{Name: "module", RiskLevel: domain.RiskLevelLow}}, Summary: domain.CBOSummary{TotalClasses: 1, FilesAnalyzed: 1}})
+				if merged.Summary.TotalClasses != wantTotal+1 || merged.Summary.CBODistribution["0"] != 13 || merged.Summary.LowRiskClasses != 13 {
+					t.Fatalf("merged summary lost zeros: %+v", merged.Summary)
+				}
+			}
+		})
+	}
+}
 
 func genericReport() *analysis.Report {
 	fragment1 := clone.Fragment{ID: 0, Name: "Sum", Language: "Go", FilePath: "a.go", StartLine: 1, EndLine: 10, LineCount: 8, NodeCount: 20, Content: "func Sum() {}"}
@@ -321,6 +401,7 @@ func TestCombineCoupling(t *testing.T) {
 			{Name: "Server", FilePath: "a.go", Language: "Go", StartLine: 3, EndLine: 9, CBO: 4, DependentClasses: []string{"Base", "Config", "model.User", "st.Store"}, Inheritance: 1, TypeHint: 3, RiskLevel: coredomain.RiskLevelMedium},
 			{Name: "Config", FilePath: "b.go", Language: "Go", StartLine: 1, EndLine: 2, CBO: 1, DependentClasses: []string{"Base"}, TypeHint: 1, RiskLevel: coredomain.RiskLevelLow},
 		},
+		TotalClasses:  2,
 		FilesAnalyzed: 2,
 		Warnings:      []string{"x: no go.mod above it"},
 	}}

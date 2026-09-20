@@ -331,7 +331,7 @@ func genericCoupling(report *analysis.Report) *domain.CBOResponse {
 	}
 	return &domain.CBOResponse{
 		Classes:     classes,
-		Summary:     service.SummarizeCoupling(classes, src.FilesAnalyzed),
+		Summary:     service.SummarizeCoupling(classes, src.FilesAnalyzed, src.TotalClasses-len(classes)),
 		Warnings:    append([]string{}, src.Warnings...),
 		Errors:      []string{},
 		GeneratedAt: time.Now().Format(time.RFC3339),
@@ -368,7 +368,7 @@ func mergeCoupling(generic, javascript *domain.CBOResponse) *domain.CBOResponse 
 	})
 	return &domain.CBOResponse{
 		Classes:     classes,
-		Summary:     service.SummarizeCoupling(classes, generic.Summary.FilesAnalyzed+javascript.Summary.FilesAnalyzed),
+		Summary:     service.SummarizeCoupling(classes, generic.Summary.FilesAnalyzed+javascript.Summary.FilesAnalyzed, generic.Summary.TotalClasses+javascript.Summary.TotalClasses-len(classes)),
 		Warnings:    mergeStrings(generic.Warnings, javascript.Warnings),
 		Errors:      mergeStrings(generic.Errors, javascript.Errors),
 		GeneratedAt: javascript.GeneratedAt,
