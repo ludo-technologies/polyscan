@@ -60,8 +60,10 @@ func (b *ASTBuilder) buildNode(tsNode *sitter.Node) *Node {
 		return b.buildGeneratorFunction(tsNode)
 	case "method_definition":
 		return b.buildMethodDefinition(tsNode)
-	case "class_declaration":
+	case "class_declaration", "abstract_class_declaration":
 		return b.buildClassDeclaration(tsNode)
+	case "class":
+		return b.buildClassExpression(tsNode)
 	case "if_statement":
 		return b.buildIfStatement(tsNode)
 	case "switch_statement":
@@ -304,17 +306,30 @@ func (b *ASTBuilder) buildMethodDefinition(tsNode *sitter.Node) *Node {
 	return node
 }
 
-// buildClassDeclaration builds a class declaration node
+// buildClassDeclaration builds a class declaration node. The abstract form is
+// the same node type in tree-sitter, so both land here.
 func (b *ASTBuilder) buildClassDeclaration(tsNode *sitter.Node) *Node {
 	node := NewNode(NodeClass)
+	b.fillClass(node, tsNode)
+	return node
+}
+
+// buildClassExpression builds a class expression node, the `class { ... }` form
+// used as a value. It may carry a name (`const C = class Inner {}`), which is
+// only visible inside the class body, so it is kept when present.
+func (b *ASTBuilder) buildClassExpression(tsNode *sitter.Node) *Node {
+	node := NewNode(NodeClassExpression)
+	b.fillClass(node, tsNode)
+	return node
+}
+
+func (b *ASTBuilder) fillClass(node *Node, tsNode *sitter.Node) {
 	node.Location = b.getLocation(tsNode)
 
-	// Extract class name
 	if nameNode := b.getChildByFieldName(tsNode, "name"); nameNode != nil {
 		node.Name = nameNode.Content(b.source)
 	}
 
-	// Extract class body
 	if bodyNode := b.getChildByFieldName(tsNode, "body"); bodyNode != nil {
 		for i := 0; i < int(bodyNode.ChildCount()); i++ {
 			child := bodyNode.Child(i)
@@ -326,8 +341,6 @@ func (b *ASTBuilder) buildClassDeclaration(tsNode *sitter.Node) *Node {
 			}
 		}
 	}
-
-	return node
 }
 
 // buildIfStatement builds an if statement node

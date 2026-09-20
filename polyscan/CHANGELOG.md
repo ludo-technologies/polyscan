@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- TypeScript classes written as `abstract class` or as a `class` expression reach clone detection as class fragments. The AST builder had a case for `class_declaration` only, so the other two spellings fell through to the generic builder, kept their tree-sitter type names, and were never offered as fragments; the CFG took the module name for them too, since the generic node carries no `Name`. Before, two files holding the same abstract base class or the same class expression reported no clone pair, while the same code as a plain class did (#158)
+
 ## [0.4.0] - 2026-09-17
 
 ### Added
