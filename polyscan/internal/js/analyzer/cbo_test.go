@@ -429,22 +429,6 @@ func TestIsBuiltinClass(t *testing.T) {
 	}
 }
 
-func TestIsBuiltinObject(t *testing.T) {
-	builtins := []string{"console", "process", "JSON", "Math", "window", "document"}
-	for _, name := range builtins {
-		if !isBuiltinObject(name) {
-			t.Errorf("Expected %q to be a builtin object", name)
-		}
-	}
-
-	nonBuiltins := []string{"myService", "userManager", "appConfig"}
-	for _, name := range nonBuiltins {
-		if isBuiltinObject(name) {
-			t.Errorf("Expected %q to NOT be a builtin object", name)
-		}
-	}
-}
-
 func TestIsPrimitiveType(t *testing.T) {
 	primitives := []string{"string", "number", "boolean", "void", "null", "undefined", "any", "unknown"}
 	for _, name := range primitives {
@@ -491,12 +475,14 @@ func TestCalculateRiskLevel(t *testing.T) {
 func TestCBOAttributeAccessDependencies(t *testing.T) {
 	source := `
 import userService from './user-service';
-import logger from './logger';
+import { logger as log } from './logger';
+import * as services from './services';
 
 function doSomething() {
     userService.getUser();
     userService.updateUser();
-    logger.log('message');
+    log.log('message');
+    services.nested.run();
 }
 `
 
@@ -514,9 +500,122 @@ function doSomething() {
 		t.Fatalf("Failed to analyze: %v", err)
 	}
 
-	// Should have 2 attribute access dependencies (user-service and logger)
-	if result.Metrics.AttributeAccessDependencies != 2 {
-		t.Errorf("Expected 2 attribute access dependencies, got %d", result.Metrics.AttributeAccessDependencies)
+	if result.Metrics.AttributeAccessDependencies != 3 {
+		t.Errorf("Expected 3 attribute access dependencies, got %d", result.Metrics.AttributeAccessDependencies)
+	}
+	if result.Metrics.CouplingCount != 3 || !slices.Equal(result.Metrics.DependentClasses, []string{"logger", "services", "user-service"}) {
+		t.Errorf("Expected only the three imported modules, got %+v", result.Metrics)
+	}
+}
+
+// Method receivers name values, not necessarily external classes (issue 150).
+func TestCBOLocalMethodReceiversNotCounted(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+	}{
+		{
+			name: "module and function variables",
+			source: `
+const cache = new Map();
+let plugin = {};
+var legacy = {};
+function run(input) {
+  const w = new Widget();
+  let local = {};
+  cache.set('key', w.render());
+  plugin.run();
+  legacy.run();
+  local.run();
+  return input.load();
+}`,
+		},
+		{
+			name: "destructured and callback bindings",
+			source: `
+const { nested: { target }, nextReset = {} } = options;
+const [first, ...rest] = values;
+target.run(); nextReset.run(); first.run(); rest.map(x => x.run());
+const run = ({ app }, [item], ...args) => {
+  app.run(); item.run(); args.map(arg => arg.run());
+};
+function defaults(input = {}) { input.load(); }
+`,
+		},
+		{
+			name: "nested scopes and chained receivers",
+			source: `
+function run(input) {
+  return () => input.service.load();
+}
+for (const item of items) { item.run(); }
+try { run(); } catch (error) { error.toString(); }
+class Local { static run() {} }
+Local.run();
+`,
+		},
+	}
+	for _, ext := range []string{"js", "ts"} {
+		for _, tc := range cases {
+			t.Run(ext+"/"+tc.name, func(t *testing.T) {
+				var p *parser.Parser
+				if ext == "ts" {
+					p = parser.NewTypeScriptParser()
+				} else {
+					p = parser.NewParser()
+				}
+				defer p.Close()
+				filePath := "plugin." + ext
+				source := "import { Widget } from './dep';\n" + tc.source
+				ast, err := p.ParseFile(filePath, []byte(source))
+				if err != nil {
+					t.Fatalf("Failed to parse: %v", err)
+				}
+				result, err := NewCBOAnalyzer(nil).AnalyzeFile(ast, filePath)
+				if err != nil {
+					t.Fatalf("Failed to analyze: %v", err)
+				}
+				if result.Metrics.CouplingCount != 1 || !slices.Equal(result.Metrics.DependentClasses, []string{"dep"}) {
+					t.Errorf("Expected only dep, got %+v", result.Metrics)
+				}
+				if result.Metrics.AttributeAccessDependencies != 0 {
+					t.Errorf("Local calls added %d attribute dependencies", result.Metrics.AttributeAccessDependencies)
+				}
+			})
+		}
+	}
+}
+
+func TestCBOLocalMethodReceiversIssue150(t *testing.T) {
+	const source = `
+import { Widget } from './dep'
+const cache = new Map<string, string>()
+export function run(input: { load(): string }, label: string): string {
+  const w = new Widget()
+  cache.set(label, w.render())
+  return input.load()
+}`
+	p := parser.NewTypeScriptParser()
+	defer p.Close()
+	ast, err := p.ParseFile("main.ts", []byte(source))
+	if err != nil {
+		t.Fatalf("Failed to parse: %v", err)
+	}
+	config := DefaultCBOAnalyzerConfig()
+	config.LowThreshold = 1
+	config.MediumThreshold = 2
+	result, err := NewCBOAnalyzer(config).AnalyzeFile(ast, "main.ts")
+	if err != nil {
+		t.Fatalf("Failed to analyze: %v", err)
+	}
+	if result.Metrics.CouplingCount != 1 || !slices.Equal(result.Metrics.DependentClasses, []string{"dep"}) {
+		t.Errorf("Expected only dep, got %+v", result.Metrics)
+	}
+	if result.Metrics.InstantiationDependencies != 1 || result.Metrics.AttributeAccessDependencies != 0 {
+		t.Errorf("Expected one constructor dependency and no receiver dependencies, got %+v", result.Metrics)
+	}
+	if result.RiskLevel != domain.RiskLevelLow {
+		t.Errorf("Local calls inflated risk to %v", result.RiskLevel)
 	}
 }
 
@@ -554,6 +653,9 @@ func TestCBOCommonJSRequire(t *testing.T) {
 const fs = require('fs');
 const lodash = require('lodash');
 const utils = require('./utils');
+fs.readFileSync('test.js');
+lodash.map([], x => x);
+utils.run();
 `
 
 	p := parser.NewParser()
@@ -574,6 +676,45 @@ const utils = require('./utils');
 	// Should have 2 dependencies (lodash and utils, excluding fs builtin)
 	if result.Metrics.ImportDependencies != 2 {
 		t.Errorf("Expected 2 import dependencies, got %d", result.Metrics.ImportDependencies)
+	}
+	if result.Metrics.CouplingCount != 2 || !slices.Equal(result.Metrics.DependentClasses, []string{"lodash", "utils"}) {
+		t.Errorf("Expected only the two required modules, got %+v", result.Metrics)
+	}
+	if result.Metrics.AttributeAccessDependencies != 2 {
+		t.Errorf("Expected 2 CommonJS attribute dependencies, got %+v", result.Metrics)
+	}
+}
+
+func TestCBOAttributeAccessBuiltinImports(t *testing.T) {
+	for _, source := range []string{
+		`import fs from 'fs'; import * as path from 'node:path'; import os from 'os';
+fs.readFileSync('file'); path.join('a', 'b'); os.platform();`,
+		`const fs = require('fs'), path = require('node:path'); const os = require('os');
+fs.readFileSync('file'); path.join('a', 'b'); os.platform();`,
+	} {
+		for _, includeBuiltins := range []bool{false, true} {
+			p := parser.NewParser()
+			ast, err := p.ParseString(source)
+			p.Close()
+			if err != nil {
+				t.Fatalf("Failed to parse: %v", err)
+			}
+			config := DefaultCBOAnalyzerConfig()
+			config.IncludeBuiltins = includeBuiltins
+			result, err := NewCBOAnalyzer(config).AnalyzeFile(ast, "builtin.js")
+			if err != nil {
+				t.Fatalf("Failed to analyze: %v", err)
+			}
+			var want []string
+			if includeBuiltins {
+				want = []string{"fs", "node:path", "os"}
+			}
+			metrics := result.Metrics
+			if metrics.CouplingCount != len(want) || metrics.ImportDependencies != len(want) ||
+				metrics.AttributeAccessDependencies != len(want) || !slices.Equal(metrics.DependentClasses, want) {
+				t.Errorf("IncludeBuiltins=%v, source=%s: expected %v in all dependency counts, got %+v", includeBuiltins, source, want, metrics)
+			}
+		}
 	}
 }
 
@@ -687,6 +828,11 @@ export function run() {
 }
 `,
 			wantModule: "elysia",
+		},
+		{
+			name:       "CommonJS binding",
+			source:     `const Widget = require('./dep'); const w = new Widget(); w.render();`,
+			wantModule: "dep",
 		},
 		{
 			name: "named import with alias",
