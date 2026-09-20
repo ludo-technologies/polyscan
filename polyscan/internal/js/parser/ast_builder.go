@@ -60,7 +60,7 @@ func (b *ASTBuilder) buildNode(tsNode *sitter.Node) *Node {
 		return b.buildGeneratorFunction(tsNode)
 	case "method_definition":
 		return b.buildMethodDefinition(tsNode)
-	case "class_declaration":
+	case "class_declaration", "abstract_class_declaration", "class":
 		return b.buildClassDeclaration(tsNode)
 	case "if_statement":
 		return b.buildIfStatement(tsNode)
@@ -309,9 +309,13 @@ func (b *ASTBuilder) buildMethodDefinition(tsNode *sitter.Node) *Node {
 	return node
 }
 
-// buildClassDeclaration builds a class declaration node
+// buildClassDeclaration builds a class declaration or expression node
 func (b *ASTBuilder) buildClassDeclaration(tsNode *sitter.Node) *Node {
-	node := NewNode(NodeClass)
+	nodeType := NodeClass
+	if tsNode.Type() == "class" {
+		nodeType = NodeClassExpression
+	}
+	node := NewNode(nodeType)
 	node.Location = b.getLocation(tsNode)
 	b.addDecoratorChildren(node, tsNode)
 

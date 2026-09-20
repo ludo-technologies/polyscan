@@ -561,6 +561,72 @@ func TestParseClass(t *testing.T) {
 	}
 }
 
+func TestParseAbstractClass(t *testing.T) {
+	code := `
+	abstract class AbstractBase {
+		abstract compute(): number;
+		total(): number {
+			return 42;
+		}
+	}
+	`
+
+	parser := NewTypeScriptParser()
+	defer parser.Close()
+
+	ast, err := parser.ParseString(code)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	found := false
+	ast.Walk(func(n *Node) bool {
+		if n.Type == NodeClass {
+			found = true
+			if n.Name != "AbstractBase" {
+				t.Errorf("Expected class name 'AbstractBase', got '%s'", n.Name)
+			}
+			return false
+		}
+		return true
+	})
+
+	if !found {
+		t.Error("Expected to find abstract class declaration as NodeClass")
+	}
+}
+
+func TestParseClassExpression(t *testing.T) {
+	code := `
+	const MyClass = class {
+		hello() {
+			return "world";
+		}
+	};
+	`
+
+	parser := NewParser()
+	defer parser.Close()
+
+	ast, err := parser.ParseString(code)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	found := false
+	ast.Walk(func(n *Node) bool {
+		if n.Type == NodeClassExpression {
+			found = true
+			return false
+		}
+		return true
+	})
+
+	if !found {
+		t.Error("Expected to find class expression as NodeClassExpression")
+	}
+}
+
 func TestParseAsyncFunction(t *testing.T) {
 	code := `
 	async function fetchData() {
