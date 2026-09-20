@@ -87,17 +87,51 @@ func BuildImportGraph(allModuleInfos map[string]*domain.ModuleInfo, analyzedFile
 				case domain.ImportTypeSideEffect:
 					graph.importedNamesFromFile[resolvedPath]["*"] = true
 				}
-				if graph.reverseEdges[resolvedPath] == nil {
-					graph.reverseEdges[resolvedPath] = make(map[string]bool)
-				}
-				graph.reverseEdges[resolvedPath][importingFile] = true
+				graph.addEdge(importingFile, resolvedPath)
 			}
-			if len(resolvedPaths) > 0 {
-				graph.forwardEdges[importingFile] = append(graph.forwardEdges[importingFile], resolvedPaths...)
+		}
+		for _, exp := range info.Exports {
+			if exp.Source == "" || exp.IsTypeOnly {
+				continue
+			}
+			for _, resolvedPath := range resolveImportPaths(importingFile, exp.Source, exp.SourceType, analyzedFiles, idx) {
+				graph.addEdge(importingFile, resolvedPath)
+				if graph.importedNamesFromFile[resolvedPath] == nil {
+					graph.importedNamesFromFile[resolvedPath] = make(map[string]bool)
+				}
+				names := graph.importedNamesFromFile[resolvedPath]
+				if exp.ExportType == "all" {
+					// Unlike a namespace import, export * does not publish default.
+					if target := allModuleInfos[resolvedPath]; target != nil {
+						for _, targetExport := range target.Exports {
+							for _, name := range getExportedNames(targetExport) {
+								if name != "default" {
+									names[name] = true
+								}
+							}
+						}
+					}
+				} else {
+					for _, spec := range exp.Specifiers {
+						if !spec.IsType && spec.Local != "" {
+							names[spec.Local] = true
+						}
+					}
+				}
 			}
 		}
 	}
 	return graph
+}
+
+func (g *ImportGraph) addEdge(from, to string) {
+	if g.reverseEdges[to] == nil {
+		g.reverseEdges[to] = make(map[string]bool)
+	}
+	if !g.reverseEdges[to][from] {
+		g.forwardEdges[from] = append(g.forwardEdges[from], to)
+		g.reverseEdges[to][from] = true
+	}
 }
 
 // DetectUnusedImports detects imported names that are never referenced in the file.

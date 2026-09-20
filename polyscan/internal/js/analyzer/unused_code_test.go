@@ -3,6 +3,7 @@ package analyzer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
@@ -47,6 +48,63 @@ func parseAndAnalyzeTS(t *testing.T, source string) (*parser.Node, *domain.Modul
 	}
 
 	return ast, info
+}
+
+func TestBarrelReExports(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		barrel string
+		unused []string
+	}{
+		{"star", `export * from './mod.js';`, []string{"default"}},
+		{"named", `export { used } from './mod.js';`, []string{"unused", "default"}},
+		{"aliased", `export { used as publicName } from './mod.js';`, []string{"unused", "default"}},
+		{"default", `export { default as publicName } from './mod.js';`, []string{"used", "unused"}},
+		{"extensionless", `export { used } from './mod';`, []string{"unused", "default"}},
+		{"path alias", `export { used } from '@/mod.js';`, []string{"unused", "default"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, mod := parseAndAnalyzeTS(t, "export function used() {}\nexport class unused {}\nexport default function hidden() {}")
+			_, barrel := parseAndAnalyzeTS(t, tc.barrel)
+			infos := map[string]*domain.ModuleInfo{"/project/mod.ts": mod, "/project/index.ts": barrel}
+			graph := BuildImportGraph(infos, map[string]bool{"/project/mod.ts": true, "/project/index.ts": true})
+			for _, detect := range []func(map[string]*domain.ModuleInfo, *ImportGraph) []*DeadCodeFinding{
+				DetectUnusedExports, DetectUnusedExportedFunctions,
+			} {
+				findings := detect(infos, graph)
+				if len(findings) != len(tc.unused) {
+					t.Fatalf("expected unused %v, got %+v", tc.unused, findings)
+				}
+				for i, name := range tc.unused {
+					if !strings.Contains(findings[i].Description, "'"+name+"'") {
+						t.Errorf("expected unused %s, got %s", name, findings[i].Description)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestBarrelReExports_ChainsAndCycles(t *testing.T) {
+	sources := map[string]string{
+		"/project/index.ts":  `export * from './barrel.js';`,
+		"/project/barrel.ts": `export { used as publicName } from './mod.js'; export * from './index.js';`,
+		"/project/mod.ts":    `import './barrel.js'; export function used() {}`,
+	}
+	infos := make(map[string]*domain.ModuleInfo)
+	files := make(map[string]bool)
+	for path, source := range sources {
+		_, infos[path] = parseAndAnalyzeTS(t, source)
+		files[path] = true
+	}
+	graph := BuildImportGraph(infos, files)
+	for _, detect := range []func(map[string]*domain.ModuleInfo, *ImportGraph) []*DeadCodeFinding{
+		DetectUnusedExports, DetectUnusedExportedFunctions, DetectOrphanFiles,
+	} {
+		if findings := detect(infos, graph); len(findings) != 0 {
+			t.Errorf("expected no findings for reachable barrel chain, got %+v", findings)
+		}
+	}
 }
 
 // --- Unused Import Tests ---
