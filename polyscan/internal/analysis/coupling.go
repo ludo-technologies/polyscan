@@ -38,9 +38,11 @@ type CoupledClass struct {
 type Coupling struct {
 	// Classes lists every type coupled to at least one other, sorted by
 	// descending CBO, then by location.
-	Classes       []CoupledClass `json:"classes"`
-	FilesAnalyzed int            `json:"files_analyzed"`
-	Warnings      []string       `json:"warnings,omitempty"`
+	Classes []CoupledClass `json:"classes"`
+	// TotalClasses includes uncoupled types omitted from Classes.
+	TotalClasses  int      `json:"total_classes"`
+	FilesAnalyzed int      `json:"files_analyzed"`
+	Warnings      []string `json:"warnings,omitempty"`
 }
 
 // couplingFile is what the coupling analysis keeps of one file.
@@ -313,7 +315,7 @@ func (b *couplingBuilder) build() *Coupling {
 		owners = append(owners, t)
 	}
 
-	coupling := &Coupling{Classes: []CoupledClass{}, FilesAnalyzed: len(b.files), Warnings: b.warnings}
+	coupling := &Coupling{Classes: []CoupledClass{}, TotalClasses: len(classes), FilesAnalyzed: len(b.files), Warnings: b.warnings}
 	for i, result := range cbo.ComputeCBO(classes, cbo.DefaultConfig()) {
 		if result.CouplingCount == 0 {
 			continue

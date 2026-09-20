@@ -112,7 +112,7 @@ func (s *CBOServiceImpl) buildResponse(ctx context.Context, results []fileAnalys
 	filteredClasses := s.filterClasses(allClasses, req)
 	sortedClasses := s.sortClasses(filteredClasses, req.SortBy)
 
-	summary := SummarizeCoupling(sortedClasses, filesProcessed)
+	summary := SummarizeCoupling(sortedClasses, filesProcessed, 0)
 
 	return &domain.CBOResponse{
 		Classes:     sortedClasses,
@@ -233,14 +233,19 @@ func classPrecedes(a, b domain.ClassCoupling) bool {
 
 // SummarizeCoupling aggregates coupling results, in any order, into the
 // summary the report renders: totals, risk counts, the distribution and the
-// most coupled classes.
-func SummarizeCoupling(classes []domain.ClassCoupling, filesProcessed int) domain.CBOSummary {
+// most coupled classes. Omitted zero-coupling types still contribute to the
+// population statistics, but not to the most-coupled listing.
+func SummarizeCoupling(classes []domain.ClassCoupling, filesProcessed, omittedZeros int) domain.CBOSummary {
 	summary := domain.CBOSummary{
-		TotalClasses:       len(classes),
-		ClassesAnalyzed:    len(classes),
+		TotalClasses:       len(classes) + omittedZeros,
+		ClassesAnalyzed:    len(classes) + omittedZeros,
 		FilesAnalyzed:      filesProcessed,
 		CBODistribution:    make(map[string]int),
 		MostCoupledClasses: []domain.ClassCoupling{},
+	}
+	if omittedZeros > 0 {
+		summary.LowRiskClasses = omittedZeros
+		summary.CBODistribution["0"] = omittedZeros
 	}
 
 	if len(classes) == 0 {
@@ -251,6 +256,9 @@ func SummarizeCoupling(classes []domain.ClassCoupling, filesProcessed int) domai
 	totalCBO := 0
 	maxCBO := 0
 	minCBO := classes[0].Metrics.CouplingCount
+	if omittedZeros > 0 {
+		minCBO = 0
+	}
 
 	for _, class := range classes {
 		cbo := class.Metrics.CouplingCount
@@ -278,7 +286,7 @@ func SummarizeCoupling(classes []domain.ClassCoupling, filesProcessed int) domai
 		summary.CBODistribution[rangeKey]++
 	}
 
-	summary.AverageCBO = float64(totalCBO) / float64(len(classes))
+	summary.AverageCBO = float64(totalCBO) / float64(summary.TotalClasses)
 	summary.MaxCBO = maxCBO
 	summary.MinCBO = minCBO
 
