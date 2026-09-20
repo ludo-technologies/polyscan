@@ -571,7 +571,7 @@ func TestParseAbstractClass(t *testing.T) {
 	}
 	`
 
-	parser := NewParser()
+	parser := NewTypeScriptParser()
 	defer parser.Close()
 
 	ast, err := parser.ParseString(code)
