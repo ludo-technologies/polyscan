@@ -278,7 +278,9 @@ func (ca *CBOAnalyzer) extractAttributeAccessDependencies(ast *parser.Node, deps
 	// Track imported identifiers for context
 	importedIdentifiers := ca.collectImportedIdentifiers(ast)
 
-	// Look for method calls on imported objects
+	// Only imported receivers identify external dependencies. A receiver name
+	// alone denotes a value (often a local or parameter), not a coupled class.
+	// Constructor dependencies are handled by the instantiation pass.
 	ast.Walk(func(node *parser.Node) bool {
 		if node.Type == parser.NodeCallExpression {
 			// Check for member expression calls: obj.method()
@@ -290,12 +292,6 @@ func (ca *CBOAnalyzer) extractAttributeAccessDependencies(ast *parser.Node, deps
 						depName := normalizeModuleName(moduleName)
 						deps.AttributeAccessDependencies[depName] = true
 						deps.DependentClasses[depName] = true
-					} else {
-						// Otherwise, count the object itself (could be a class instance)
-						if !isBuiltinObject(objName) {
-							deps.AttributeAccessDependencies[objName] = true
-							deps.DependentClasses[objName] = true
-						}
 					}
 				}
 			}
@@ -521,22 +517,6 @@ var builtinClasses = map[string]bool{
 	"FormData": true, "Blob": true, "File": true, "FileReader": true,
 }
 
-var builtinObjects = map[string]bool{
-	"console": true, "process": true, "global": true, "globalThis": true,
-	"window": true, "document": true, "navigator": true, "location": true,
-	"localStorage": true, "sessionStorage": true,
-	"JSON": true, "Math": true, "Intl": true,
-	"Object": true, "Array": true, "String": true, "Number": true,
-	"Boolean": true, "Date": true, "RegExp": true,
-	"Promise": true, "Proxy": true, "Reflect": true,
-	"Buffer": true, "require": true, "module": true, "exports": true,
-	"__dirname": true, "__filename": true,
-	"setTimeout": true, "setInterval": true, "setImmediate": true,
-	"clearTimeout": true, "clearInterval": true, "clearImmediate": true,
-	"fetch": true, "XMLHttpRequest": true,
-	"this": true, "super": true,
-}
-
 var primitiveTypes = map[string]bool{
 	"string": true, "number": true, "boolean": true, "void": true,
 	"null": true, "undefined": true, "never": true, "any": true,
@@ -561,11 +541,6 @@ var builtinTypes = map[string]bool{
 // isBuiltinClass returns true if the class is a JavaScript built-in
 func isBuiltinClass(name string) bool {
 	return builtinClasses[name]
-}
-
-// isBuiltinObject returns true if the object is a JavaScript built-in
-func isBuiltinObject(name string) bool {
-	return builtinObjects[name]
 }
 
 // isPrimitiveType returns true if the type is a primitive TypeScript type
