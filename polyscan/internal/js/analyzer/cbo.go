@@ -148,7 +148,8 @@ func (ca *CBOAnalyzer) extractImportDependencies(ast *parser.Node, filePath stri
 	}
 }
 
-// collectImportedIdentifiers maps each import's local binding name to its module.
+// collectImportedIdentifiers maps ESM imports and direct CommonJS require
+// bindings (const name = require('module')) to their modules.
 // Both the instantiation and the attribute access passes need the same map, so
 // it is built once per pass here instead of being inlined at every call site.
 func (ca *CBOAnalyzer) collectImportedIdentifiers(ast *parser.Node) map[string]string {
@@ -159,6 +160,17 @@ func (ca *CBOAnalyzer) collectImportedIdentifiers(ast *parser.Node) map[string]s
 			for _, spec := range node.Specifiers {
 				if spec.Name != "" {
 					imported[spec.Name] = moduleName
+				}
+			}
+		}
+		// Variable declarators retain their grammar shape in Children:
+		// the binding comes first and the initializer comes last.
+		if node.Type == "variable_declarator" && len(node.Children) >= 2 {
+			binding := node.Children[0]
+			initializer := node.Children[len(node.Children)-1]
+			if binding.Type == parser.NodeIdentifier && initializer.Type == parser.NodeCallExpression {
+				if imp := ca.moduleAnalyzer.processRequireCall(initializer); imp != nil {
+					imported[binding.Name] = imp.Source
 				}
 			}
 		}
@@ -289,6 +301,10 @@ func (ca *CBOAnalyzer) extractAttributeAccessDependencies(ast *parser.Node, deps
 				if objName != "" {
 					// If the object is an imported identifier, count the module as a dependency
 					if moduleName, ok := importedIdentifiers[objName]; ok {
+						if !ca.config.IncludeBuiltins &&
+							ca.moduleAnalyzer.classifyModuleSource(moduleName) == domain.ModuleTypeBuiltin {
+							return true
+						}
 						depName := normalizeModuleName(moduleName)
 						deps.AttributeAccessDependencies[depName] = true
 						deps.DependentClasses[depName] = true

@@ -558,7 +558,12 @@ Local.run();
 	for _, ext := range []string{"js", "ts"} {
 		for _, tc := range cases {
 			t.Run(ext+"/"+tc.name, func(t *testing.T) {
-				p := parser.NewParser()
+				var p *parser.Parser
+				if ext == "ts" {
+					p = parser.NewTypeScriptParser()
+				} else {
+					p = parser.NewParser()
+				}
 				defer p.Close()
 				filePath := "plugin." + ext
 				source := "import { Widget } from './dep';\n" + tc.source
@@ -675,6 +680,42 @@ utils.run();
 	if result.Metrics.CouplingCount != 2 || !slices.Equal(result.Metrics.DependentClasses, []string{"lodash", "utils"}) {
 		t.Errorf("Expected only the two required modules, got %+v", result.Metrics)
 	}
+	if result.Metrics.AttributeAccessDependencies != 2 {
+		t.Errorf("Expected 2 CommonJS attribute dependencies, got %+v", result.Metrics)
+	}
+}
+
+func TestCBOAttributeAccessBuiltinImports(t *testing.T) {
+	for _, source := range []string{
+		`import fs from 'fs'; import * as path from 'node:path'; import os from 'os';
+fs.readFileSync('file'); path.join('a', 'b'); os.platform();`,
+		`const fs = require('fs'), path = require('node:path'); const os = require('os');
+fs.readFileSync('file'); path.join('a', 'b'); os.platform();`,
+	} {
+		for _, includeBuiltins := range []bool{false, true} {
+			p := parser.NewParser()
+			ast, err := p.ParseString(source)
+			p.Close()
+			if err != nil {
+				t.Fatalf("Failed to parse: %v", err)
+			}
+			config := DefaultCBOAnalyzerConfig()
+			config.IncludeBuiltins = includeBuiltins
+			result, err := NewCBOAnalyzer(config).AnalyzeFile(ast, "builtin.js")
+			if err != nil {
+				t.Fatalf("Failed to analyze: %v", err)
+			}
+			var want []string
+			if includeBuiltins {
+				want = []string{"fs", "node:path", "os"}
+			}
+			metrics := result.Metrics
+			if metrics.CouplingCount != len(want) || metrics.ImportDependencies != len(want) ||
+				metrics.AttributeAccessDependencies != len(want) || !slices.Equal(metrics.DependentClasses, want) {
+				t.Errorf("IncludeBuiltins=%v, source=%s: expected %v in all dependency counts, got %+v", includeBuiltins, source, want, metrics)
+			}
+		}
+	}
 }
 
 // TestCBOTypeHintsAreBreakdownOnly: a type annotation is a declaration, not
@@ -787,6 +828,11 @@ export function run() {
 }
 `,
 			wantModule: "elysia",
+		},
+		{
+			name:       "CommonJS binding",
+			source:     `const Widget = require('./dep'); const w = new Widget(); w.render();`,
+			wantModule: "dep",
 		},
 		{
 			name: "named import with alias",
