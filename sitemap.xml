@@ -2,90 +2,90 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://docs.codescan.dev/polyscan/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/contributing/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/faq/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/cli/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/cli/analyze/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/cli/version/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/configuration/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/configuration/examples/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/configuration/reference/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/getting-started/installation/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/getting-started/migrating-from-jscan/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/getting-started/quick-start/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/guides/dependency-graph/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/guides/reduce-duplicate-code/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/guides/typescript-projects/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/integrations/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/integrations/agent-skills/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/integrations/ci-cd/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/output/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/output/health-score/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/output/html-report/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
     <url>
          <loc>https://docs.codescan.dev/polyscan/output/json-schema/</loc>
-         <lastmod>2026-09-17</lastmod>
+         <lastmod>2026-09-21</lastmod>
     </url>
 </urlset>
