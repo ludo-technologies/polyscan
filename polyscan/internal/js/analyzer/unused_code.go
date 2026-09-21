@@ -318,6 +318,10 @@ func DetectUnusedExports(allModuleInfos map[string]*domain.ModuleInfo, graph *Im
 
 // getExportedNames extracts the exported name(s) from an export declaration.
 func getExportedNames(exp *domain.Export) []string {
+	if exp.IsTypeOnly {
+		return nil
+	}
+
 	var names []string
 
 	// Named exports with specifiers: export { foo, bar }

@@ -30,24 +30,30 @@ func parseAndAnalyze(t *testing.T, source string) (*parser.Node, *domain.ModuleI
 	return ast, info
 }
 
-// helper to parse TS source and get module info + AST
-func parseAndAnalyzeTS(t *testing.T, source string) (*parser.Node, *domain.ModuleInfo) {
+// helper to parse TS source with a custom filename and get module info + AST
+func parseAndAnalyzeTSNamed(t *testing.T, filename, source string) (*parser.Node, *domain.ModuleInfo) {
 	t.Helper()
 	p := parser.NewTypeScriptParser()
 	defer p.Close()
 
-	ast, err := p.ParseFile("test.ts", []byte(source))
+	ast, err := p.ParseFile(filename, []byte(source))
 	if err != nil {
 		t.Fatalf("Failed to parse TS: %v", err)
 	}
 
 	ma := NewModuleAnalyzer(DefaultModuleAnalyzerConfig())
-	info, err := ma.AnalyzeFile(ast, "test.ts")
+	info, err := ma.AnalyzeFile(ast, filename)
 	if err != nil {
 		t.Fatalf("Failed to analyze module: %v", err)
 	}
 
 	return ast, info
+}
+
+// helper to parse TS source and get module info + AST
+func parseAndAnalyzeTS(t *testing.T, source string) (*parser.Node, *domain.ModuleInfo) {
+	t.Helper()
+	return parseAndAnalyzeTSNamed(t, "test.ts", source)
 }
 
 func TestBarrelReExports(t *testing.T) {
@@ -219,6 +225,55 @@ func TestDetectUnusedImports_TypeOnlySkipped(t *testing.T) {
 		for _, f := range findings {
 			t.Logf("  finding: %s", f.Description)
 		}
+	}
+}
+
+func TestDetectUnusedImports_TypeOnlyStatementAndInline_Parsed(t *testing.T) {
+	source := `
+import type { TypeA } from './a';
+import { type TypeB, usedFunc, unusedFunc } from './b';
+
+usedFunc();
+`
+	ast, info := parseAndAnalyzeTS(t, source)
+	findings := DetectUnusedImports(ast, info, "test.ts", []byte(source))
+
+	if len(findings) != 1 {
+		t.Fatalf("Expected 1 finding for unusedFunc, got %d: %+v", len(findings), findings)
+	}
+	expectedDesc := "Imported name 'unusedFunc' from './b' is never used"
+	if findings[0].Description != expectedDesc {
+		t.Errorf("Expected description %q, got %q", expectedDesc, findings[0].Description)
+	}
+}
+
+func TestDetectUnusedExports_TypeOnlyStatementAndInline_Parsed(t *testing.T) {
+	source := `
+export type { StmtType };
+export { type InlineType, RegularExport };
+`
+	_, mod := parseAndAnalyzeTSNamed(t, "/src/types.ts", source)
+	allInfos := map[string]*domain.ModuleInfo{
+		"/src/types.ts": mod,
+		"/src/app.ts": {
+			FilePath: "/src/app.ts",
+			Imports:  []*domain.Import{},
+		},
+	}
+	analyzedFiles := map[string]bool{
+		"/src/types.ts": true,
+		"/src/app.ts":   true,
+	}
+
+	graph := BuildImportGraph(allInfos, analyzedFiles)
+	findings := DetectUnusedExports(allInfos, graph)
+
+	if len(findings) != 1 {
+		t.Fatalf("Expected 1 finding for RegularExport, got %d: %+v", len(findings), findings)
+	}
+	expectedDesc := "Export 'RegularExport' is not imported by any other analyzed file"
+	if findings[0].Description != expectedDesc {
+		t.Errorf("Expected description %q, got %q", expectedDesc, findings[0].Description)
 	}
 }
 
