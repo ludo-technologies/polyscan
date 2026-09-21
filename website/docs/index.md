@@ -105,6 +105,12 @@ polyscan analyze --format text src/
 polyscan analyze --format json src/ > report.json
 ```
 
+## A weekly report on GitHub
+
+[Polyscan App](https://codescan.dev/pyscn-bot) runs the same analysis on your repository every week and files the result as a GitHub Issue. It is free for every repository.
+
+<a href="https://codescan.dev/pyscn-bot"><img alt="Install Polyscan App for free" src="https://img.shields.io/badge/Polyscan_App-Install_for_free-2ea44f?style=for-the-badge&logo=github&logoColor=white" height="44"></a>
+
 ## Working with Python instead?
 
 The same analyses are available for Python in [pyscn](https://docs.codescan.dev/pyscn/), which shares its core algorithms with polyscan. And if you are arriving from jscan, the JavaScript/TypeScript analyzer that merged into polyscan, the [migration page](getting-started/migrating-from-jscan.md) maps every old command to its replacement.
