@@ -185,6 +185,8 @@ type Node struct {
 	Declaration *Node   // Export declaration
 	Imported    *Node   // Imported name
 	Local       *Node   // Local binding
+	IsType      bool    // Type-only specifier (e.g. import/export { type X })
+	IsTypeOnly  bool    // Type-only statement (e.g. import/export type { X })
 
 	// TypeScript fields
 	TypeAnnotation *Node   // Type annotation

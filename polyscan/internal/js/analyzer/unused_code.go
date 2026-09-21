@@ -91,7 +91,7 @@ func BuildImportGraph(allModuleInfos map[string]*domain.ModuleInfo, analyzedFile
 			}
 		}
 		for _, exp := range info.Exports {
-			if exp.Source == "" || exp.IsTypeOnly {
+			if exp.Source == "" {
 				continue
 			}
 			for _, resolvedPath := range resolveImportPaths(importingFile, exp.Source, exp.SourceType, analyzedFiles, idx) {
@@ -113,7 +113,7 @@ func BuildImportGraph(allModuleInfos map[string]*domain.ModuleInfo, analyzedFile
 					}
 				} else {
 					for _, spec := range exp.Specifiers {
-						if !spec.IsType && spec.Local != "" {
+						if spec.Local != "" {
 							names[spec.Local] = true
 						}
 					}
@@ -144,7 +144,6 @@ func DetectUnusedImports(ast *parser.Node, moduleInfo *domain.ModuleInfo, filePa
 	}
 
 	// Collect local names from imports (skip side-effect, type-only, dynamic)
-	typeOnlyImportLines := detectTypeOnlyImportLines(content)
 	type importEntry struct {
 		localName string
 		line      int
@@ -158,7 +157,7 @@ func DetectUnusedImports(ast *parser.Node, moduleInfo *domain.ModuleInfo, filePa
 			continue
 		}
 		// Skip type-only imports (import type { Foo } from 'bar')
-		if imp.IsTypeOnly || imp.ImportType == domain.ImportTypeTypeOnly || typeOnlyImportLines[imp.Location.StartLine] {
+		if imp.IsTypeOnly || imp.ImportType == domain.ImportTypeTypeOnly {
 			continue
 		}
 		// Skip dynamic imports (import('foo'))
@@ -233,22 +232,6 @@ func DetectUnusedImports(ast *parser.Node, moduleInfo *domain.ModuleInfo, filePa
 	return findings
 }
 
-// detectTypeOnlyImportLines returns source line numbers where import declarations are
-// explicitly type-only (e.g. `import type { Foo } from 'bar'`).
-func detectTypeOnlyImportLines(content []byte) map[int]bool {
-	lines := make(map[int]bool)
-	if len(content) == 0 {
-		return lines
-	}
-
-	for i, line := range strings.Split(string(content), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "import type ") {
-			lines[i+1] = true
-		}
-	}
-	return lines
-}
-
 // DetectUnusedExports detects exported names that are not imported by any other analyzed file.
 // It uses the precomputed ImportGraph to check each export against the reverse import index.
 func DetectUnusedExports(allModuleInfos map[string]*domain.ModuleInfo, graph *ImportGraph) []*DeadCodeFinding {
@@ -318,6 +301,10 @@ func DetectUnusedExports(allModuleInfos map[string]*domain.ModuleInfo, graph *Im
 
 // getExportedNames extracts the exported name(s) from an export declaration.
 func getExportedNames(exp *domain.Export) []string {
+	if exp.IsTypeOnly {
+		return nil
+	}
+
 	var names []string
 
 	// Named exports with specifiers: export { foo, bar }
@@ -364,9 +351,13 @@ func resolveImportPath(importingFile, source string, knownFiles map[string]bool)
 	resolved = filepath.Clean(resolved)
 
 	for _, candidate := range moduleCandidates(filepath.ToSlash(resolved)) {
-		candidate = filepath.FromSlash(candidate)
-		if knownFiles[candidate] {
-			return candidate
+		nativeCandidate := filepath.FromSlash(candidate)
+		slashCandidate := filepath.ToSlash(candidate)
+		if knownFiles[nativeCandidate] {
+			return nativeCandidate
+		}
+		if knownFiles[slashCandidate] {
+			return slashCandidate
 		}
 	}
 	return ""

@@ -985,6 +985,9 @@ func (b *ASTBuilder) buildImportStatement(tsNode *sitter.Node) *Node {
 		}
 
 		switch child.Type() {
+		case "type":
+			node.IsTypeOnly = true
+
 		case "import_clause":
 			// Handle import clause (contains default import and/or named imports)
 			b.extractImportClause(child, node)
@@ -1035,6 +1038,9 @@ func (b *ASTBuilder) extractImportClause(clauseNode *sitter.Node, node *Node) {
 		}
 
 		switch child.Type() {
+		case "type":
+			node.IsTypeOnly = true
+
 		case "identifier":
 			// Default import: import React from 'react'
 			specNode := NewNode(NodeImportDefaultSpecifier)
@@ -1074,12 +1080,16 @@ func (b *ASTBuilder) buildImportSpecifier(tsNode *sitter.Node) *Node {
 	specNode := NewNode(NodeImportSpecifier)
 	specNode.Location = b.getLocation(tsNode)
 
-	// An import specifier can have: name or name as alias
+	// An import specifier can have: name or name as alias, with optional type modifier
 	identifiers := []*sitter.Node{}
 	for i := 0; i < int(tsNode.ChildCount()); i++ {
 		child := tsNode.Child(i)
-		if child != nil && child.Type() == "identifier" {
-			identifiers = append(identifiers, child)
+		if child != nil {
+			if child.Type() == "type" {
+				specNode.IsType = true
+			} else if child.Type() == "identifier" {
+				identifiers = append(identifiers, child)
+			}
 		}
 	}
 
@@ -1104,7 +1114,7 @@ func (b *ASTBuilder) buildExportStatement(tsNode *sitter.Node) *Node {
 	node.Location = b.getLocation(tsNode)
 	b.addDecoratorChildren(node, tsNode)
 
-	// Check for default, export *, etc.
+	// Check for default, export *, type, etc.
 	hasDefault := false
 	hasWildcard := false
 
@@ -1114,6 +1124,8 @@ func (b *ASTBuilder) buildExportStatement(tsNode *sitter.Node) *Node {
 			continue
 		}
 		switch child.Type() {
+		case "type":
+			node.IsTypeOnly = true
 		case "default":
 			hasDefault = true
 		case "*":
@@ -1157,16 +1169,25 @@ func (b *ASTBuilder) extractExportClause(clauseNode *sitter.Node, node *Node) {
 			continue
 		}
 
+		if child.Type() == "type" {
+			node.IsTypeOnly = true
+			continue
+		}
+
 		if child.Type() == "export_specifier" {
 			specNode := NewNode(NodeExportSpecifier)
 			specNode.Location = b.getLocation(child)
 
-			// Extract the identifiers (local and exported names)
+			// Extract the identifiers (local and exported names) and optional type modifier
 			identifiers := []*sitter.Node{}
 			for j := 0; j < int(child.ChildCount()); j++ {
 				grandchild := child.Child(j)
-				if grandchild != nil && grandchild.Type() == "identifier" {
-					identifiers = append(identifiers, grandchild)
+				if grandchild != nil {
+					if grandchild.Type() == "type" {
+						specNode.IsType = true
+					} else if grandchild.Type() == "identifier" {
+						identifiers = append(identifiers, grandchild)
+					}
 				}
 			}
 

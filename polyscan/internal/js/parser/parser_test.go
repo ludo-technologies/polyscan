@@ -1012,3 +1012,96 @@ func TestLocation_String(t *testing.T) {
 		t.Errorf("Expected 'src/index.js:42:10', got '%s'", str)
 	}
 }
+
+func TestParseTypeOnlyImportsAndExports(t *testing.T) {
+	p := NewTypeScriptParser()
+	defer p.Close()
+
+	code := `
+import type { Foo } from './foo';
+import { type Bar, baz, type Qux as Alias } from './bar';
+export type { StmtExport };
+export { type InlineExport, normalExport };
+export type { ReExport } from './reexport';
+`
+	ast, err := p.ParseString(code)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if len(ast.Body) != 5 {
+		t.Fatalf("Expected 5 statements, got %d", len(ast.Body))
+	}
+
+	// 1. import type { Foo } from './foo';
+	stmt0 := ast.Body[0]
+	if stmt0.Type != NodeImportDeclaration {
+		t.Errorf("Expected NodeImportDeclaration, got %s", stmt0.Type)
+	}
+	if !stmt0.IsTypeOnly {
+		t.Errorf("Expected stmt0.IsTypeOnly to be true")
+	}
+	if len(stmt0.Specifiers) != 1 || stmt0.Specifiers[0].Name != "Foo" {
+		t.Errorf("Expected 1 specifier Foo, got %+v", stmt0.Specifiers)
+	}
+
+	// 2. import { type Bar, baz, type Qux as Alias } from './bar';
+	stmt1 := ast.Body[1]
+	if stmt1.Type != NodeImportDeclaration {
+		t.Errorf("Expected NodeImportDeclaration, got %s", stmt1.Type)
+	}
+	if stmt1.IsTypeOnly {
+		t.Errorf("Expected stmt1.IsTypeOnly to be false")
+	}
+	if len(stmt1.Specifiers) != 3 {
+		t.Fatalf("Expected 3 specifiers, got %d", len(stmt1.Specifiers))
+	}
+	if !stmt1.Specifiers[0].IsType || stmt1.Specifiers[0].Name != "Bar" {
+		t.Errorf("Expected specifier 0 to be type Bar, got IsType=%v Name=%s", stmt1.Specifiers[0].IsType, stmt1.Specifiers[0].Name)
+	}
+	if stmt1.Specifiers[1].IsType || stmt1.Specifiers[1].Name != "baz" {
+		t.Errorf("Expected specifier 1 to be non-type baz, got IsType=%v Name=%s", stmt1.Specifiers[1].IsType, stmt1.Specifiers[1].Name)
+	}
+	if !stmt1.Specifiers[2].IsType || stmt1.Specifiers[2].Name != "Alias" || stmt1.Specifiers[2].Imported.Name != "Qux" {
+		t.Errorf("Expected specifier 2 to be type Qux as Alias, got IsType=%v Name=%s Imported=%+v", stmt1.Specifiers[2].IsType, stmt1.Specifiers[2].Name, stmt1.Specifiers[2].Imported)
+	}
+
+	// 3. export type { StmtExport };
+	stmt2 := ast.Body[2]
+	if stmt2.Type != NodeExportNamedDeclaration {
+		t.Errorf("Expected NodeExportNamedDeclaration, got %s", stmt2.Type)
+	}
+	if !stmt2.IsTypeOnly {
+		t.Errorf("Expected stmt2.IsTypeOnly to be true")
+	}
+	if len(stmt2.Specifiers) != 1 || stmt2.Specifiers[0].Name != "StmtExport" {
+		t.Errorf("Expected 1 specifier StmtExport, got %+v", stmt2.Specifiers)
+	}
+
+	// 4. export { type InlineExport, normalExport };
+	stmt3 := ast.Body[3]
+	if stmt3.Type != NodeExportNamedDeclaration {
+		t.Errorf("Expected NodeExportNamedDeclaration, got %s", stmt3.Type)
+	}
+	if stmt3.IsTypeOnly {
+		t.Errorf("Expected stmt3.IsTypeOnly to be false")
+	}
+	if len(stmt3.Specifiers) != 2 {
+		t.Fatalf("Expected 2 specifiers, got %d", len(stmt3.Specifiers))
+	}
+	if !stmt3.Specifiers[0].IsType || stmt3.Specifiers[0].Name != "InlineExport" {
+		t.Errorf("Expected specifier 0 to be type InlineExport, got IsType=%v Name=%s", stmt3.Specifiers[0].IsType, stmt3.Specifiers[0].Name)
+	}
+	if stmt3.Specifiers[1].IsType || stmt3.Specifiers[1].Name != "normalExport" {
+		t.Errorf("Expected specifier 1 to be non-type normalExport, got IsType=%v Name=%s", stmt3.Specifiers[1].IsType, stmt3.Specifiers[1].Name)
+	}
+
+	// 5. export type { ReExport } from './reexport';
+	stmt4 := ast.Body[4]
+	if stmt4.Type != NodeExportNamedDeclaration {
+		t.Errorf("Expected NodeExportNamedDeclaration, got %s", stmt4.Type)
+	}
+	if !stmt4.IsTypeOnly {
+		t.Errorf("Expected stmt4.IsTypeOnly to be true")
+	}
+}

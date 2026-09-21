@@ -295,6 +295,7 @@ func (ma *ModuleAnalyzer) processImportDeclaration(node *parser.Node) *domain.Im
 		SourceType: ma.classifyModuleSource(source),
 		Specifiers: make([]domain.ImportSpecifier, 0),
 		Location:   ma.nodeToSourceLocation(node),
+		IsTypeOnly: node.IsTypeOnly,
 	}
 
 	// Determine import type and extract specifiers
@@ -309,6 +310,7 @@ func (ma *ModuleAnalyzer) processImportDeclaration(node *parser.Node) *domain.Im
 			imp.Specifiers = append(imp.Specifiers, domain.ImportSpecifier{
 				Imported: "default",
 				Local:    spec.Name,
+				IsType:   node.IsTypeOnly,
 			})
 
 		case parser.NodeImportNamespaceSpecifier:
@@ -316,12 +318,14 @@ func (ma *ModuleAnalyzer) processImportDeclaration(node *parser.Node) *domain.Im
 			imp.Specifiers = append(imp.Specifiers, domain.ImportSpecifier{
 				Imported: "*",
 				Local:    spec.Name,
+				IsType:   node.IsTypeOnly,
 			})
 
 		case parser.NodeImportSpecifier:
 			hasNamed = true
 			specifier := domain.ImportSpecifier{
-				Local: spec.Name,
+				Local:  spec.Name,
+				IsType: spec.IsType || node.IsTypeOnly,
 			}
 			if spec.Imported != nil {
 				specifier.Imported = spec.Imported.Name
@@ -342,10 +346,6 @@ func (ma *ModuleAnalyzer) processImportDeclaration(node *parser.Node) *domain.Im
 	} else if len(node.Specifiers) == 0 {
 		imp.ImportType = domain.ImportTypeSideEffect
 	}
-
-	// Check for TypeScript type import
-	// This would require additional AST parsing for 'import type'
-	// For now, we check if the node might be a type import based on children
 
 	return imp
 }
@@ -404,6 +404,7 @@ func (ma *ModuleAnalyzer) processExportNamedDeclaration(node *parser.Node) *doma
 		ExportType: "named",
 		Specifiers: make([]domain.ExportSpecifier, 0),
 		Location:   ma.nodeToSourceLocation(node),
+		IsTypeOnly: node.IsTypeOnly,
 	}
 
 	// Check for re-export: export { ... } from 'source'
@@ -420,6 +421,7 @@ func (ma *ModuleAnalyzer) processExportNamedDeclaration(node *parser.Node) *doma
 			exp.Specifiers = append(exp.Specifiers, domain.ExportSpecifier{
 				Local:    node.Declaration.Name,
 				Exported: node.Declaration.Name,
+				IsType:   node.IsTypeOnly,
 			})
 		}
 	}
@@ -427,7 +429,8 @@ func (ma *ModuleAnalyzer) processExportNamedDeclaration(node *parser.Node) *doma
 	// Process specifiers
 	for _, spec := range node.Specifiers {
 		specifier := domain.ExportSpecifier{
-			Local: spec.Name,
+			Local:  spec.Name,
+			IsType: spec.IsType || node.IsTypeOnly,
 		}
 		if spec.Local != nil {
 			specifier.Local = spec.Local.Name
@@ -444,6 +447,7 @@ func (ma *ModuleAnalyzer) processExportDefaultDeclaration(node *parser.Node) *do
 	exp := &domain.Export{
 		ExportType: "default",
 		Location:   ma.nodeToSourceLocation(node),
+		IsTypeOnly: node.IsTypeOnly,
 	}
 
 	if node.Declaration != nil {
@@ -461,6 +465,7 @@ func (ma *ModuleAnalyzer) processExportAllDeclaration(node *parser.Node) *domain
 	exp := &domain.Export{
 		ExportType: "all",
 		Location:   ma.nodeToSourceLocation(node),
+		IsTypeOnly: node.IsTypeOnly,
 	}
 
 	if node.Source != nil {
