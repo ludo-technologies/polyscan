@@ -277,6 +277,92 @@ export { type InlineType, RegularExport };
 	}
 }
 
+func TestDetectUnusedExports_TypeOnlyImportCountsAsUsage(t *testing.T) {
+	libSource := `export class Widget { x = 1 }`
+	appSource := `
+import type { Widget } from './lib';
+export const f = (w: Widget) => w;
+`
+	_, libMod := parseAndAnalyzeTSNamed(t, "/src/lib.ts", libSource)
+	_, appMod := parseAndAnalyzeTSNamed(t, "/src/app.ts", appSource)
+
+	allInfos := map[string]*domain.ModuleInfo{
+		"/src/lib.ts": libMod,
+		"/src/app.ts": appMod,
+	}
+	analyzedFiles := map[string]bool{
+		"/src/lib.ts": true,
+		"/src/app.ts": true,
+	}
+
+	graph := BuildImportGraph(allInfos, analyzedFiles)
+	findings := DetectUnusedExports(allInfos, graph)
+
+	for _, f := range findings {
+		if strings.Contains(f.Description, "'Widget'") && f.FilePath == "/src/lib.ts" {
+			t.Errorf("Expected 'Widget' in lib.ts to be considered imported by type-only import, but got finding: %s", f.Description)
+		}
+	}
+}
+
+func TestDetectUnusedExports_TypeOnlyBarrelReExportRegistersEdge(t *testing.T) {
+	libSource := `export class Widget { x = 1 }`
+	barrelSource := `export type { Widget } from './lib';`
+	appSource := `import { Widget } from './barrel'; export const w = new Widget();`
+
+	_, libMod := parseAndAnalyzeTSNamed(t, "/src/lib.ts", libSource)
+	_, barrelMod := parseAndAnalyzeTSNamed(t, "/src/barrel.ts", barrelSource)
+	_, appMod := parseAndAnalyzeTSNamed(t, "/src/app.ts", appSource)
+
+	allInfos := map[string]*domain.ModuleInfo{
+		"/src/lib.ts":    libMod,
+		"/src/barrel.ts": barrelMod,
+		"/src/app.ts":    appMod,
+	}
+	analyzedFiles := map[string]bool{
+		"/src/lib.ts":    true,
+		"/src/barrel.ts": true,
+		"/src/app.ts":    true,
+	}
+
+	graph := BuildImportGraph(allInfos, analyzedFiles)
+	findings := DetectUnusedExports(allInfos, graph)
+
+	for _, f := range findings {
+		if strings.Contains(f.Description, "'Widget'") && f.FilePath == "/src/lib.ts" {
+			t.Errorf("Expected 'Widget' in lib.ts to be considered imported via barrel re-export, but got finding: %s", f.Description)
+		}
+	}
+}
+
+func TestDetectUnusedExportedFunctions_TypeOnlyImportCountsAsUsage(t *testing.T) {
+	libSource := `export class Widget { x = 1 }`
+	appSource := `
+import type { Widget } from './lib';
+export const f = (w: Widget) => w;
+`
+	_, libMod := parseAndAnalyzeTSNamed(t, "/src/lib.ts", libSource)
+	_, appMod := parseAndAnalyzeTSNamed(t, "/src/app.ts", appSource)
+
+	allInfos := map[string]*domain.ModuleInfo{
+		"/src/lib.ts": libMod,
+		"/src/app.ts": appMod,
+	}
+	analyzedFiles := map[string]bool{
+		"/src/lib.ts": true,
+		"/src/app.ts": true,
+	}
+
+	graph := BuildImportGraph(allInfos, analyzedFiles)
+	findings := DetectUnusedExportedFunctions(allInfos, graph)
+
+	for _, f := range findings {
+		if strings.Contains(f.Description, "'Widget'") && f.FilePath == "/src/lib.ts" {
+			t.Errorf("Expected 'Widget' in lib.ts to be considered imported by type-only import, but got finding: %s", f.Description)
+		}
+	}
+}
+
 func TestDetectUnusedImports_TypeReferenceCountsAsUsage(t *testing.T) {
 	source := `
 import { Metadata } from "next";

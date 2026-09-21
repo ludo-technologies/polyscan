@@ -337,9 +337,7 @@ func (ma *ModuleAnalyzer) processImportDeclaration(node *parser.Node) *domain.Im
 	}
 
 	// Determine import type
-	if node.IsTypeOnly {
-		imp.ImportType = domain.ImportTypeTypeOnly
-	} else if hasNamespace {
+	if hasNamespace {
 		imp.ImportType = domain.ImportTypeNamespace
 	} else if hasDefault && !hasNamed {
 		imp.ImportType = domain.ImportTypeDefault
