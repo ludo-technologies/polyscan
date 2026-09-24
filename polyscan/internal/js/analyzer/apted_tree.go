@@ -57,7 +57,9 @@ func (tc *TreeConverter) getNodeLabel(astNode *parser.Node) string {
 		if astNode.Value != nil {
 			label = fmt.Sprintf("Literal(%v)", astNode.Value)
 		}
-	case parser.NodeFunction, parser.NodeAsyncFunction, parser.NodeArrowFunction:
+	// Arrow functions are left out: their name is inferred from the binding,
+	// which lies outside the fragment.
+	case parser.NodeFunction, parser.NodeAsyncFunction:
 		if astNode.Name != "" {
 			label = fmt.Sprintf("Function(%s)", astNode.Name)
 		}
