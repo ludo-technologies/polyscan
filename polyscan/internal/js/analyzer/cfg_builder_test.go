@@ -3,6 +3,7 @@ package analyzer
 import (
 	"log"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
@@ -628,6 +629,55 @@ func TestCFGBuilder_Build_BreakStatement(t *testing.T) {
 
 	if !hasBreakEdge {
 		t.Error("CFG should have EdgeBreak edge")
+	}
+}
+
+func TestCFGBuilder_Build_SwitchJumpTargets(t *testing.T) {
+	tests := []struct {
+		name   string
+		body   string
+		jump   parser.NodeType
+		edge   EdgeType
+		target string
+	}{
+		{"switch break", `switch (x) { case 1: break; }`, parser.NodeBreakStatement, EdgeBreak, LabelSwitchMerge},
+		{"switch in loop", `while (x) { switch (x) { case 1: break; } }`, parser.NodeBreakStatement, EdgeBreak, LabelSwitchMerge},
+		{"for in switch", `switch (x) { case 1: for (;;) { break; } }`, parser.NodeBreakStatement, EdgeBreak, LabelLoopExit},
+		{"for-in in switch", `switch (x) { case 1: for (let k in x) { break; } }`, parser.NodeBreakStatement, EdgeBreak, LabelLoopExit},
+		{"for-of in switch", `switch (x) { case 1: for (let k of x) { break; } }`, parser.NodeBreakStatement, EdgeBreak, LabelLoopExit},
+		{"while in switch", `switch (x) { case 1: while (x) { break; } }`, parser.NodeBreakStatement, EdgeBreak, LabelLoopExit},
+		{"do-while in switch", `switch (x) { case 1: do { break; } while (x); }`, parser.NodeBreakStatement, EdgeBreak, LabelLoopExit},
+		{"continue through switch", `while (x) { switch (x) { case 1: continue; } }`, parser.NodeContinueStatement, EdgeContinue, LabelLoopHeader},
+		{"break after switch", `while (x) { switch (x) { case 1: x--; } break; }`, parser.NodeBreakStatement, EdgeBreak, LabelLoopExit},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ast := parseJS(t, "function test(x) {"+tt.body+"}")
+			cfg, err := NewCFGBuilder().Build(findFunction(ast, "test"))
+			if err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
+			jumps := 0
+			for _, block := range cfg.Blocks {
+				for _, value := range block.Statements {
+					stmt, ok := jsNode(value)
+					if !ok || stmt.Type != tt.jump {
+						continue
+					}
+					jumps++
+					if len(block.Successors) != 1 {
+						t.Fatalf("Jump should have one successor, got %d", len(block.Successors))
+					}
+					edge := block.Successors[0]
+					if edge.Type != tt.edge || !strings.HasPrefix(edge.To.ID, tt.target+"_") {
+						t.Errorf("Jump targets %s via %v, want %s via %v", edge.To.ID, edge.Type, tt.target, tt.edge)
+					}
+				}
+			}
+			if jumps != 1 {
+				t.Fatalf("Expected one jump statement, got %d", jumps)
+			}
+		})
 	}
 }
 

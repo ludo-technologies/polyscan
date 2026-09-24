@@ -132,6 +132,62 @@ func TestDeadCodeDetector_Detect_CodeAfterReturn(t *testing.T) {
 	}
 }
 
+func TestDeadCodeDetector_Detect_SwitchBreak(t *testing.T) {
+	tests := []struct {
+		name         string
+		body         string
+		wantDeadCode bool
+	}{
+		{"reported example", `let c = 0; switch (x) { case "a": c = 1; break; default: throw new Error("x"); } return c;`, false},
+		{"throwing default", `switch (x) { case 1: break; default: throw new Error("x"); } return x;`, false},
+		{"returning default", `switch (x) { case 1: break; default: return 0; } return x;`, false},
+		{"block case", `switch (x) { case 1: { break; } default: throw new Error("x"); } return x;`, false},
+		{"inside loop", `for (let i = 0; i < 3; i++) {
+			switch (x) { case 1: break; default: throw new Error("x"); }
+			console.log(i);
+		} return x;`, false},
+		{"nested switch", `switch (x) {
+			case 1:
+				switch (y) { case 2: break; default: throw new Error("y"); }
+				break;
+			default: throw new Error("x");
+		} return x;`, false},
+		{"code after break", `switch (x) { case 1: break; console.log("dead"); default: throw x; } return x;`, true},
+		{"all cases terminate", `switch (x) { case 1: return x; default: throw x; } return x;`, true},
+	}
+	for _, language := range []struct {
+		name      string
+		newParser func() *parser.Parser
+	}{
+		{"JavaScript", parser.NewParser},
+		{"TypeScript", parser.NewTypeScriptParser},
+	} {
+		t.Run(language.name, func(t *testing.T) {
+			p := language.newParser()
+			defer p.Close()
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					ast, err := p.ParseString("function test(x, y) {" + tt.body + "}")
+					if err != nil {
+						t.Fatalf("Parse failed: %v", err)
+					}
+					cfg, err := NewCFGBuilder().Build(findFunction(ast, "test"))
+					if err != nil {
+						t.Fatalf("Build failed: %v", err)
+					}
+					result := NewDeadCodeDetector(cfg).Detect()
+					if result.HasFindings() != tt.wantDeadCode {
+						t.Errorf("HasFindings() = %v, want %v", result.HasFindings(), tt.wantDeadCode)
+						for _, finding := range result.Findings {
+							t.Logf("%+v", *finding)
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestDeadCodeDetector_Detect_CodeAfterThrow(t *testing.T) {
 	code := `
 		function test() {
