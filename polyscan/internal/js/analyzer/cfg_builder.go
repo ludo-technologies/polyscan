@@ -36,10 +36,9 @@ const (
 	LabelSwitchMerge = "switch_merge"
 )
 
-// loopContext tracks the context of a loop for break/continue handling
+// loopContext tracks the context of a loop for continue handling
 type loopContext struct {
 	headerBlock *BasicBlock // Loop condition/iterator block
-	exitBlock   *BasicBlock // Loop exit point
 	loopType    string      // "for", "while", "for-in", "for-of"
 }
 
@@ -58,6 +57,7 @@ type CFGBuilder struct {
 	blockCounter   uint
 	logger         *log.Logger
 	loopStack      []*loopContext
+	breakTargets   []*BasicBlock // Enclosing loop and switch exits, in nesting order
 	exceptionStack []*exceptionContext
 }
 
@@ -396,6 +396,7 @@ func (b *CFGBuilder) buildSwitchStatement(node *parser.Node) {
 
 	testBlock := b.currentBlock
 	mergeBlock := b.newBlock(LabelSwitchMerge)
+	b.breakTargets = append(b.breakTargets, mergeBlock)
 	var prevCaseBlock *BasicBlock
 	var defaultBlock *BasicBlock
 
@@ -458,6 +459,7 @@ func (b *CFGBuilder) buildSwitchStatement(node *parser.Node) {
 		b.cfg.ConnectBlocks(testBlock, mergeBlock, EdgeCondFalse)
 	}
 
+	b.breakTargets = b.breakTargets[:len(b.breakTargets)-1]
 	b.currentBlock = mergeBlock
 }
 
@@ -488,9 +490,9 @@ func (b *CFGBuilder) buildForStatement(node *parser.Node) {
 	// Push loop context for break/continue
 	b.loopStack = append(b.loopStack, &loopContext{
 		headerBlock: headerBlock,
-		exitBlock:   exitBlock,
 		loopType:    "for",
 	})
+	b.breakTargets = append(b.breakTargets, exitBlock)
 
 	// Process body
 	b.currentBlock = bodyBlock
@@ -511,6 +513,7 @@ func (b *CFGBuilder) buildForStatement(node *parser.Node) {
 
 	// Pop loop context
 	b.loopStack = b.loopStack[:len(b.loopStack)-1]
+	b.breakTargets = b.breakTargets[:len(b.breakTargets)-1]
 
 	b.currentBlock = exitBlock
 }
@@ -537,9 +540,9 @@ func (b *CFGBuilder) buildForInStatement(node *parser.Node) {
 	// Push loop context
 	b.loopStack = append(b.loopStack, &loopContext{
 		headerBlock: headerBlock,
-		exitBlock:   exitBlock,
 		loopType:    "for-in",
 	})
+	b.breakTargets = append(b.breakTargets, exitBlock)
 
 	// Process body
 	b.currentBlock = bodyBlock
@@ -557,6 +560,7 @@ func (b *CFGBuilder) buildForInStatement(node *parser.Node) {
 
 	// Pop loop context
 	b.loopStack = b.loopStack[:len(b.loopStack)-1]
+	b.breakTargets = b.breakTargets[:len(b.breakTargets)-1]
 
 	b.currentBlock = exitBlock
 }
@@ -589,9 +593,9 @@ func (b *CFGBuilder) buildWhileStatement(node *parser.Node) {
 	// Push loop context
 	b.loopStack = append(b.loopStack, &loopContext{
 		headerBlock: headerBlock,
-		exitBlock:   exitBlock,
 		loopType:    "while",
 	})
+	b.breakTargets = append(b.breakTargets, exitBlock)
 
 	// Process body
 	b.currentBlock = bodyBlock
@@ -609,6 +613,7 @@ func (b *CFGBuilder) buildWhileStatement(node *parser.Node) {
 
 	// Pop loop context
 	b.loopStack = b.loopStack[:len(b.loopStack)-1]
+	b.breakTargets = b.breakTargets[:len(b.breakTargets)-1]
 
 	b.currentBlock = exitBlock
 }
@@ -626,9 +631,9 @@ func (b *CFGBuilder) buildDoWhileStatement(node *parser.Node) {
 	// Push loop context
 	b.loopStack = append(b.loopStack, &loopContext{
 		headerBlock: headerBlock,
-		exitBlock:   exitBlock,
 		loopType:    "do-while",
 	})
+	b.breakTargets = append(b.breakTargets, exitBlock)
 
 	// Process body
 	b.currentBlock = bodyBlock
@@ -655,6 +660,7 @@ func (b *CFGBuilder) buildDoWhileStatement(node *parser.Node) {
 
 	// Pop loop context
 	b.loopStack = b.loopStack[:len(b.loopStack)-1]
+	b.breakTargets = b.breakTargets[:len(b.breakTargets)-1]
 
 	b.currentBlock = exitBlock
 }
@@ -745,10 +751,10 @@ func (b *CFGBuilder) buildBreakStatement(node *parser.Node) {
 	// Add break to current block
 	b.currentBlock.Statements = append(b.currentBlock.Statements, node)
 
-	// Connect to loop exit if in a loop
-	if len(b.loopStack) > 0 {
-		loopCtx := b.loopStack[len(b.loopStack)-1]
-		b.cfg.ConnectBlocks(b.currentBlock, loopCtx.exitBlock, EdgeBreak)
+	// Connect to the nearest enclosing loop or switch exit.
+	if len(b.breakTargets) > 0 {
+		target := b.breakTargets[len(b.breakTargets)-1]
+		b.cfg.ConnectBlocks(b.currentBlock, target, EdgeBreak)
 	}
 
 	// Create unreachable block for code after break

@@ -410,19 +410,15 @@ func (b *ASTBuilder) buildSwitchCase(tsNode *sitter.Node) *Node {
 		node.Test = b.buildNode(valueNode)
 	}
 
-	// Extract case body
-	if bodyNode := b.getChildByFieldName(tsNode, "body"); bodyNode != nil {
-		node.Body = []*Node{b.buildNode(bodyNode)}
-	} else {
-		// Extract all children as body statements
-		for i := 0; i < int(tsNode.ChildCount()); i++ {
-			child := tsNode.Child(i)
-			if child != nil && !b.isTrivia(child) && child.Type() != "case" && child.Type() != ":" {
-				childNode := b.buildNode(child)
-				if childNode != nil {
-					node.Body = append(node.Body, childNode)
-				}
-			}
+	// Each statement has the body field, so retain all of them, including a
+	// break after another statement. The case value is not part of the body.
+	for i := 0; i < int(tsNode.ChildCount()); i++ {
+		child := tsNode.Child(i)
+		if child == nil || b.isTrivia(child) || tsNode.FieldNameForChild(i) != "body" {
+			continue
+		}
+		if stmt := b.buildNode(child); stmt != nil {
+			node.Body = append(node.Body, stmt)
 		}
 	}
 
