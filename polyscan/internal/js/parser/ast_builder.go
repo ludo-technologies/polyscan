@@ -141,6 +141,12 @@ func (b *ASTBuilder) buildNode(tsNode *sitter.Node) *Node {
 		return b.buildExportStatement(tsNode)
 	case "statement_block":
 		return b.buildBlockStatement(tsNode)
+	case "variable_declarator", "public_field_definition":
+		return b.buildNamedBinding(tsNode, "name")
+	case "pair":
+		return b.buildNamedBinding(tsNode, "key")
+	case "field_definition":
+		return b.buildNamedBinding(tsNode, "property")
 	default:
 		// For unknown nodes, create a generic node and process children
 		return b.buildGenericNode(tsNode)
@@ -1241,6 +1247,35 @@ func (b *ASTBuilder) buildGenericNode(tsNode *sitter.Node) *Node {
 		}
 	}
 
+	return node
+}
+
+// buildNamedBinding builds a variable declarator, object pair or class field.
+// When its value is an unnamed function, the function takes the binding's name,
+// as Function.prototype.name does at runtime: `const f = () => {}` is `f`.
+func (b *ASTBuilder) buildNamedBinding(tsNode *sitter.Node, nameField string) *Node {
+	node := b.buildGenericNode(tsNode)
+
+	nameNode := b.getChildByFieldName(tsNode, nameField)
+	valueNode := b.getChildByFieldName(tsNode, "value")
+	if nameNode == nil || valueNode == nil {
+		return node
+	}
+	switch nameNode.Type() {
+	case "identifier", "property_identifier", "private_property_identifier":
+	default:
+		return node
+	}
+
+	valueLocation := b.getLocation(valueNode)
+	for _, child := range node.Children {
+		if child.Location == valueLocation {
+			if child.IsFunction() && child.Name == "" {
+				child.Name = nameNode.Content(b.source)
+			}
+			break
+		}
+	}
 	return node
 }
 

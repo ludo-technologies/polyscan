@@ -1105,3 +1105,75 @@ export type { ReExport } from './reexport';
 		t.Errorf("Expected stmt4.IsTypeOnly to be true")
 	}
 }
+
+func TestFunctionNameInferredFromBinding(t *testing.T) {
+	tests := []struct {
+		name   string
+		parser *Parser
+		code   string
+		want   map[int]string
+	}{
+		{
+			name:   "TypeScript",
+			parser: NewTypeScriptParser(),
+			code: `const arrowBlock = (a: number) => { return a; };
+const arrowAsync = async <T,>(a: T) => a;
+const fnExpr = function (a: number) { return a; };
+const fnExprNamed = function inner(a: number) { return a; };
+const obj = { prop: (a: number) => a, ["computed"]: (a: number) => a };
+class C { field = (a: number) => a; #priv = (a: number) => a; }`,
+			want: map[int]string{
+				1: "arrowBlock",
+				2: "arrowAsync",
+				3: "fnExpr",
+				4: "inner",
+				5: "prop,",
+				6: "field,#priv",
+			},
+		},
+		{
+			name:   "JavaScript",
+			parser: NewParser(),
+			code: `const arrowBlock = (a) => { return a; };
+const fnExpr = function (a) { return a; };
+const obj = { prop: (a) => a };
+class C { field = (a) => a; }`,
+			want: map[int]string{
+				1: "arrowBlock",
+				2: "fnExpr",
+				3: "prop",
+				4: "field",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer tt.parser.Close()
+			ast, err := tt.parser.ParseString(tt.code)
+			if err != nil {
+				t.Fatalf("Parse failed: %v", err)
+			}
+
+			seen := make(map[Location]bool)
+			got := make(map[int]string)
+			ast.Walk(func(n *Node) bool {
+				if n.IsFunction() && !seen[n.Location] {
+					seen[n.Location] = true
+					if prev, ok := got[n.Location.StartLine]; ok {
+						got[n.Location.StartLine] = prev + "," + n.Name
+					} else {
+						got[n.Location.StartLine] = n.Name
+					}
+				}
+				return true
+			})
+
+			for line, want := range tt.want {
+				if got[line] != want {
+					t.Errorf("line %d: got names %q, want %q", line, got[line], want)
+				}
+			}
+		})
+	}
+}
