@@ -262,8 +262,11 @@ func (dcd *DeadCodeDetector) determineDeadCodeReason(block *BasicBlock) (DeadCod
 	return ReasonUnreachableBranch, SeverityLevelWarning
 }
 
-// tryStatementsByFirstStatement maps the first body statement of every try
-// statement under root to that try statement.
+// tryStatementsByFirstStatement maps the first statement every try statement
+// under root runs when it is entered to that try statement: the first of its
+// body, or, for an empty body, the first of its catch and then of its finally.
+// An empty body falls through to the catch and finally blocks, so either of
+// them is dead exactly when the try is.
 func tryStatementsByFirstStatement(root any) map[*parser.Node]*parser.Node {
 	tries := make(map[*parser.Node]*parser.Node)
 	node, ok := jsNode(root)
@@ -271,18 +274,32 @@ func tryStatementsByFirstStatement(root any) map[*parser.Node]*parser.Node {
 		return tries
 	}
 	node.Walk(func(n *parser.Node) bool {
-		if n.Type == parser.NodeTryStatement && len(n.Body) > 0 {
-			tries[n.Body[0]] = n
+		if n.Type != parser.NodeTryStatement {
+			return true
+		}
+		for _, body := range [][]*parser.Node{n.Body, clauseBody(n.Handler), clauseBody(n.Finalizer)} {
+			if len(body) > 0 {
+				tries[body[0]] = n
+				break
+			}
 		}
 		return true
 	})
 	return tries
 }
 
-// enclosingDeadTry returns the outermost try statement whose body starts with
-// stmt, or nil. The `try {` header is not a CFG statement, but the first body
-// statement runs exactly when the try is entered, so that statement being dead
-// means the whole try statement (header, catch and finally) is dead.
+// clauseBody returns the statements of a catch or finally clause, or nil.
+func clauseBody(clause *parser.Node) []*parser.Node {
+	if clause == nil {
+		return nil
+	}
+	return clause.Body
+}
+
+// enclosingDeadTry returns the outermost try statement that runs stmt first
+// when it is entered, or nil. The `try {` header is not a CFG statement, but
+// that statement being dead means the whole try statement (header, catch and
+// finally) is dead.
 func enclosingDeadTry(stmt *parser.Node, tries map[*parser.Node]*parser.Node) *parser.Node {
 	var try *parser.Node
 	for outer, ok := tries[stmt]; ok; outer, ok = tries[stmt] {

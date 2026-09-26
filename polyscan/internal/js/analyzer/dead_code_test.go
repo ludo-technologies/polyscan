@@ -767,6 +767,20 @@ func TestDeadCodeDetector_Detect_DeadTryIncludesHeader(t *testing.T) {
 		r.x = 1;
 	}
 }`},
+		{name: "empty body with catch", code: `function test(r) {
+	return;
+	try {
+	} catch (e) {
+		r.x = 1;
+	}
+}`},
+		{name: "empty body with finally", code: `function test(r) {
+	return;
+	try {
+	} finally {
+		r.x = 1;
+	}
+}`},
 		{name: "nested", code: `function test(r) {
 	return;
 	try {
