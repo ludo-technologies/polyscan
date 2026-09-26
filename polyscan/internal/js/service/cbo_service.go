@@ -112,7 +112,9 @@ func (s *CBOServiceImpl) buildResponse(ctx context.Context, results []fileAnalys
 	filteredClasses := s.filterClasses(allClasses, req)
 	sortedClasses := s.sortClasses(filteredClasses, req.SortBy)
 
-	summary := SummarizeCoupling(sortedClasses, filesProcessed, 0)
+	// The summary feeds the health score, so it covers every analyzed class;
+	// the filters only trim the listed classes.
+	summary := SummarizeCoupling(allClasses, filesProcessed, 0)
 
 	return &domain.CBOResponse{
 		Classes:     sortedClasses,

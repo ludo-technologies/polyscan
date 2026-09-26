@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
@@ -104,5 +105,40 @@ func TestSummarizeCoupling_MostCoupledClassesStableAtTiedCutoff(t *testing.T) {
 	last := forward.MostCoupledClasses[mostCoupledClassesLimit-1]
 	if last.Name != "TieA" {
 		t.Errorf("last slot should go to the tied class that precedes by source location, got %s", last.Name)
+	}
+}
+
+// The display filters trim the listed classes, not the population the
+// summary and the health score are computed over.
+func TestCBOService_buildResponse_SummaryIgnoresDisplayFilters(t *testing.T) {
+	classes := []domain.ClassCoupling{
+		couplingClass("a.js", "a.js", 0),
+		couplingClass("b.js", "b.js", 0),
+		couplingClass("c.js", "c.js", 6),
+	}
+	results := make([]fileAnalysis[*domain.ClassCoupling], len(classes))
+	for i := range classes {
+		results[i] = fileAnalysis[*domain.ClassCoupling]{value: &classes[i]}
+	}
+	svc := NewCBOServiceWithDefaults()
+
+	shown, err := svc.buildResponse(context.Background(), results, svc.config, domain.CBORequest{ShowZeros: domain.BoolPtr(true)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	filtered, err := svc.buildResponse(context.Background(), results, svc.config, domain.CBORequest{ShowZeros: domain.BoolPtr(false), MinCBO: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(filtered.Classes) != 1 {
+		t.Fatalf("filtered listing has %d classes, want 1", len(filtered.Classes))
+	}
+	if filtered.Summary.TotalClasses != 3 || filtered.Summary.AverageCBO != 2 || filtered.Summary.MinCBO != 0 {
+		t.Errorf("filtered summary = %d classes, average %.2f, min %d; want 3, 2.00, 0",
+			filtered.Summary.TotalClasses, filtered.Summary.AverageCBO, filtered.Summary.MinCBO)
+	}
+	if filtered.Summary.TotalClasses != shown.Summary.TotalClasses || filtered.Summary.AverageCBO != shown.Summary.AverageCBO {
+		t.Errorf("summary moved with the display filters: %+v vs %+v", filtered.Summary, shown.Summary)
 	}
 }
