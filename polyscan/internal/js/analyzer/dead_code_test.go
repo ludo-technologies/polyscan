@@ -743,3 +743,61 @@ func TestIsOnlyEmptyStatements(t *testing.T) {
 		t.Error("block mixing separators and a real statement should not be empty-statements-only")
 	}
 }
+
+// A dead try statement is reported from its header, not from the first
+// statement of its body.
+func TestDeadCodeDetector_Detect_DeadTryIncludesHeader(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{name: "catch", code: `function test(r) {
+	return;
+	try {
+		r.x;
+	} catch (e) {
+		r.x = 1;
+	}
+}`},
+		{name: "finally", code: `function test(r) {
+	return;
+	try {
+		r.x;
+	} finally {
+		r.x = 1;
+	}
+}`},
+		{name: "nested", code: `function test(r) {
+	return;
+	try {
+		try {
+			r.x;
+		} catch (e) {
+			r.y;
+		}
+	} catch (e) {
+		r.x = 1;
+	}
+}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			graph, err := NewCFGBuilder().Build(findFunction(parseJS(t, tt.code), "test"))
+			if err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
+
+			findings := NewDeadCodeDetector(graph).Detect().Findings
+			if len(findings) != 1 {
+				for _, f := range findings {
+					t.Logf("finding: %s %s %d-%d", f.Reason, f.Severity, f.StartLine, f.EndLine)
+				}
+				t.Fatalf("got %d findings, want 1", len(findings))
+			}
+			if f := findings[0]; f.StartLine != 3 {
+				t.Errorf("finding = %s %d-%d, want it to start at the try header on line 3", f.Reason, f.StartLine, f.EndLine)
+			}
+		})
+	}
+}

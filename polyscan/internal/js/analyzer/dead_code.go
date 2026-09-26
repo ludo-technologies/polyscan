@@ -142,13 +142,17 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 		result.ReachableRatio = float64(reachResult.ReachableCount) / float64(result.TotalBlocks)
 	}
 	coreResult := corecfg.DetectDeadCode(dcd.cfg, corecfg.DeadCodeConfig{Classifier: classifier})
+	var tries map[*parser.Node]*parser.Node
 
 	for _, coreFinding := range coreResult.Findings {
 		block := dcd.cfg.GetBlock(coreFinding.BlockID)
 		if block == nil || len(block.Statements) == 0 {
 			continue
 		}
-		findings := dcd.analyzeDeadBlock(block)
+		if tries == nil {
+			tries = tryStatementsByFirstStatement(dcd.cfg.FunctionNode)
+		}
+		findings := dcd.analyzeDeadBlock(block, tries)
 		result.Findings = append(result.Findings, findings...)
 	}
 	result.DeadBlocks = len(result.Findings)
@@ -165,7 +169,7 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 }
 
 // analyzeDeadBlock analyzes a dead block to determine the reason and create findings
-func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock) []*DeadCodeFinding {
+func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock, tries map[*parser.Node]*parser.Node) []*DeadCodeFinding {
 	var findings []*DeadCodeFinding
 
 	// Skip blocks whose only "statements" are empty separators (a bare `;`).
@@ -199,6 +203,10 @@ func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock) []*DeadCodeFind
 		}
 		if lastOK {
 			finding.EndLine = lastStmt.Location.EndLine
+		}
+		if try := enclosingDeadTry(firstStmt, tries); try != nil {
+			finding.StartLine = min(finding.StartLine, try.Location.StartLine)
+			finding.EndLine = max(finding.EndLine, try.Location.EndLine)
 		}
 
 		// Generate code snippet
@@ -252,6 +260,36 @@ func (dcd *DeadCodeDetector) determineDeadCodeReason(block *BasicBlock) (DeadCod
 
 	// Default to unreachable branch
 	return ReasonUnreachableBranch, SeverityLevelWarning
+}
+
+// tryStatementsByFirstStatement maps the first body statement of every try
+// statement under root to that try statement.
+func tryStatementsByFirstStatement(root any) map[*parser.Node]*parser.Node {
+	tries := make(map[*parser.Node]*parser.Node)
+	node, ok := jsNode(root)
+	if !ok {
+		return tries
+	}
+	node.Walk(func(n *parser.Node) bool {
+		if n.Type == parser.NodeTryStatement && len(n.Body) > 0 {
+			tries[n.Body[0]] = n
+		}
+		return true
+	})
+	return tries
+}
+
+// enclosingDeadTry returns the outermost try statement whose body starts with
+// stmt, or nil. The `try {` header is not a CFG statement, but the first body
+// statement runs exactly when the try is entered, so that statement being dead
+// means the whole try statement (header, catch and finally) is dead.
+func enclosingDeadTry(stmt *parser.Node, tries map[*parser.Node]*parser.Node) *parser.Node {
+	var try *parser.Node
+	for outer, ok := tries[stmt]; ok; outer, ok = tries[stmt] {
+		try = outer
+		stmt = outer
+	}
+	return try
 }
 
 // generateDescription generates a human-readable description for a dead code reason
