@@ -189,11 +189,15 @@ func (c *classMethods) measure() Class {
 	for _, method := range c.methods {
 		names[strings.TrimPrefix(method.Name, prefix)] = true
 	}
+	// A bare selector naming a sibling method (s.Helper passed as a callback)
+	// references that method, so it links like a call rather than a field.
 	called := map[string]bool{}
 	for _, method := range c.methods {
-		for call := range method.Calls {
-			if names[call] {
-				called[call] = true
+		for _, refs := range []map[string]bool{method.Calls, method.Fields} {
+			for ref := range refs {
+				if names[ref] {
+					called[ref] = true
+				}
 			}
 		}
 	}
@@ -220,14 +224,13 @@ func (c *classMethods) measure() Class {
 			InstanceVars: map[string]bool{},
 			Calls:        map[string]bool{},
 		}
-		for field := range method.Fields {
-			access.InstanceVars[field] = true
-		}
-		for call := range method.Calls {
-			if names[call] {
-				access.Calls[call] = true
-			} else {
-				access.InstanceVars[call] = true
+		for _, refs := range []map[string]bool{method.Fields, method.Calls} {
+			for ref := range refs {
+				if names[ref] {
+					access.Calls[ref] = true
+				} else {
+					access.InstanceVars[ref] = true
+				}
 			}
 		}
 		accesses = append(accesses, access)

@@ -418,3 +418,42 @@ func TestAnalyzeCohesionAbsentWithoutSupportedLanguage(t *testing.T) {
 		t.Errorf("cohesion = %+v, want an empty result for a Go tree without types", report.Cohesion)
 	}
 }
+
+func TestAnalyzeCohesionMethodReferenceLinksLikeACall(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		// Setup passes handle as a callback without calling it. The
+		// reference connects Setup to handle, and handle is not a field.
+		"server.go": `package p
+
+type server struct {
+	count int
+	name  string
+}
+
+func (s *server) Setup()  { register(s.handle) }
+func (s *server) handle() { s.count++ }
+func (s *server) Name() string { return s.name }
+
+func register(f func()) {}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want server: %+v", len(classes), classes)
+	}
+	server := classes[0]
+	if server.LCOM4 != 2 || server.ExcludedMethods != 0 {
+		t.Errorf("server: LCOM4 %d, excluded %d; want 2, 0", server.LCOM4, server.ExcludedMethods)
+	}
+	if !reflect.DeepEqual(server.MethodGroups, [][]string{{"Name"}, {"Setup", "handle"}}) {
+		t.Errorf("server groups = %v, want Setup+handle and Name", server.MethodGroups)
+	}
+	if !reflect.DeepEqual(server.InstanceVariables, []string{"count", "name"}) {
+		t.Errorf("server instance variables = %v, want count and name", server.InstanceVariables)
+	}
+}
