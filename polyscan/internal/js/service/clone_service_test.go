@@ -85,3 +85,32 @@ func TestCloneServiceDetectClones_PartialFailureReturnsResponseAndError(t *testi
 		t.Fatalf("expected response error to mention failing file, got: %q", resp.Error)
 	}
 }
+
+// A group the detector formed through a Type-3 pair must not survive the
+// default type filter as one family: it splits along the retained pairs.
+func TestFilterCloneGroupsSplitsAlongRetainedPairs(t *testing.T) {
+	clone := func(id int) *domain.Clone {
+		return &domain.Clone{ID: id, Location: &domain.CloneLocation{FilePath: "a.js", StartLine: id * 10, EndLine: id*10 + 5}}
+	}
+	a, b, c := clone(0), clone(1), clone(2)
+	pairs := []*domain.ClonePair{
+		{Clone1: a, Clone2: b, Similarity: 0.96, Type: domain.Type1Clone},
+		{Clone1: b, Clone2: c, Similarity: 0.82, Type: domain.Type3Clone},
+	}
+	groups := []*domain.CloneGroup{{ID: 0, Clones: []*domain.Clone{a, b, c}, Type: domain.Type1Clone, Similarity: 0.89, Size: 3}}
+	req := domain.DefaultCloneRequest()
+
+	pairs = filterClonePairs(pairs, req)
+	groups = filterCloneGroups(splitCloneGroupsByPairs(groups, pairs), req)
+
+	if len(groups) != 1 {
+		t.Fatalf("got %d groups, want 1", len(groups))
+	}
+	group := groups[0]
+	if group.Size != 2 || group.Clones[0] != a || group.Clones[1] != b {
+		t.Errorf("group members = %v, want A and B only", group.Clones)
+	}
+	if group.Type != domain.Type1Clone || group.Similarity != 0.96 {
+		t.Errorf("group = %v %.2f, want Type-1 0.96 from the retained pair", group.Type, group.Similarity)
+	}
+}

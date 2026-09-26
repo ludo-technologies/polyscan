@@ -123,6 +123,9 @@ var Language = &engine.Language{
 `,
 	// Methods of one type may be spread over the files of its package.
 	TypeSpansDirectory: true,
+	// s.Helper without a call is a method value, and Go forbids a field
+	// named like a method of the same type.
+	MethodValues: true,
 	// default_case is deliberately absent: the default arm is the no-match
 	// path that the other cases already branch away from.
 	Decisions: `
