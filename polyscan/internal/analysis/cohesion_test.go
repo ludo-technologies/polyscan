@@ -457,3 +457,38 @@ func register(f func()) {}
 		t.Errorf("server instance variables = %v, want count and name", server.InstanceVariables)
 	}
 }
+
+func TestAnalyzeCohesionRustFieldNamedLikeAMethod(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		// self.value is the field, not the value() method: read and write
+		// share it, while value() reads only cache.
+		"lib.rs": `
+pub struct Slot { value: u32, cache: u32 }
+
+impl Slot {
+    pub fn value(&self) -> u32 { self.cache }
+    pub fn read(&self) -> u32 { self.value }
+    pub fn write(&mut self) { self.value = 1 }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want Slot: %+v", len(classes), classes)
+	}
+	slot := classes[0]
+	if slot.LCOM4 != 2 {
+		t.Errorf("Slot LCOM4 = %d, want 2", slot.LCOM4)
+	}
+	if !reflect.DeepEqual(slot.MethodGroups, [][]string{{"read", "write"}, {"value"}}) {
+		t.Errorf("Slot groups = %v, want read+write and value", slot.MethodGroups)
+	}
+	if !reflect.DeepEqual(slot.InstanceVariables, []string{"cache", "value"}) {
+		t.Errorf("Slot instance variables = %v, want cache and value", slot.InstanceVariables)
+	}
+}

@@ -132,6 +132,12 @@ type Language struct {
 	// files of a package, so cohesion is computed per directory and type
 	// rather than per file and type.
 	TypeSpansDirectory bool
+	// MethodValues reports that a receiver selector without a call can name
+	// a method, as a Go method value does, so a Members @field capture that
+	// names a sibling method is a reference to that method. Such a language
+	// must also forbid a field and a method of the same name, as Go does.
+	// Rust's self.value is always a field, even beside a value() method.
+	MethodValues bool
 
 	compileOnce sync.Once
 	compileErr  error
