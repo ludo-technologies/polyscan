@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-27
+
+### Changed
+
+- A JavaScript/TypeScript arrow function or anonymous function expression is named after the binding it is assigned to: a variable declarator, an object property or a class field, including a `#private` field. This matches `Function.prototype.name`. A named function expression keeps its own name, and a function under a computed key stays anonymous. Before, such functions were reported as anonymous in the complexity and dead code findings. Scores, metrics and clone results are unchanged (#170)
+- A clone group holds only members that a reported clone pair connects. The detector splits a group again after suppressed members are dropped and after the type filter drops Type-3 pairs. Before, the filter kept or dropped each group whole, so a group could hold a member that only a filtered pair connected. Clone and group counts can change on a JavaScript/TypeScript project (#174)
+
+### Fixed
+
+- A TypeScript type-only import or export counts as used or is left out of the unused export check. Both the statement form (`import type { X }`, `export type { X }`) and the inline form (`import { type X }`) are recognized. Before, they were reported as unused code (#166)
+- Code after a JavaScript/TypeScript `switch` is reachable when an earlier case ends in `break` and the `default` case throws or returns. The parser keeps every statement of a case body, and a `break` jumps to the exit of the nearest enclosing `switch` or loop. Before, only the first statement of a case was kept and a `break` only exited loops, so the code after the switch was reported as unreachable (#169)
+- A dead JavaScript/TypeScript `try` statement is reported from its header, including a `try` with an empty body. Before, the finding started at the first statement of the catch or finally body (#174)
+- Go cohesion (LCOM4) links a method value such as `register(s.handle)` to the method it names, as a call would. Before, it was counted as a field named after the method (#174)
+- The JavaScript/TypeScript coupling (CBO) summary is computed over the full class population before display filters apply. `polyscan analyze` sets no such filter, so the CLI output is unchanged (#174)
+
 ## [0.4.1] - 2026-09-20
 
 ### Fixed
