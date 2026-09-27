@@ -189,11 +189,22 @@ func (c *classMethods) measure() Class {
 	for _, method := range c.methods {
 		names[strings.TrimPrefix(method.Name, prefix)] = true
 	}
+	// A field capture naming a sibling method is a method value, such as
+	// s.handle passed as a callback, only where the language has them.
+	// Rust's self.value is always a field, even beside a value() method.
+	isMethod := func(ref string, field bool) bool {
+		return names[ref] && (!field || c.language.MethodValues)
+	}
 	called := map[string]bool{}
 	for _, method := range c.methods {
 		for call := range method.Calls {
-			if names[call] {
+			if isMethod(call, false) {
 				called[call] = true
+			}
+		}
+		for field := range method.Fields {
+			if isMethod(field, true) {
+				called[field] = true
 			}
 		}
 	}
@@ -221,10 +232,14 @@ func (c *classMethods) measure() Class {
 			Calls:        map[string]bool{},
 		}
 		for field := range method.Fields {
-			access.InstanceVars[field] = true
+			if isMethod(field, true) {
+				access.Calls[field] = true
+			} else {
+				access.InstanceVars[field] = true
+			}
 		}
 		for call := range method.Calls {
-			if names[call] {
+			if isMethod(call, false) {
 				access.Calls[call] = true
 			} else {
 				access.InstanceVars[call] = true

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	coreclone "github.com/ludo-technologies/polyscan/core/clone"
+	coredomain "github.com/ludo-technologies/polyscan/core/domain"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/analyzer"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/parser"
@@ -205,9 +207,12 @@ func (s *CloneServiceImpl) detectFromExtraction(ctx context.Context, results []f
 		clonePairs, cloneGroups = detector.DetectClonesWithContext(ctx, allFragments)
 	}
 
-	// Filter results based on request criteria (clone types, similarity range)
+	// Filter results based on request criteria (clone types, similarity
+	// range). Groups are re-split along the retained pairs before they are
+	// filtered, so a kept group never holds a member that only a filtered-out
+	// pair connected, and its type and similarity come from what remains.
 	clonePairs = filterClonePairs(clonePairs, req)
-	cloneGroups = filterCloneGroups(cloneGroups, req)
+	cloneGroups = filterCloneGroups(splitCloneGroupsByPairs(cloneGroups, clonePairs), req)
 
 	// Build statistics
 	statistics := s.buildStatistics(clonePairs, cloneGroups, filesAnalyzed, linesAnalyzed)
@@ -381,6 +386,25 @@ func filterClonePairs(pairs []*domain.ClonePair, req *domain.CloneRequest) []*do
 		filtered = append(filtered, pair)
 	}
 	return filtered
+}
+
+// splitCloneGroupsByPairs restricts the detector's groups to the connected
+// components of the retained pairs; see analyzer.SplitGroupsByPairs.
+func splitCloneGroupsByPairs(groups []*domain.CloneGroup, pairs []*domain.ClonePair) []*domain.CloneGroup {
+	corePairs := make([]*coreclone.ItemPair[*domain.Clone], 0, len(pairs))
+	for _, pair := range pairs {
+		corePairs = append(corePairs, &coreclone.ItemPair[*domain.Clone]{Item1: pair.Clone1, Item2: pair.Clone2, Similarity: pair.Similarity, PairType: coredomain.CloneType(pair.Type)})
+	}
+	coreGroups := make([]*coreclone.ItemGroup[*domain.Clone], 0, len(groups))
+	for _, group := range groups {
+		coreGroups = append(coreGroups, &coreclone.ItemGroup[*domain.Clone]{ID: group.ID, Items: group.Clones})
+	}
+	split := analyzer.SplitGroupsByPairs(coreGroups, corePairs)
+	result := make([]*domain.CloneGroup, 0, len(split))
+	for _, group := range split {
+		result = append(result, &domain.CloneGroup{ID: group.ID, Clones: group.Items, Type: domain.CloneType(group.GroupType), Similarity: group.Similarity, Size: len(group.Items)})
+	}
+	return result
 }
 
 // filterCloneGroups filters clone groups based on request criteria

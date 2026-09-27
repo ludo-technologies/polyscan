@@ -1029,12 +1029,15 @@ func (cd *CloneDetector) groupClonesWithStrategy(strategy coreclone.GroupingStra
 	}
 	memberResult := coreclone.DedupeStrictSubsetGroupMembers(strategy.GroupItems(corePairs), corePairs)
 	groupResult := coreclone.DedupeCoveredGroups(memberResult.Groups)
-	groups := coreclone.FilterGroupsWithoutBackingPairs(groupResult.Groups, corePairs)
 	for key := range memberResult.Suppressed {
 		groupResult.Suppressed[key] = struct{}{}
 	}
+	// Drop the suppressed members' pairs before the groups are validated, so a
+	// group that only held together through a suppressed member is re-split
+	// rather than reported as one family.
 	corePairs = coreclone.FilterPairsWithSuppressedMembers(corePairs, groupResult.Suppressed)
 	corePairs = coreclone.FilterSuppressedPairs(corePairs, groupResult.SuppressedPairs)
+	groups := SplitGroupsByPairs(groupResult.Groups, corePairs)
 	cd.clonePairs = cd.clonePairs[:0]
 	for _, pair := range corePairs {
 		cd.clonePairs = append(cd.clonePairs, originals[pair])

@@ -418,3 +418,77 @@ func TestAnalyzeCohesionAbsentWithoutSupportedLanguage(t *testing.T) {
 		t.Errorf("cohesion = %+v, want an empty result for a Go tree without types", report.Cohesion)
 	}
 }
+
+func TestAnalyzeCohesionMethodReferenceLinksLikeACall(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		// Setup passes handle as a callback without calling it. The
+		// reference connects Setup to handle, and handle is not a field.
+		"server.go": `package p
+
+type server struct {
+	count int
+	name  string
+}
+
+func (s *server) Setup()  { register(s.handle) }
+func (s *server) handle() { s.count++ }
+func (s *server) Name() string { return s.name }
+
+func register(f func()) {}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want server: %+v", len(classes), classes)
+	}
+	server := classes[0]
+	if server.LCOM4 != 2 || server.ExcludedMethods != 0 {
+		t.Errorf("server: LCOM4 %d, excluded %d; want 2, 0", server.LCOM4, server.ExcludedMethods)
+	}
+	if !reflect.DeepEqual(server.MethodGroups, [][]string{{"Name"}, {"Setup", "handle"}}) {
+		t.Errorf("server groups = %v, want Setup+handle and Name", server.MethodGroups)
+	}
+	if !reflect.DeepEqual(server.InstanceVariables, []string{"count", "name"}) {
+		t.Errorf("server instance variables = %v, want count and name", server.InstanceVariables)
+	}
+}
+
+func TestAnalyzeCohesionRustFieldNamedLikeAMethod(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		// self.value is the field, not the value() method: read and write
+		// share it, while value() reads only cache.
+		"lib.rs": `
+pub struct Slot { value: u32, cache: u32 }
+
+impl Slot {
+    pub fn value(&self) -> u32 { self.cache }
+    pub fn read(&self) -> u32 { self.value }
+    pub fn write(&mut self) { self.value = 1 }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want Slot: %+v", len(classes), classes)
+	}
+	slot := classes[0]
+	if slot.LCOM4 != 2 {
+		t.Errorf("Slot LCOM4 = %d, want 2", slot.LCOM4)
+	}
+	if !reflect.DeepEqual(slot.MethodGroups, [][]string{{"read", "write"}, {"value"}}) {
+		t.Errorf("Slot groups = %v, want read+write and value", slot.MethodGroups)
+	}
+	if !reflect.DeepEqual(slot.InstanceVariables, []string{"cache", "value"}) {
+		t.Errorf("Slot instance variables = %v, want cache and value", slot.InstanceVariables)
+	}
+}
