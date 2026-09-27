@@ -142,7 +142,7 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 		result.ReachableRatio = float64(reachResult.ReachableCount) / float64(result.TotalBlocks)
 	}
 	coreResult := corecfg.DetectDeadCode(dcd.cfg, corecfg.DeadCodeConfig{Classifier: classifier})
-	var tries map[*parser.Node]*parser.Node
+	var tries []tryEntry
 
 	for _, coreFinding := range coreResult.Findings {
 		block := dcd.cfg.GetBlock(coreFinding.BlockID)
@@ -150,7 +150,7 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 			continue
 		}
 		if tries == nil {
-			tries = tryStatementsByFirstStatement(dcd.cfg.FunctionNode)
+			tries = collectTryEntries(dcd.cfg.FunctionNode)
 		}
 		findings := dcd.analyzeDeadBlock(block, tries)
 		result.Findings = append(result.Findings, findings...)
@@ -169,7 +169,7 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 }
 
 // analyzeDeadBlock analyzes a dead block to determine the reason and create findings
-func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock, tries map[*parser.Node]*parser.Node) []*DeadCodeFinding {
+func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock, tries []tryEntry) []*DeadCodeFinding {
 	var findings []*DeadCodeFinding
 
 	// Skip blocks whose only "statements" are empty separators (a bare `;`).
@@ -204,7 +204,7 @@ func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock, tries map[*pars
 		if lastOK {
 			finding.EndLine = lastStmt.Location.EndLine
 		}
-		if try := enclosingDeadTry(firstStmt, tries); try != nil {
+		if try := deadTryStatement(block, firstStmt, tries); try != nil {
 			finding.StartLine = min(finding.StartLine, try.Location.StartLine)
 			finding.EndLine = max(finding.EndLine, try.Location.EndLine)
 		}
@@ -262,13 +262,19 @@ func (dcd *DeadCodeDetector) determineDeadCodeReason(block *BasicBlock) (DeadCod
 	return ReasonUnreachableBranch, SeverityLevelWarning
 }
 
-// tryStatementsByFirstStatement maps the first statement every try statement
-// under root runs when it is entered to that try statement: the first of its
-// body, or, for an empty body, the first of its catch and then of its finally.
-// An empty body falls through to the catch and finally blocks, so either of
-// them is dead exactly when the try is.
-func tryStatementsByFirstStatement(root any) map[*parser.Node]*parser.Node {
-	tries := make(map[*parser.Node]*parser.Node)
+// tryEntry records the clause a try statement runs first when it is entered:
+// its body, or, for an empty body, its catch and then its finally. An empty
+// body falls through to them, so that clause is dead exactly when the try is.
+type tryEntry struct {
+	try   *parser.Node
+	label string       // label of the CFG block the builder gives the clause
+	first *parser.Node // first statement of the clause, nil if all are empty
+}
+
+// collectTryEntries returns the entry of every try statement under root, outer
+// statements before the ones they contain.
+func collectTryEntries(root any) []tryEntry {
+	tries := []tryEntry{}
 	node, ok := jsNode(root)
 	if !ok {
 		return tries
@@ -277,12 +283,17 @@ func tryStatementsByFirstStatement(root any) map[*parser.Node]*parser.Node {
 		if n.Type != parser.NodeTryStatement {
 			return true
 		}
-		for _, body := range [][]*parser.Node{n.Body, clauseBody(n.Handler), clauseBody(n.Finalizer)} {
-			if len(body) > 0 {
-				tries[body[0]] = n
+		entry := tryEntry{try: n}
+		for _, clause := range []struct {
+			label string
+			body  []*parser.Node
+		}{{LabelTryBlock, n.Body}, {LabelCatchBlock, clauseBody(n.Handler)}, {LabelFinallyBlock, clauseBody(n.Finalizer)}} {
+			if len(clause.body) > 0 {
+				entry.label, entry.first = clause.label, clause.body[0]
 				break
 			}
 		}
+		tries = append(tries, entry)
 		return true
 	})
 	return tries
@@ -296,17 +307,55 @@ func clauseBody(clause *parser.Node) []*parser.Node {
 	return clause.Body
 }
 
-// enclosingDeadTry returns the outermost try statement that runs stmt first
-// when it is entered, or nil. The `try {` header is not a CFG statement, but
-// that statement being dead means the whole try statement (header, catch and
-// finally) is dead.
-func enclosingDeadTry(stmt *parser.Node, tries map[*parser.Node]*parser.Node) *parser.Node {
+// deadTryStatement returns the outermost try statement that the dead block
+// makes dead as a whole, or nil. The `try {` header is not a CFG statement,
+// but a dead block that is the entry clause of the innermost try around its
+// first statement means the whole try (header, catch and finally) is dead.
+// The CFG does not hold every statement itself, an if contributing only its
+// condition, so the first statement need only lie inside the entry's first
+// statement. A try that is itself the entry of an outer try extends to it.
+func deadTryStatement(block *BasicBlock, stmt *parser.Node, tries []tryEntry) *parser.Node {
+	if stmt == nil {
+		return nil
+	}
+	label := block.ID[:max(strings.LastIndexByte(block.ID, '_'), 0)]
 	var try *parser.Node
-	for outer, ok := tries[stmt]; ok; outer, ok = tries[stmt] {
+	for i := len(tries) - 1; i >= 0; i-- {
+		if containsNode(tries[i].try, stmt) {
+			if tries[i].label == label && containsNode(tries[i].first, stmt) {
+				try = tries[i].try
+			}
+			break
+		}
+	}
+	for try != nil {
+		outer := enclosingEntry(try, tries)
+		if outer == nil {
+			break
+		}
 		try = outer
-		stmt = outer
 	}
 	return try
+}
+
+// enclosingEntry returns the try statement whose entry statement is try, or nil.
+func enclosingEntry(try *parser.Node, tries []tryEntry) *parser.Node {
+	for _, entry := range tries {
+		if entry.first == try {
+			return entry.try
+		}
+	}
+	return nil
+}
+
+// containsNode reports whether target is root or lies inside it.
+func containsNode(root, target *parser.Node) bool {
+	found := false
+	root.Walk(func(n *parser.Node) bool {
+		found = found || n == target
+		return !found
+	})
+	return found
 }
 
 // generateDescription generates a human-readable description for a dead code reason

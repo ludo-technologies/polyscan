@@ -781,6 +781,22 @@ func TestDeadCodeDetector_Detect_DeadTryIncludesHeader(t *testing.T) {
 		r.x = 1;
 	}
 }`},
+		{name: "body starting with an if", code: `function test(r) {
+	return;
+	try {
+		if (r) { r.x(); }
+	} catch (e) {
+		r.y();
+	}
+}`},
+		{name: "body starting with a block", code: `function test(r) {
+	return;
+	try {
+		{ r.x(); }
+	} catch (e) {
+		r.y();
+	}
+}`},
 		{name: "nested", code: `function test(r) {
 	return;
 	try {
@@ -811,6 +827,62 @@ func TestDeadCodeDetector_Detect_DeadTryIncludesHeader(t *testing.T) {
 			}
 			if f := findings[0]; f.StartLine != 3 {
 				t.Errorf("finding = %s %d-%d, want it to start at the try header on line 3", f.Reason, f.StartLine, f.EndLine)
+			}
+		})
+	}
+}
+
+// A dead try inside a live try extends only to its own header.
+func TestDeadCodeDetector_Detect_DeadTryInsideLiveTry(t *testing.T) {
+	tests := []struct {
+		name       string
+		code       string
+		start, end int
+	}{
+		{name: "inside the body", code: `function test(r) {
+	try {
+		if (r) {
+			return;
+			try {
+				r.x();
+			} catch (e) {
+				r.y();
+			}
+		}
+	} catch (e) {
+	}
+}`, start: 5, end: 9},
+		{name: "inside the catch of an empty try", code: `function test(r) {
+	try {
+	} catch (e) {
+		if (r) {
+			return;
+			try {
+				r.x();
+			} catch (f) {
+				r.y();
+			}
+		}
+	}
+}`, start: 6, end: 10},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			graph, err := NewCFGBuilder().Build(findFunction(parseJS(t, tt.code), "test"))
+			if err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
+
+			findings := NewDeadCodeDetector(graph).Detect().Findings
+			if len(findings) != 1 {
+				for _, f := range findings {
+					t.Logf("finding: %s %s %d-%d", f.Reason, f.Severity, f.StartLine, f.EndLine)
+				}
+				t.Fatalf("got %d findings, want 1", len(findings))
+			}
+			if f := findings[0]; f.StartLine != tt.start || f.EndLine != tt.end {
+				t.Errorf("finding = %d-%d, want the inner try on lines %d-%d", f.StartLine, f.EndLine, tt.start, tt.end)
 			}
 		})
 	}
