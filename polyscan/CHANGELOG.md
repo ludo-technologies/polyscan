@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-03
+
+### Fixed
+
+- A TypeScript type-only import or export (`import type`, `export type`) is not a load-time edge in circular dependency detection, because the compiler erases it. Dynamic `import()` was already left out for the same reason. An inline `import { type X }` still counts as a load-time edge. Coupling metrics are unchanged. Before, a cycle that closed only through type-only imports was reported as a circular dependency (#175)
+
 ## [0.5.0] - 2026-09-27
 
 ### Changed
