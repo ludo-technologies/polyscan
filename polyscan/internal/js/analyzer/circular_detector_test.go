@@ -373,3 +373,36 @@ func TestDetectCyclesKeepsCycleWithStaticAndDynamicEdges(t *testing.T) {
 		t.Errorf("Expected 1 cycle, got %d", result.TotalCycles)
 	}
 }
+
+func TestDetectCyclesSkipsTypeOnlyEdges(t *testing.T) {
+	// A -> B (static), B -> A (`import type` only): the type import is erased
+	// at compile time, so this is not a load-time cycle.
+	graph := domain.NewDependencyGraph()
+	graph.AddNode(&domain.ModuleNode{ID: "a"})
+	graph.AddNode(&domain.ModuleNode{ID: "b"})
+	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b", EdgeType: domain.EdgeTypeImport, Weight: 1})
+	graph.AddEdge(&domain.DependencyEdge{From: "b", To: "a", EdgeType: domain.EdgeTypeTypeOnly, Weight: 1})
+
+	result := NewCircularDependencyDetector().DetectCycles(graph)
+
+	if result.HasCircularDependencies {
+		t.Errorf("Expected no circular dependencies when back edge is type-only, got %d", result.TotalCycles)
+	}
+}
+
+func TestDetectCyclesKeepsCycleWithStaticAndTypeOnlyEdges(t *testing.T) {
+	// A -> B (static), B -> A (static AND type-only): the static back edge
+	// still forms a load-time cycle.
+	graph := domain.NewDependencyGraph()
+	graph.AddNode(&domain.ModuleNode{ID: "a"})
+	graph.AddNode(&domain.ModuleNode{ID: "b"})
+	graph.AddEdge(&domain.DependencyEdge{From: "a", To: "b", EdgeType: domain.EdgeTypeImport, Weight: 1})
+	graph.AddEdge(&domain.DependencyEdge{From: "b", To: "a", EdgeType: domain.EdgeTypeTypeOnly, Weight: 1})
+	graph.AddEdge(&domain.DependencyEdge{From: "b", To: "a", EdgeType: domain.EdgeTypeImport, Weight: 1})
+
+	result := NewCircularDependencyDetector().DetectCycles(graph)
+
+	if result.TotalCycles != 1 {
+		t.Errorf("Expected 1 cycle via the static back edge, got %d", result.TotalCycles)
+	}
+}
