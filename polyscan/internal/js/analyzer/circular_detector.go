@@ -19,24 +19,25 @@ func NewCircularDependencyDetector() *CircularDependencyDetector {
 }
 
 // isLoadTimeEdge reports whether an edge participates in module loading.
-// Dynamic import() edges are evaluated only when the call executes, so they
-// cannot form a load-time circular import and are excluded from cycle
-// detection. A pair connected by both a static and a dynamic import is still
-// a load-time dependency via its static edge. See pyscn issue #460.
+// Dynamic import() edges are evaluated only when the call executes, and
+// `import type` / `export type` statements are erased by the compiler, so
+// neither can form a load-time circular import and both are excluded from
+// cycle detection. A pair also connected by a static value import is still a
+// load-time dependency via that edge. See pyscn issue #460.
 func isLoadTimeEdge(edge *domain.DependencyEdge) bool {
-	return edge != nil && edge.EdgeType != domain.EdgeTypeDynamic
+	return edge != nil && edge.EdgeType != domain.EdgeTypeDynamic && edge.EdgeType != domain.EdgeTypeTypeOnly
 }
 
 // LoadTimeGraph is graph seen through its load-time imports alone. Every
 // structural analysis of how modules are layered — cycles, depth, chains —
 // reads the same view, so the reported depth cannot count an edge that the
 // cycle report has already ruled out. Coupling metrics deliberately keep the
-// dynamic edges: a lazy import is still a runtime dependency.
+// dynamic and type-only edges: both are still dependencies of the code.
 func LoadTimeGraph(graph *domain.DependencyGraph) coregraph.DirectedGraph {
 	return loadTimeGraph{graph: graph}
 }
 
-// loadTimeGraph excludes dynamic imports from the graph seen by structural
+// loadTimeGraph excludes dynamic and type-only imports from the graph seen by structural
 // analysis while leaving the full dependency graph unchanged for reporting.
 type loadTimeGraph struct {
 	graph *domain.DependencyGraph
