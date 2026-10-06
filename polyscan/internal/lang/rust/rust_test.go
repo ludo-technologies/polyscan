@@ -77,6 +77,8 @@ func TestComplexityCountsDecisionPoints(t *testing.T) {
 		{"if let", `if let Some(x) = o { x } else { 0 }`, 2, map[string]int{"branch": 1}},
 		{"match arms except the last", `match n { 1 => 1, 2 | 3 => 2, _ => 0 }`, 3, map[string]int{"case": 2}},
 		{"single arm match", `match n { _ => 0 }`, 1, map[string]int{}},
+		{"comment after a match arm", "match n {\n1 => 1, // one\n2 => 2,\n// fallback\n_ => 0 }", 3, map[string]int{"case": 2}},
+		{"block comment between match arms", `match n { 1 => 1, /* two */ 2 => 2, _ => 0 }`, 3, map[string]int{"case": 2}},
 		{"for", `for i in 0..3 { }`, 2, map[string]int{"loop": 1}},
 		{"while", `while a { }`, 2, map[string]int{"loop": 1}},
 		{"while let", `while let Some(x) = o { }`, 2, map[string]int{"loop": 1}},
