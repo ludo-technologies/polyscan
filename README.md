@@ -15,7 +15,7 @@ Building with Cursor, Claude, or ChatGPT? polyscan performs structural analysis 
 [![PyPI](https://img.shields.io/pypi/v/pyscn?style=flat-square&logo=pypi&label=pyscn)](https://pypi.org/project/pyscn/)
 [![License](https://img.shields.io/github/license/ludo-technologies/polyscan?style=flat-square)](LICENSE)
 
-<a href="https://codescan.dev/pyscn-bot"><img alt="Install Polyscan App for free" src="https://img.shields.io/badge/Polyscan_App-Install_for_free-2ea44f?style=for-the-badge&logo=github&logoColor=white" height="44"></a>
+<a href="https://github.com/apps/polyscan-app/installations/new"><img alt="Install Polyscan App for free" src="https://img.shields.io/badge/Polyscan_App-Install_for_free-2ea44f?style=for-the-badge&logo=github&logoColor=white" height="44"></a>
 
 </div>
 
@@ -61,7 +61,7 @@ Complexity and duplicate code cover every language. Dependencies cover Go, JavaS
 
 [Polyscan App](https://codescan.dev/pyscn-bot) files a weekly audit report as a GitHub Issue. Free for every repository.
 
-<a href="https://codescan.dev/pyscn-bot"><img alt="Install Polyscan App for free" src="https://img.shields.io/badge/Polyscan_App-Install_for_free-2ea44f?style=for-the-badge&logo=github&logoColor=white" height="44"></a>
+<a href="https://github.com/apps/polyscan-app/installations/new"><img alt="Install Polyscan App for free" src="https://img.shields.io/badge/Polyscan_App-Install_for_free-2ea44f?style=for-the-badge&logo=github&logoColor=white" height="44"></a>
 
 ## AI Agent Integration
 
