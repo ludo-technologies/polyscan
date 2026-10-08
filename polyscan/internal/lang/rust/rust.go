@@ -122,8 +122,9 @@ var Language = &engine.Language{
   (#eq? @path "Self"))
 `,
 	// A match is exhaustive, so its last arm is the path the other arms
-	// branch away from and only arms followed by another arm count; an
-	// arm's guard is a further branch. let-else branches on the pattern.
+	// branch away from and only arms followed by another arm count, with
+	// any comments between them skipped; an arm's guard is a further
+	// branch. let-else branches on the pattern.
 	// In a let chain the && are tokens of the chain rather than binary
 	// expressions. The ? operator is an early return and counts like the
 	// exception edge core/cfg counts.
@@ -131,7 +132,7 @@ var Language = &engine.Language{
 (if_expression) @branch
 (match_pattern condition: (_)) @branch
 (let_declaration alternative: (_)) @branch
-(match_block (match_arm) @case . (match_arm))
+(match_block (match_arm) @case . [(line_comment) (block_comment)]* . (match_arm))
 (for_expression) @loop
 (while_expression) @loop
 (loop_expression) @loop
