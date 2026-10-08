@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-08
+
+### Fixed
+
+- A Rust `match` arm followed by a line or block comment counts as a decision point in cyclomatic complexity. The last arm is still not counted. Before, an arm followed by a comment was left out, so the complexity was too low (#178)
+
 ## [0.5.1] - 2026-10-03
 
 ### Fixed
