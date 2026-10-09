@@ -98,11 +98,43 @@ Read the JSON output. Group findings by `(analysis, language, rule_or_pattern)`.
 For each cluster, record the total count and pick **3–5 representative samples** (prefer variety: different files, different sizes, mix of risk levels). Also collect:
 
 - `summary.skipped_files` and the `analyze.stderr` warnings — a skipped valid source file or a crashed analysis is its own cluster (`engine / <lang> / skipped-file`).
+- **Score decomposition**: the per-dimension scores in `summary` and the penalty each implies.
+  **The health score is not `100 - Σ penalties`.** `core/domain/scoring.go` exports
+  `HealthScoreFromPenalties`, but the analyze path does not use it: `CalculateHealthScore`
+  (`polyscan/internal/js/domain/analyze.go`) charges each *enabled* dimension's raw penalty against
+  its own budget and calls `healthScoreFromPenaltyBudget`, which is a **ratio**:
+
+  ```
+  score = 100 - round(Σ penalty × 100 / Σ budget) - parseErrorPenalty
+  ```
+
+  Budgets are `MaxScoreBase` = 20 per dimension except dependencies, which is
+  `MaxDependencyPenalty` = 16. To recover a dimension's raw penalty from its published score, invert
+  `PenaltyToScore`: `penalty = (100 - score) / 5` for the 20-budget dimensions; for dependencies that
+  gives the *normalized* penalty, so multiply by 16/20 for the raw one. A dimension's share of the
+  loss is then `penalty / Σ budget × 100` points — the shares do **not** equal `100 - score`.
+
+  `parseErrorPenalty` is subtracted afterwards and **unscaled**, and it has a floor:
+  `MinParseErrorPenalty = 100 - GradeAThreshold + 1` = **11 points for even one unparsable file**
+  (the intent being that a run with parse errors cannot grade A). On a large repo this routinely
+  outweighs every real dimension, so check it before attributing a bad grade to code quality.
+
+  Record the 2–3 contributors holding most of the loss, and reconcile your arithmetic against the
+  reported `health_score` — if it does not land on the reported number exactly, your penalty
+  derivation is wrong, not the tool's. Then sanity-check the grade against the findings: if it looks
+  harsher or kinder than the findings justify, that gap is a lead for step 5b. A wrong *number* is as
+  much a defect as a wrong *finding*, and triaging individual findings will never surface it.
 - Findings whose `file_path` lies under `vendor/`, `third_party/`, `node_modules/`, `target/`, `build/`, `dist/`, `_deps/`, or matches generated-file markers. The generic (Go/Rust/C++) collector has **no directory exclusions**, so these are a known `tuning` pattern (`generic-scans-vendored-dirs`); count them, sample 1–2, and don't let them crowd out the clusters that matter.
 
 ### 5. Triage in parallel
 
-Spawn one **`Explore` Agent per cluster**, all in a single message so they run concurrently. Brief each agent:
+Spawn one **`Explore` Agent per cluster**, all in a single message so they run concurrently.
+
+If an agent stalls (no result after a few minutes, or a wrap-up request goes unanswered), `TaskStop`
+it and triage that cluster yourself from the JSON. A cluster is a single analysis pass; it doesn't
+need a sub-agent to be correct, and a stalled fan-out must not cost the audit its findings.
+
+Brief each agent:
 
 > "Triage polyscan findings of type **`<analysis> / <language> / <pattern>`** in repo `<repo-path>`.
 >
@@ -152,6 +184,63 @@ Spawn one **`Explore` Agent per cluster**, all in a single message so they run c
 >
 > Do not modify any files. Read-only triage."
 
+### 5b. Score integrity (differential runs)
+
+Step 5 asks "did polyscan flag the right *code*?" over one frozen `analyze.json`. This step asks the
+orthogonal question — **"is the reported number itself right?"** — and it is the one step that
+*re-runs* polyscan. Run it yourself, not in a read-only agent; a run takes well under a second.
+
+Change **one knob at a time** and diff `summary`:
+
+```bash
+cd <repo-path-or-any-target>
+for MC in 1 25; do
+  polyscan/polyscan analyze --format json --min-complexity $MC . > /tmp/ps_$MC.json 2>/dev/null
+  python3 -c "
+import json; d=json.load(open('/tmp/ps_$MC.json')); s=d.get('summary',{})
+print('$MC', s.get('health_score'), s.get('grade'), s.get('complexity_score'),
+      (d.get('complexity') or {}).get('summary',{}).get('total_functions'))"
+done
+```
+
+The invariant: **a presentation-only option must not move any score.** `--min-complexity` selects
+what gets *listed*; it must leave `health_score`, the per-dimension scores and the summary
+population counts untouched. (Verified holding as of this writing — `--min-complexity 1` vs `25`
+both give health 75 / 24 functions on `polyscan/testdata`. Re-check it rather than assuming.)
+
+Also run, and interpret carefully:
+
+- **`--select`**: per-dimension scores must stay identical to the full run. `health_score` itself
+  legitimately moves, and — because of the ratio in step 4 — it moves in **either** direction: a
+  dimension that runs alone is judged at full weight instead of being averaged against healthier
+  ones. Selecting *fewer* dimensions can therefore *lower* the score, which is the opposite of what
+  "fewer penalties" suggests. On `rogerpadilla/uql` the full run scored 57/D while `--select clone`
+  and `--select deps` each scored 39/F, and `--select complexity` scored 84/B — an 18-point spread
+  either way from the same tree. None of that is a bug; it is documented at
+  `polyscan/internal/js/service/doc.go` ("summaries built from different `--select` values are not
+  comparable"). Do not file it. Do record which direction it moved for your target, since a CI gate
+  using `--select` is graded on a different curve and usually a harsher one.
+- **Population consistency across analyses**: two analyses over the same unit should agree on how
+  many units exist. LCOM counting far more classes than CBO on the same tree is a lead, not a
+  curiosity.
+- **Known suspect — CBO filter-then-summarize.** `polyscan/internal/js/service/cbo_service.go:112-115`
+  filters classes (`MinCBO`/`MaxCBO`/`ShowZeros`) and *then* calls `SummarizeCoupling(sortedClasses, …)`,
+  whose `TotalClasses` (`:239`) becomes `summary.CBOClasses`
+  (`polyscan/internal/js/service/output_formatter.go:332`) and thus the coupling-penalty denominator.
+  This is the same shape as pyscn issue #785, where dropping zero-coupling classes from the
+  denominator moved the health grade by two steps. **Checked on `rogerpadilla/uql` (2026-09-17) and
+  it did not fire in the default `analyze` path**: `cbo.classes` held 280 entries against
+  `analyzed_files` 280, with 47 of them at `coupling_count: 0` — the zero-coupling classes are
+  present, so the denominator was complete, and `coupling_count == len(dependent_classes)` for all
+  280. Cheap to re-check (two `jq` counts), so confirm it per target rather than assuming either way;
+  what remains unexercised is the config path that sets `ShowZeros`/`MinCBO`, since there is no
+  `--show-zeros` analyze flag. A focused Go test over `CBOServiceImpl` is still the way to settle it.
+
+A score-integrity defect is `bug_class: "clear-bug"` — it is a structural anomaly in polyscan's output
+with an exact wrong field — at `P0` if it affects every target, `P1` otherwise. Evidence is the
+**before/after table** plus a minimal repro. These reproduce deterministically, so they verify
+unusually well; don't discount them for lacking a per-finding `file:line`.
+
 ### 6. Auto-file `clear-bug` findings (with dedup + rate limit)
 
 For each finding with `bug_class == "clear-bug"`:
@@ -161,7 +250,25 @@ For each finding with `bug_class == "clear-bug"`:
    gh issue list -R ludo-technologies/polyscan -s all -L 50 \
      --label auto-filed --search "<pattern_slug>" --json number,title
    ```
-   If any result mentions the same `pattern_slug`, **skip filing** — note "deduped against #<n>" in the report. Only `auto-filed`-labeled issues are considered for dedup; manually-filed issues are intentionally ignored.
+   If any result mentions the same `pattern_slug`, **skip filing** — note "deduped against #<n>" in the report.
+
+   Then run a second, wider pass over **all** issues, auto-filed or not, searching the construct
+   rather than the slug — a maintainer's issue will not be named the way you named your pattern:
+
+   ```bash
+   gh issue list -R ludo-technologies/polyscan -s all -L 100 --json number,title,state \
+     -q '.[] | select(.title|test("<keyword1>|<keyword2>";"i")) | "\(.number)\t\(.state)\t\(.title)"'
+   ```
+
+   The `auto-filed` label is the kill-switch for *rollback*, not a licence to ignore human issues.
+   When an **open** manually-filed issue already covers the same root cause, do not open a second
+   one: add your construct, repro and impact as a **comment** on it, and record that in the report
+   under "Issues filed". Splitting one root cause across two issues is the expensive mistake this
+   skill is meant to avoid. File separately only when the mechanism is genuinely different — say so
+   in one line if it is a near miss. A **closed** issue that matches is a different signal: verify
+   whether it actually regressed before filing anything, since the symptom may now have a new cause
+   (on `rogerpadilla/uql`, dead-code findings looked exactly like the closed #126 and were in fact
+   two unrelated live bugs).
 
 2. **Verify claims against raw JSON.** Before drafting the issue body, for every specific metric value, field name, or count you're about to cite in "Actual Output", extract it directly from `raw/analyze.json` for that exact finding (via `jq`) and use that literal value — do not restate the triage sub-agent's prose `evidence` field if it paraphrases a number. If the value you were about to cite doesn't match what's actually in `raw/analyze.json`, the finding is not a real `clear-bug`: downgrade it to `unsure`/`none` and do not file.
 
@@ -221,7 +328,9 @@ Write `.polyscan/audit/results/<slug>/$TS/report.md`:
 - **polyscan**: `<version>` (commit `<polyscan-sha>`)
 - **Date**: 2026-09-05
 - **LOC analyzed**: <summary.total_loc> across <summary.total_files> files (<summary.skipped_files> skipped)
-- **Health**: <summary.health_score> (<summary.grade>)
+- **Health**: <summary.health_score> (<summary.grade>) — penalty breakdown: <dimension> <n>pts, … ;
+  note any dimension whose points are an artifact rather than real debt
+- **Score-integrity differentials**: <knobs tested> — invariant held / violated (<detail>)
 
 ## Summary
 
@@ -285,8 +394,15 @@ One paragraph: language, total findings, suspected FP rate per cluster, **# of i
 ## Notes
 
 - All work stays under `.polyscan/audit/` (gitignored) **except** auto-filed issues, which are public on GitHub. Treat the `auto-filed` label as the kill-switch: a single `gh issue list -R ludo-technologies/polyscan -l auto-filed --json number -q '.[].number' | xargs -n1 gh issue close -R ludo-technologies/polyscan` can roll everything back if the heuristics drift.
-- Sub-agents are read-only on the local filesystem — they investigate and judge, they don't modify code.
+- Sub-agents are read-only on the local filesystem — they investigate and judge, they don't modify code. Step 5b is the exception and is run by you, since it re-runs polyscan under varied config.
+- **"Works as designed" is not "correct".** Classifying a finding `none` because the behaviour follows from a documented default explains the *behaviour*, not its consequences — ask once more where that value flows. pyscn #785 was missed on a first pass by stopping at "CBO lists 56 of 124 classes because `show_zeros` defaults to false"; the filtered 56 was also the scoring denominator. Before dropping such a lead, grep the value's consumers.
 - The `clear-bug` category is intentionally narrow. When in doubt, prefer `tuning` (which only drafts, never auto-files) — false issues are far more costly than missed ones.
-- If a cluster is huge (>200 findings), still only sample 5 — the rate from a sample is what matters.
+- If a cluster is huge (>200 findings), sample 5 by default — the rate from a sample is usually what
+  matters. The exception: when the verdict can be decided **mechanically** from the finding plus its
+  own source file, check the whole cluster with a script instead. A sample of 5 yields "probably
+  mostly wrong"; a scripted pass over all of them yields "91 of 91 are false", which is a far
+  stronger claim in an issue and takes about as long to write. `unused_import` is the worked example
+  — extract `(file_path, imported name)` from the JSON, grep each name in its own file outside the
+  import lines, and bucket the hits by construct.
 - Python repos are out of scope: polyscan has no Python analyzer; use `pyscn-fp-audit` in the pyscn checkout for those.
 - Avoid running on this monorepo (`polyscan` itself) — that's not the audit target. `polyscan/testdata/` is a fixture tree full of intentional clones and dead code.
