@@ -195,6 +195,11 @@ type ComplexityResponse struct {
 	// part of standalone complexity output.
 	ModuleRollups map[string]ModuleComplexityMetrics `json:"-" yaml:"-"`
 
+	// AnalyzedFunctions lists every analyzed function, before the report
+	// filters are applied, for consumers that judge the whole population,
+	// such as polyscan check. Functions is the subset the report shows.
+	AnalyzedFunctions []FunctionComplexity `json:"-" yaml:"-"`
+
 	// Warnings and issues
 	Warnings []string `json:"warnings,omitempty" yaml:"warnings,omitempty"`
 	Errors   []string `json:"errors,omitempty" yaml:"errors,omitempty"`

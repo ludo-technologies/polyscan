@@ -844,3 +844,24 @@ func TestAnalyzeErrorExitCode(t *testing.T) {
 		t.Errorf("analyze exit code = %d, want 1", got)
 	}
 }
+
+// The configuration's output.min_complexity only limits which functions the
+// report lists, so a function it hides must still fail the check.
+func TestCheckIgnoresReportFilters(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		"jscan.config.json": `{"output":{"min_complexity":20}}`,
+		"branches.js": "export function branches(a) {\n" +
+			"  if (a > 1) { return 1; }\n" +
+			"  if (a > 2) { return 2; }\n" +
+			"  if (a > 3) { return 3; }\n" +
+			"  return 0;\n" +
+			"}\n",
+	})
+	out, err := run(t, "check", "--select", "complexity", "--max-complexity", "2", dir)
+	if err == nil || exitCodeFor(err) != exitCodeQualityIssues {
+		t.Fatalf("err = %v, want a quality failure\n%s", err, out)
+	}
+	if want := "branches.js:1: branches is too complex (4 > 2)"; !strings.Contains(out, want) {
+		t.Errorf("output lacks %q:\n%s", want, out)
+	}
+}

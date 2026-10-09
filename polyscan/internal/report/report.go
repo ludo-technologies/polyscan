@@ -147,9 +147,10 @@ func genericComplexity(report *analysis.Report) (*domain.ComplexityResponse, err
 	}
 
 	return &domain.ComplexityResponse{
-		Functions:     functions,
-		ByDirectory:   byDirectory,
-		ModuleRollups: rollups,
+		Functions:         functions,
+		AnalyzedFunctions: functions,
+		ByDirectory:       byDirectory,
+		ModuleRollups:     rollups,
 		Summary: domain.ComplexitySummary{
 			TotalFunctions:         src.Summary.TotalFunctions,
 			FunctionsParsed:        src.Summary.TotalFunctions,
@@ -398,19 +399,8 @@ func mergeComplexity(generic, javascript *domain.ComplexityResponse) *domain.Com
 		return generic
 	}
 
-	functions := make([]domain.FunctionComplexity, 0, len(generic.Functions)+len(javascript.Functions))
-	functions = append(functions, generic.Functions...)
-	functions = append(functions, javascript.Functions...)
-	sort.SliceStable(functions, func(i, j int) bool {
-		a, b := functions[i], functions[j]
-		if a.Metrics.Complexity != b.Metrics.Complexity {
-			return a.Metrics.Complexity > b.Metrics.Complexity
-		}
-		if a.FilePath != b.FilePath {
-			return a.FilePath < b.FilePath
-		}
-		return a.StartLine < b.StartLine
-	})
+	functions := mergeFunctions(generic.Functions, javascript.Functions)
+	analyzed := mergeFunctions(generic.AnalyzedFunctions, javascript.AnalyzedFunctions)
 
 	rollups := make(map[string]domain.ModuleComplexityMetrics, len(generic.ModuleRollups)+len(javascript.ModuleRollups))
 	for path, metrics := range generic.ModuleRollups {
@@ -421,16 +411,35 @@ func mergeComplexity(generic, javascript *domain.ComplexityResponse) *domain.Com
 	}
 
 	return &domain.ComplexityResponse{
-		Functions:     functions,
-		ByDirectory:   mergeDirectories(generic.ByDirectory, javascript.ByDirectory),
-		ModuleRollups: rollups,
-		Summary:       mergeComplexitySummaries(generic.Summary, javascript.Summary),
-		Warnings:      mergeStrings(generic.Warnings, javascript.Warnings),
-		Errors:        mergeStrings(generic.Errors, javascript.Errors),
-		GeneratedAt:   javascript.GeneratedAt,
-		Version:       javascript.Version,
-		Config:        javascript.Config,
+		Functions:         functions,
+		AnalyzedFunctions: analyzed,
+		ByDirectory:       mergeDirectories(generic.ByDirectory, javascript.ByDirectory),
+		ModuleRollups:     rollups,
+		Summary:           mergeComplexitySummaries(generic.Summary, javascript.Summary),
+		Warnings:          mergeStrings(generic.Warnings, javascript.Warnings),
+		Errors:            mergeStrings(generic.Errors, javascript.Errors),
+		GeneratedAt:       javascript.GeneratedAt,
+		Version:           javascript.Version,
+		Config:            javascript.Config,
 	}
+}
+
+// mergeFunctions joins two function lists, most complex first.
+func mergeFunctions(a, b []domain.FunctionComplexity) []domain.FunctionComplexity {
+	functions := make([]domain.FunctionComplexity, 0, len(a)+len(b))
+	functions = append(functions, a...)
+	functions = append(functions, b...)
+	sort.SliceStable(functions, func(i, j int) bool {
+		a, b := functions[i], functions[j]
+		if a.Metrics.Complexity != b.Metrics.Complexity {
+			return a.Metrics.Complexity > b.Metrics.Complexity
+		}
+		if a.FilePath != b.FilePath {
+			return a.FilePath < b.FilePath
+		}
+		return a.StartLine < b.StartLine
+	})
+	return functions
 }
 
 func mergeComplexitySummaries(a, b domain.ComplexitySummary) domain.ComplexitySummary {

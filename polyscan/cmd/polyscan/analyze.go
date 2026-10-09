@@ -253,7 +253,9 @@ func filterFunctions(complexity *jsdomain.ComplexityResponse, minComplexity int)
 	if complexity == nil || minComplexity <= 1 {
 		return
 	}
-	listed := complexity.Functions[:0]
+	// A new slice, because Functions can share its backing array with
+	// AnalyzedFunctions.
+	listed := make([]jsdomain.FunctionComplexity, 0, len(complexity.Functions))
 	for _, fn := range complexity.Functions {
 		if fn.Metrics.Complexity >= minComplexity {
 			listed = append(listed, fn)

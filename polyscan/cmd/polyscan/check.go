@@ -205,12 +205,14 @@ func (o checkOptions) checkDiagnostics(diagnostics []jsdomain.AnalysisDiagnostic
 	return fmt.Errorf("%d file(s) could not be analyzed (use --allow-parse-errors to skip parse errors)", blocking)
 }
 
+// complexityIssues counts the functions above --max-complexity among every
+// analyzed function, not only the ones the report filters leave visible.
 func (o checkOptions) complexityIssues(complexity *jsdomain.ComplexityResponse, w io.Writer) int {
 	if complexity == nil {
 		return 0
 	}
 	issues := 0
-	for _, fn := range complexity.Functions {
+	for _, fn := range complexity.AnalyzedFunctions {
 		if fn.Metrics.Complexity > o.maxComplexity {
 			issues++
 			fmt.Fprintf(w, "%s:%d: %s is too complex (%d > %d)\n",
