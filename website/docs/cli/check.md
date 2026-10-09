@@ -44,7 +44,7 @@ polyscan check --max-cycles 3 .                 # Allow up to 3 dependency cycle
 polyscan check --select complexity,clone .      # Also list clones
 polyscan check --allow-dead-code .              # Report dead code without failing
 polyscan check --allow-parse-errors .           # Skip unparsable files without failing
-polyscan check --quiet .                        # Print nothing unless issues are found
+polyscan check --quiet .                        # Print only warnings unless issues are found
 ```
 
 ## Flags
@@ -57,7 +57,7 @@ polyscan check --quiet .                        # Print nothing unless issues ar
 | `--allow-dead-code` | | `false` | Print critical dead code without failing the check |
 | `--allow-circular-deps` | | `false` | Print circular dependencies without failing the check |
 | `--allow-parse-errors` | | `false` | Skip files with a syntax error without failing the check. A file that cannot be read still fails |
-| `--quiet` | `-q` | `false` | Print nothing unless issues are found. Clones and allowed findings are not printed |
+| `--quiet` | `-q` | `false` | Print nothing unless issues are found, apart from warnings such as a configuration key that no command reads. Clones and allowed findings are not printed |
 | `--exclude` | | | Files and directories to leave out, as on [`analyze`](analyze.md) |
 | `--include-tests` | | `false` | Analyze test files and test code, as on [`analyze`](analyze.md) |
 

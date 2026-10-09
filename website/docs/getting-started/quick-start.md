@@ -67,7 +67,7 @@ The five values accepted by `--select` are `complexity`, `deadcode`, `clone`, `c
 polyscan check src/
 ```
 
-`check` exits 1 when a function is too complex or when it finds critical dead code, and 2 when the analysis fails. The [check page](../cli/check.md) lists its thresholds, and the [CI/CD page](../integrations/ci-cd.md) has complete pipeline configurations.
+`check` exits 1 when a function is too complex, when it finds critical dead code, or when it finds a circular dependency, and 2 when the analysis fails. The [check page](../cli/check.md) lists its thresholds, and the [CI/CD page](../integrations/ci-cd.md) has complete pipeline configurations.
 
 ## 5. Configure the JavaScript/TypeScript analysis
 

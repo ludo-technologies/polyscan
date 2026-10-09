@@ -88,7 +88,7 @@ Examples:
   polyscan check --max-cycles 3 .              # Allow up to 3 dependency cycles
   polyscan check --allow-dead-code .           # Report dead code without failing
   polyscan check --allow-parse-errors .        # Skip unparsable files without failing
-  polyscan check --quiet .                     # Print nothing unless issues are found`,
+  polyscan check --quiet .                     # Print only warnings unless issues are found`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
@@ -118,7 +118,7 @@ Examples:
 	cmd.Flags().BoolVar(&opts.allowDeadCode, "allow-dead-code", false, "Report dead code without failing")
 	cmd.Flags().BoolVar(&opts.allowCircularDeps, "allow-circular-deps", false, "Report circular dependencies without failing")
 	cmd.Flags().BoolVar(&opts.allowParseErrors, "allow-parse-errors", false, "Skip unparsable files without failing; unreadable files still fail")
-	cmd.Flags().BoolVarP(&opts.quiet, "quiet", "q", false, "Print nothing unless issues are found")
+	cmd.Flags().BoolVarP(&opts.quiet, "quiet", "q", false, "Print nothing but warnings unless issues are found")
 	addFileFlags(cmd, &opts.exclude, &opts.includeTests)
 	return cmd
 }

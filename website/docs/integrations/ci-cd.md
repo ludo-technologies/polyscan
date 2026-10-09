@@ -165,12 +165,14 @@ files=$(git diff --cached --name-only --diff-filter=ACM \
 [ -z "$files" ] && exit 0
 
 # shellcheck disable=SC2086
-npx polyscan check --quiet --select complexity --max-complexity 20 $files
+npx polyscan check --quiet --include-tests --select complexity --max-complexity 20 $files
 ```
 
 Make it executable with `chmod +x .git/hooks/pre-commit`.
 
 Restricting `--select` to `complexity` is deliberate. Dead code detection on a handful of staged files reports almost every export as unused, because the importers are not in the file list.
+
+`--include-tests` is needed because test files are left out by default. Without it, a commit that stages only test files gives `check` no source files to analyze, so it exits 2 and blocks the commit.
 
 ## Docker
 
