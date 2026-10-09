@@ -845,6 +845,8 @@
       
         
       
+        
+      
     
     
     
@@ -917,6 +919,34 @@
     
   
     analyze
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check
   
 
     
@@ -1595,7 +1625,7 @@
 
 
 <h1 id="cli-reference">CLI Reference<a class="headerlink" href="#cli-reference" title="Permanent link">&para;</a></h1>
-<p>polyscan exposes two commands. <code>analyze</code> accepts one or more paths, and every path may be a file or a directory.</p>
+<p>polyscan exposes three commands. <code>analyze</code> and <code>check</code> accept one or more paths, and every path may be a file or a directory.</p>
 <table>
 <thead>
 <tr>
@@ -1609,6 +1639,11 @@
 <td><a href="analyze/"><code>analyze</code></a></td>
 <td>Run the full analysis and produce a report</td>
 <td>No</td>
+</tr>
+<tr>
+<td><a href="check/"><code>check</code></a></td>
+<td>Check the code against thresholds for CI</td>
+<td>Yes</td>
 </tr>
 <tr>
 <td><a href="version/"><code>version</code></a></td>
@@ -1626,17 +1661,18 @@
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="go">Available Commands:</span>
 </span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="go">  analyze     Analyze source files</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="go">  completion  Generate the autocompletion script for the specified shell</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="go">  help        Help about any command</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="go">  version     Print version information</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="go">Flags:</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="go">  -h, --help      help for polyscan</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="go">  -v, --version   version for polyscan</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="go">Use "polyscan [command] --help" for more information about a command.</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="go">  check       Check code quality against thresholds for CI</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="go">  completion  Generate the autocompletion script for the specified shell</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="go">  help        Help about any command</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="go">  version     Print version information</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="go">Flags:</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="go">  -h, --help      help for polyscan</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="go">  -v, --version   version for polyscan</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="go">Use "polyscan [command] --help" for more information about a command.</span>
 </span></code></pre></div>
-<p>To fail a pipeline on the results, gate on the JSON output — there is no separate check command. The <a href="../integrations/ci-cd/">CI/CD page</a> shows how. If you are looking for jscan's <code>check</code>, <code>deps</code> or <code>init</code> commands, see <a href="../getting-started/migrating-from-jscan/">migrating from jscan</a>.</p>
+<p>To fail a pipeline on the results, use <a href="check/"><code>check</code></a>. The <a href="../integrations/ci-cd/">CI/CD page</a> shows complete jobs. If you are looking for jscan's <code>deps</code> or <code>init</code> commands, see <a href="../getting-started/migrating-from-jscan/">migrating from jscan</a>.</p>
 <h2 id="which-files-polyscan-reads">Which files polyscan reads<a class="headerlink" href="#which-files-polyscan-reads" title="Permanent link">&para;</a></h2>
 <p><code>analyze</code> walks the directory tree and collects files by extension, dispatching each to its language:</p>
 <table>

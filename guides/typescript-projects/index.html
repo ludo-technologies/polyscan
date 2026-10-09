@@ -1076,6 +1076,8 @@
       
         
       
+        
+      
     
     
     
@@ -1147,6 +1149,34 @@
     
   
     analyze
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check
   
 
     
@@ -2126,9 +2156,8 @@
 </span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">}</span>
 </span></code></pre></div>
 <h3 id="4-gate-on-critical-findings-first">4. Gate on critical findings first<a class="headerlink" href="#4-gate-on-critical-findings-first" title="Permanent link">&para;</a></h3>
-<p>An exported symbol that no analyzed file imports produces a warning-level finding. In a library, or in any project analyzed one directory at a time, that describes most of your public API, so a CI gate should start by counting only the critical findings:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>src/<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.summary.critical_dead_code == 0'</span>
+<p>An exported symbol that no analyzed file imports produces a warning-level finding. In a library, or in any project analyzed one directory at a time, that describes most of your public API, so a CI gate should start by counting only the critical findings. <code>polyscan check</code> does this:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--select<span class="w"> </span>deadcode<span class="w"> </span>src/
 </span></code></pre></div>
 <p>Tighten the gate once the first round of fixes has landed. The <a href="../../integrations/ci-cd/">CI/CD page</a> has complete jobs.</p>
 <h2 id="monorepos">Monorepos<a class="headerlink" href="#monorepos" title="Permanent link">&para;</a></h2>

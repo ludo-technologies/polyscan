@@ -12,13 +12,13 @@
         <meta name="author" content="ludo-technologies">
       
       
-        <link rel="canonical" href="https://docs.codescan.dev/polyscan/output/health-score/">
+        <link rel="canonical" href="https://docs.codescan.dev/polyscan/cli/check/">
       
       
-        <link rel="prev" href="../json-schema/">
+        <link rel="prev" href="../analyze/">
       
       
-        <link rel="next" href="../../integrations/">
+        <link rel="next" href="../version/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Health Score - polyscan</title>
+        <title>check - polyscan</title>
       
     
     
@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#health-score" class="md-skip">
+        <a href="#polyscan-check" class="md-skip">
           Skip to content
         </a>
       
@@ -117,7 +117,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Health Score
+              check
             
           </span>
         </div>
@@ -300,11 +300,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../cli/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
           
   
   
@@ -344,13 +346,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../../output/" class="md-tabs__link">
           
   
   
@@ -830,6 +830,8 @@
       
   
   
+    
+  
   
   
     
@@ -849,22 +851,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../cli/" class="md-nav__link ">
+            <a href="../" class="md-nav__link ">
               
   
   
@@ -882,13 +885,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
@@ -908,7 +911,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/analyze/" class="md-nav__link">
+      <a href="../analyze/" class="md-nav__link">
         
   
   
@@ -933,10 +936,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../cli/check/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -952,6 +982,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#exit-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit codes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-fails-the-check" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What fails the check
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#synopsis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Synopsis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#flags" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Flags
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -964,7 +1069,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../cli/version/" class="md-nav__link">
+      <a href="../version/" class="md-nav__link">
         
   
   
@@ -1132,8 +1237,6 @@
       
   
   
-    
-  
   
   
     
@@ -1153,23 +1256,22 @@
     
     
       
-        
-        
-      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../../output/" class="md-nav__link ">
               
   
   
@@ -1187,13 +1289,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1213,7 +1315,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../html-report/" class="md-nav__link">
+      <a href="../../output/html-report/" class="md-nav__link">
         
   
   
@@ -1241,7 +1343,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../json-schema/" class="md-nav__link">
+      <a href="../../output/json-schema/" class="md-nav__link">
         
   
   
@@ -1266,37 +1368,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Health Score
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../output/health-score/" class="md-nav__link">
         
   
   
@@ -1312,175 +1387,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#the-formula" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        The formula
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#grades" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Grades
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#project-scale" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Project scale
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#how-each-penalty-is-computed" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        How each penalty is computed
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="How each penalty is computed">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#complexity" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Complexity
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#dead-code" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dead code
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#duplication" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Duplication
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#coupling" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Coupling
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#dependencies" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dependencies
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#category-scores" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Category scores
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#selecting-fewer-analyses-changes-the-budget" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Selecting fewer analyses changes the budget
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#worked-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Worked example
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-moves-the-score-most" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What moves the score most
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1737,10 +1643,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-formula" class="md-nav__link">
+  <a href="#exit-codes" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The formula
+        Exit codes
       
     </span>
   </a>
@@ -1748,10 +1654,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#grades" class="md-nav__link">
+  <a href="#what-fails-the-check" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Grades
+        What fails the check
       
     </span>
   </a>
@@ -1759,10 +1665,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#project-scale" class="md-nav__link">
+  <a href="#synopsis" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Project scale
+        Synopsis
       
     </span>
   </a>
@@ -1770,82 +1676,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#how-each-penalty-is-computed" class="md-nav__link">
+  <a href="#flags" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How each penalty is computed
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="How each penalty is computed">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#complexity" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Complexity
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#dead-code" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dead code
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#duplication" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Duplication
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#coupling" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Coupling
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#dependencies" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Dependencies
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#category-scores" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Category scores
+        Flags
       
     </span>
   </a>
@@ -1853,32 +1687,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#selecting-fewer-analyses-changes-the-budget" class="md-nav__link">
+  <a href="#output" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Selecting fewer analyses changes the budget
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#worked-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Worked example
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-moves-the-score-most" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What moves the score most
+        Output
       
     </span>
   </a>
@@ -1931,7 +1743,7 @@
         <a href="../" class="md-path__link">
           
   <span class="md-ellipsis">
-    Output Formats
+    CLI Reference
   </span>
 
         </a>
@@ -1950,7 +1762,7 @@
 
 
   
-    <a href="https://github.com/ludo-technologies/polyscan/edit/main/website/docs/output/health-score.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/ludo-technologies/polyscan/edit/main/website/docs/cli/check.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1958,228 +1770,158 @@
   
 
 
-<h1 id="health-score">Health Score<a class="headerlink" href="#health-score" title="Permanent link">&para;</a></h1>
-<p>The health score is a single number from 0 to 100 summarizing everything polyscan measured, with a letter grade attached. It appears at the end of the terminal summary, at the top of the HTML report, and in the <code>summary</code> object of the JSON output.</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>Health Score: 91/100 (Grade: A)
+<h1 id="polyscan-check">polyscan check<a class="headerlink" href="#polyscan-check" title="Permanent link">&para;</a></h1>
+<p>Checks the code against fixed thresholds and sets the exit code from the result. This is the command for a CI quality gate.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>polyscan<span class="w"> </span>check<span class="w"> </span><span class="o">[</span>path...<span class="o">]</span>
 </span></code></pre></div>
-<p>This page documents exactly how that number is produced, so that you can predict how a change to your code will move it.</p>
-<h2 id="the-formula">The formula<a class="headerlink" href="#the-formula" title="Permanent link">&para;</a></h2>
-<p>Each analyzed dimension produces an integer penalty with a fixed maximum:</p>
+<p>With no path, <code>check</code> analyzes the current directory.</p>
+<h2 id="exit-codes">Exit codes<a class="headerlink" href="#exit-codes" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Dimension</th>
-<th>Maximum penalty</th>
+<th>Code</th>
+<th>Meaning</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Complexity</td>
-<td>20</td>
+<td><code>0</code></td>
+<td>No quality issues were found</td>
 </tr>
 <tr>
-<td>Dead code</td>
-<td>20</td>
+<td><code>1</code></td>
+<td>Quality issues were found. Each issue is printed</td>
 </tr>
 <tr>
-<td>Duplication</td>
-<td>20</td>
-</tr>
-<tr>
-<td>Coupling</td>
-<td>20</td>
-</tr>
-<tr>
-<td>Dependencies</td>
-<td>16</td>
+<td><code>2</code></td>
+<td>The analysis failed, so the result is not a verdict about the code. An invalid flag, a missing path, a path with no supported source files, and a file that cannot be read or parsed all exit 2</td>
 </tr>
 </tbody>
 </table>
-<p>The score charges the run against the dimensions that actually ran:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>score = 100 - round(100 × total penalty ÷ maximum possible penalty)
-</span></code></pre></div>
-<p>where both sums cover only the enabled dimensions. A dimension that did not run — because <code>--select</code> excluded it, or because no analyzed language has it — is left out of both sums entirely, rather than scored as clean. A pure Go project is therefore judged on complexity and duplication alone, out of a budget of 40, while a JavaScript project is judged on all five, out of 96. In both cases a clean codebase scores 100 and a fully saturated one scores near 0.</p>
-<p>Files that could not be parsed at all are charged separately, after the projection: the parse-error penalty grows with the skipped-file ratio, from a floor of 11 points — enough to cost grade A — up to 56 points when everything was skipped. It exists because every dimension above silently excludes unparsable files, so without it a broken tree would look healthy.</p>
-<p>The result is clamped to the range 0 to 100.</p>
-<div class="admonition note">
-<p class="admonition-title">Changed when jscan merged into polyscan</p>
-<p>jscan subtracted the raw penalties from 100 directly, so five clean dimensions were a precondition for a high score. polyscan projects the penalties onto the dimensions that ran, which keeps scores meaningful for languages that only have complexity and clone analysis. On a JavaScript project the two formulas agree closely but not exactly: the projection divides by 96 rather than 100.</p>
-</div>
-<h2 id="grades">Grades<a class="headerlink" href="#grades" title="Permanent link">&para;</a></h2>
+<p>A pipeline can treat 1 and 2 differently. Code 1 means the code needs work. Code 2 means the job itself needs attention, and it is never a pass.</p>
+<h2 id="what-fails-the-check">What fails the check<a class="headerlink" href="#what-fails-the-check" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Grade</th>
-<th>Score</th>
+<th>Analysis</th>
+<th>Fails when</th>
+<th>Languages</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>A</td>
-<td>90 to 100</td>
+<td><code>complexity</code></td>
+<td>A function has cyclomatic complexity above <code>--max-complexity</code> (default 10)</td>
+<td>All</td>
 </tr>
 <tr>
-<td>B</td>
-<td>75 to 89</td>
+<td><code>deadcode</code></td>
+<td>Critical dead code is found, such as code after a <code>return</code></td>
+<td>JavaScript/TypeScript</td>
 </tr>
 <tr>
-<td>C</td>
-<td>60 to 74</td>
+<td><code>deps</code></td>
+<td>There are more circular dependency cycles than <code>--max-cycles</code> (default 0). Every cycle then counts as one issue</td>
+<td>Go, JavaScript/TypeScript</td>
 </tr>
 <tr>
-<td>D</td>
-<td>45 to 59</td>
-</tr>
-<tr>
-<td>F</td>
-<td>0 to 44</td>
+<td><code>clone</code></td>
+<td>Never. Clones are listed for information only</td>
+<td>All</td>
 </tr>
 </tbody>
 </table>
-<p>These thresholds are shared with pyscn so that a grade means the same thing regardless of the language being analyzed.</p>
-<h2 id="project-scale">Project scale<a class="headerlink" href="#project-scale" title="Permanent link">&para;</a></h2>
-<p>Directly below the health score, polyscan prints the size of the repository it just analyzed:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>Project Scale: Medium (123 files, 456 functions, 7890 LOC)
+<p><code>check</code> runs <code>complexity</code>, <code>deadcode</code> and <code>deps</code> by default. Clone detection runs only when <code>--select</code> names <code>clone</code>.</p>
+<p>Only critical dead code fails the check. Unused imports and exports are warnings, and they never fail it, because a library's exports are usually imported outside the analyzed directory.</p>
+<p>A file that cannot be read or parsed fails the check with exit code 2, because the check cannot say anything about that file. <code>--allow-parse-errors</code> skips files with a syntax error and lets the check pass on the rest. A file that cannot be read still fails. Go, Rust and C++ files are parsed with error recovery, so a syntax error in one of them leaves out only the functions that contain it and does not fail the check. The <a href="../analyze/#language-coverage">analyze page</a> explains this.</p>
+<h2 id="synopsis">Synopsis<a class="headerlink" href="#synopsis" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>polyscan<span class="w"> </span>check<span class="w">                                  </span><span class="c1"># Check the current directory</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>polyscan<span class="w"> </span>check<span class="w"> </span>src/<span class="w">                             </span><span class="c1"># Check one directory</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--select<span class="w"> </span>complexity<span class="w"> </span>src/<span class="w">         </span><span class="c1"># Complexity only</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--max-complexity<span class="w"> </span><span class="m">15</span><span class="w"> </span>src/<span class="w">         </span><span class="c1"># Raise the complexity limit</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--max-cycles<span class="w"> </span><span class="m">3</span><span class="w"> </span>.<span class="w">                 </span><span class="c1"># Allow up to 3 dependency cycles</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--select<span class="w"> </span>complexity,clone<span class="w"> </span>.<span class="w">      </span><span class="c1"># Also list clones</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--allow-dead-code<span class="w"> </span>.<span class="w">              </span><span class="c1"># Report dead code without failing</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--allow-parse-errors<span class="w"> </span>.<span class="w">           </span><span class="c1"># Skip unparsable files without failing</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--quiet<span class="w"> </span>.<span class="w">                        </span><span class="c1"># Print only warnings unless issues are found</span>
 </span></code></pre></div>
-<p>The label comes from the number of analyzed files alone:</p>
+<h2 id="flags">Flags<a class="headerlink" href="#flags" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Label</th>
-<th>Analyzed files</th>
+<th>Flag</th>
+<th>Short</th>
+<th>Default</th>
+<th>Description</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>Micro</td>
-<td>0 to 9</td>
+<td><code>--select</code></td>
+<td><code>-s</code></td>
+<td><code>complexity,deadcode,deps</code></td>
+<td>Comma-separated list of analyses to run. Accepts <code>complexity</code>, <code>deadcode</code>, <code>clone</code> and <code>deps</code></td>
 </tr>
 <tr>
-<td>Small</td>
-<td>10 to 49</td>
+<td><code>--max-complexity</code></td>
+<td></td>
+<td><code>10</code></td>
+<td>Maximum allowed cyclomatic complexity of a function</td>
 </tr>
 <tr>
-<td>Medium</td>
-<td>50 to 199</td>
+<td><code>--max-cycles</code></td>
+<td></td>
+<td><code>0</code></td>
+<td>Maximum allowed number of circular dependency cycles</td>
 </tr>
 <tr>
-<td>Large</td>
-<td>200 to 999</td>
+<td><code>--allow-dead-code</code></td>
+<td></td>
+<td><code>false</code></td>
+<td>Print critical dead code without failing the check</td>
 </tr>
 <tr>
-<td>Enterprise</td>
-<td>1000 or more</td>
+<td><code>--allow-circular-deps</code></td>
+<td></td>
+<td><code>false</code></td>
+<td>Print circular dependencies without failing the check</td>
+</tr>
+<tr>
+<td><code>--allow-parse-errors</code></td>
+<td></td>
+<td><code>false</code></td>
+<td>Skip files with a syntax error without failing the check. A file that cannot be read still fails</td>
+</tr>
+<tr>
+<td><code>--quiet</code></td>
+<td><code>-q</code></td>
+<td><code>false</code></td>
+<td>Print nothing unless issues are found, apart from warnings such as a configuration key that no command reads. Clones and allowed findings are not printed</td>
+</tr>
+<tr>
+<td><code>--exclude</code></td>
+<td></td>
+<td></td>
+<td>Files and directories to leave out, as on <a href="../analyze/"><code>analyze</code></a></td>
+</tr>
+<tr>
+<td><code>--include-tests</code></td>
+<td></td>
+<td><code>false</code></td>
+<td>Analyze test files and test code, as on <a href="../analyze/"><code>analyze</code></a></td>
 </tr>
 </tbody>
 </table>
-<p>The scale is reported for context only. It does not change the health score or the grade in any way, so two repositories of different sizes with identical metrics receive identical scores.</p>
-<p>The line count comes from the clone analysis, which is the stage that reads whole files. When clone analysis is turned off, the line count is omitted and the line reads <code>Project Scale: Medium (123 files, 456 functions)</code>.</p>
-<h2 id="how-each-penalty-is-computed">How each penalty is computed<a class="headerlink" href="#how-each-penalty-is-computed" title="Permanent link">&para;</a></h2>
-<p>Four of the dimensions use the same shape. A ratio is computed, and the penalty grows linearly from 0 until the ratio reaches a saturation point, beyond which the penalty stays at its maximum.</p>
-<h3 id="complexity">Complexity<a class="headerlink" href="#complexity" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ratio   = (high risk functions + 0.5 × medium risk functions) ÷ total functions
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>penalty = 20 × ratio ÷ 0.30, capped at 20, at least 1 when ratio &gt; 0
+<h2 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h2>
+<p><code>check</code> writes everything to standard error. Each finding is one line that starts with the file path and line number:</p>
+<div class="language-console highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="gp">$ </span>polyscan<span class="w"> </span>check<span class="w"> </span>src/
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="go">Running quality check (complexity, deadcode, deps)...</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="go">src/server.go:24: Server.Handle is too complex (14 &gt; 10)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="go">src/util.js:3: Code after return statement is unreachable</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="go">circular dependency: src/a.js -&gt; src/b.js</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="go">Error: found 3 quality issue(s)</span>
 </span></code></pre></div>
-<p>The penalty reaches its maximum once the weighted ratio hits 30 percent. It never rounds down to 0 while any function is above the medium threshold, so a complexity score of 100 means every function is low risk. A codebase where one function in twenty is high risk loses about 3 of the 20 points, and one where every third function is high risk loses all of them. Medium risk functions count half as much as high risk ones. The population covers every analyzed function in every language.</p>
-<p>Which functions count as high or medium risk depends on the thresholds, so for JavaScript/TypeScript raising <code>complexity.medium_threshold</code> raises the score without changing any code.</p>
-<h3 id="dead-code">Dead code<a class="headerlink" href="#dead-code" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>weighted = 1.0 × critical + 0.5 × warning + 0.2 × info
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>rate     = weighted ÷ dead_code_files
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>penalty  = 20 × rate ÷ 3.0, capped at 20
-</span></code></pre></div>
-<p>This is a per-file rate rather than a raw count, so a large codebase is not penalized simply for being large. The penalty maxes out at three weighted findings per file. The divisor is the file count the dead code analysis covered, which is the JavaScript/TypeScript files, reported as <code>dead_code_files</code> in the summary. The whole run's <code>total_files</code> is not used here, so Go, Rust and C++ files in a mixed tree do not dilute the rate.</p>
-<h3 id="duplication">Duplication<a class="headerlink" href="#duplication" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>penalty = 20 × duplication percentage ÷ 60, capped at 20
-</span></code></pre></div>
-<p>The duplication percentage is the proportion of code fragments, across every language, that participate in at least one clone pair or group. It reaches the maximum penalty at 60 percent. Every fragment with a partner counts in full, so the ratio runs high on languages with conventional function shapes: well-kept Go libraries such as cobra and x/crypto sit near 20 percent, and wrapper-heavy ones such as testify and afero near 35 percent.</p>
-<h3 id="coupling">Coupling<a class="headerlink" href="#coupling" title="Permanent link">&para;</a></h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ratio   = (high coupling modules + 0.3 × medium coupling modules) ÷ total modules
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>penalty = 20 × ratio ÷ 0.40, capped at 20
-</span></code></pre></div>
-<p>Medium risk modules are weighted at 0.3 rather than 0.5, which is more forgiving than the complexity weighting. The penalty saturates when the weighted ratio reaches 40 percent, slightly later than the complexity penalty.</p>
-<h3 id="dependencies">Dependencies<a class="headerlink" href="#dependencies" title="Permanent link">&para;</a></h3>
-<p>This penalty is the sum of three independent parts.</p>
-<p><strong>Cycles, up to 10 points.</strong> Two candidate values are computed and the larger wins:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>proportional = 10 × modules in cycles ÷ total modules
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>floor        = log₂(modules in cycles + 1)
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>cycle points = min(10, max(proportional, floor))
-</span></code></pre></div>
-<p>The logarithmic floor exists so that circular imports always cost something. Without it, three modules in a cycle inside a thousand-module repository would round away to nothing.</p>
-<p><strong>Depth, up to 3 points.</strong> polyscan compares your longest import chain against the depth a healthy graph of that size would have:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>expected     = max(3, ⌈log₂(total modules + 1)⌉ + 1)
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>depth points = min(3, max(0, max depth - expected))
-</span></code></pre></div>
-<p><strong>Main sequence deviation, up to 3 points.</strong> The Martin distance from the main sequence, a value between 0 and 1, multiplied by 3 and rounded. The <a href="../../guides/dependency-graph/">dependency graph guide</a> explains what that metric means.</p>
-<h2 id="category-scores">Category scores<a class="headerlink" href="#category-scores" title="Permanent link">&para;</a></h2>
-<p>Alongside the overall number, polyscan reports a 0 to 100 score per dimension. These are presentation values and do not feed back into the total.</p>
-<p>For complexity, dead code, duplication, and coupling the conversion is direct:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>category score = 100 - (penalty × 5)
-</span></code></pre></div>
-<p>A penalty of 4 out of 20 therefore displays as 80 out of 100.</p>
-<p>The dependency score is normalized first, because its maximum penalty is 16 rather than 20:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>normalized     = round(penalty ÷ 16 × 20)
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>category score = 100 - (normalized × 5)
-</span></code></pre></div>
-<p>The <code>architecture_score</code> field in the JSON output is always 0, because architecture validation is not implemented in polyscan; the field exists because the scoring code is shared with pyscn. Ignore it.</p>
-<h2 id="selecting-fewer-analyses-changes-the-budget">Selecting fewer analyses changes the budget<a class="headerlink" href="#selecting-fewer-analyses-changes-the-budget" title="Permanent link">&para;</a></h2>
-<p>A dimension that did not run is left out of both the penalty and the budget, so scores from different <code>--select</code> values are computed over different denominators and are not comparable:</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="gp">$ </span>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>--select<span class="w"> </span>complexity<span class="w"> </span>src/<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.summary.health_score
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="go">100</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="gp">$ </span>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>src/<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.summary.health_score
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="go">91</span>
-</span></code></pre></div>
-<p>The code is identical in both runs. Only the set of dimensions being scored changed. The same applies across languages: a Go project's 90 and a TypeScript project's 90 are both grade A, but they are earned over different dimension sets.</p>
-<p>If you track the score over time, always run the same selection on the same tree. The default, which runs everything a language supports, is the right choice for a tracked metric.</p>
-<h2 id="worked-example">Worked example<a class="headerlink" href="#worked-example" title="Permanent link">&para;</a></h2>
-<p>Take a TypeScript run summarized as 91 out of 100 with grade A. All five dimensions ran, so the budget is 20 + 20 + 20 + 20 + 16 = 96:</p>
-<table>
-<thead>
-<tr>
-<th>Dimension</th>
-<th>Measurement</th>
-<th>Penalty</th>
-<th>Category score</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Complexity</td>
-<td>0 high risk and 0 medium risk of 4 functions</td>
-<td>0</td>
-<td>100</td>
-</tr>
-<tr>
-<td>Dead code</td>
-<td>1 critical and 2 warnings across 2 files, a rate of 1.0</td>
-<td>7</td>
-<td>65</td>
-</tr>
-<tr>
-<td>Duplication</td>
-<td>0 percent</td>
-<td>0</td>
-<td>100</td>
-</tr>
-<tr>
-<td>Coupling</td>
-<td>0 of 2 modules at risk</td>
-<td>0</td>
-<td>100</td>
-</tr>
-<tr>
-<td>Dependencies</td>
-<td>0 cycles, depth 1, deviation 0.6</td>
-<td>2</td>
-<td>85</td>
-</tr>
-</tbody>
-</table>
-<p>The total penalty is 9 out of a possible 96, so the score is <code>100 - round(100 × 9 ÷ 96) = 100 - 9 = 91</code>, grade A.</p>
-<p>The dead code figure is the one worth following through. The weighted finding count is <code>1.0 × 1 + 0.5 × 2 = 2.0</code>, spread over 2 files, giving a rate of 1.0. That is one third of the way to the saturation point of 3.0, so the penalty is one third of 20, which rounds to 7. The category score is <code>100 - 7 × 5 = 65</code>.</p>
-<h2 id="what-moves-the-score-most">What moves the score most<a class="headerlink" href="#what-moves-the-score-most" title="Permanent link">&para;</a></h2>
-<p>Because every dimension saturates, the fastest gains come from whichever dimension is furthest from zero rather than from whichever has the most raw findings. A project with a dead code score of 65 and a complexity score of 100 should fix dead code first, even if it has far more functions than findings.</p>
-<p>The dimensions also differ in how quickly they saturate. Complexity saturates at a weighted ratio of 30 percent and coupling at 40 percent, so a handful of complex functions costs a few points, while a single unparsable file costs at least 11.</p>
+<p>The JavaScript/TypeScript configuration file is discovered the same way as for <code>analyze</code>. Its <code>complexity.max_complexity</code> key is not read. Use <code>--max-complexity</code> to set the limit.</p>
 
 
 

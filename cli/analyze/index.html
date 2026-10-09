@@ -18,7 +18,7 @@
         <link rel="prev" href="../">
       
       
-        <link rel="next" href="../version/">
+        <link rel="next" href="../check/">
       
       
         
@@ -845,6 +845,8 @@
       
         
       
+        
+      
     
     
     
@@ -1110,6 +1112,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1910,7 +1940,7 @@
 <p>Runs the full analysis and produces a report. This is the command you reach for when you want to understand a codebase.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>polyscan<span class="w"> </span>analyze<span class="w"> </span><span class="o">[</span>path...<span class="o">]</span>
 </span></code></pre></div>
-<p><code>analyze</code> always exits with code 0 when the analysis itself succeeds, no matter how poor the results are. To fail a pipeline on the results, gate on the JSON output as shown on the <a href="../../integrations/ci-cd/">CI/CD page</a>.</p>
+<p><code>analyze</code> always exits with code 0 when the analysis itself succeeds, no matter how poor the results are. To fail a pipeline on the results, use <a href="../check/"><code>check</code></a>.</p>
 <h2 id="synopsis">Synopsis<a class="headerlink" href="#synopsis" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>polyscan<span class="w"> </span>analyze<span class="w"> </span>.<span class="w">                                       </span><span class="c1"># All analyses, HTML report</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>polyscan<span class="w"> </span>analyze<span class="w"> </span>--select<span class="w"> </span>complexity,deadcode<span class="w"> </span>src/<span class="w">       </span><span class="c1"># Two analyses only</span>

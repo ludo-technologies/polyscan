@@ -843,6 +843,8 @@
       
         
       
+        
+      
     
     
     
@@ -914,6 +916,34 @@
     
   
     analyze
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check
   
 
     
@@ -2230,7 +2260,7 @@
 </span></code></pre></div>
 <h3 id="complexitymax_complexity"><code>complexity.max_complexity</code><a class="headerlink" href="#complexitymax_complexity" title="Permanent link">&para;</a></h3>
 <p><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 13H7v-2h10m-5-9A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2"/></svg></span> <strong>Not applied</strong> &nbsp;&middot;&nbsp; integer &nbsp;&middot;&nbsp; default <code>0</code></p>
-<p>Supplied the default threshold for jscan's retired <code>check</code> command. It is accepted without a warning for backward compatibility, but nothing reads it now. To gate a pipeline on complexity, use the JSON output as shown on the <a href="../../integrations/ci-cd/">CI/CD page</a>.</p>
+<p>Supplied the default threshold for jscan's <code>check</code> command. It is accepted without a warning for backward compatibility, but nothing reads it now. <code>polyscan check</code> takes the limit from its <a href="../../cli/check/#flags"><code>--max-complexity</code></a> flag.</p>
 <p>Must be either 0, meaning no limit, or greater than <code>medium_threshold</code>.</p>
 <h3 id="complexityenabled"><code>complexity.enabled</code><a class="headerlink" href="#complexityenabled" title="Permanent link">&para;</a></h3>
 <p><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 13H7v-2h10m-5-9A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2"/></svg></span> <strong>Not applied</strong> &nbsp;&middot;&nbsp; boolean &nbsp;&middot;&nbsp; default <code>true</code></p>

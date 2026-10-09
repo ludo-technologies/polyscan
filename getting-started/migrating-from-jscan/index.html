@@ -970,6 +970,8 @@
       
         
       
+        
+      
     
     
     
@@ -1041,6 +1043,34 @@
     
   
     analyze
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check
   
 
     
@@ -1814,7 +1844,7 @@
 </tr>
 <tr>
 <td><code>jscan check src/</code></td>
-<td>Retired — <a href="#the-check-command">gate on the JSON output</a></td>
+<td><code>polyscan check src/</code>. See <a href="#the-check-command">the <code>check</code> command</a></td>
 </tr>
 <tr>
 <td><code>jscan deps src/</code></td>
@@ -1839,19 +1869,18 @@
 <li>Everything else — <code>--select</code>, <code>--no-open</code>, <code>-o/--output</code> — is unchanged.</li>
 </ul>
 <h2 id="the-check-command">The <code>check</code> command<a class="headerlink" href="#the-check-command" title="Permanent link">&para;</a></h2>
-<p><code>jscan check</code> was retired with the merge; there is no gate command in polyscan yet. Gate on the JSON output instead, which can express the same thresholds:</p>
+<p><code>polyscan check</code> replaces <code>jscan check</code> and keeps its exit codes: 0 for no issues, 1 for quality issues, and 2 when the analysis fails. The differences are in the flags:</p>
+<ul>
+<li>The thresholds come from flags only. The configuration file's <code>complexity.max_complexity</code> key is not read, so pass <code>--max-complexity</code> instead. The <code>--config</code> flag is gone, as on <code>analyze</code>.</li>
+<li><code>--allow-parse-errors</code> waives only syntax errors. A file that cannot be read still fails the check with exit code 2.</li>
+<li>The <code>--json</code> and <code>--verbose</code> flags are gone. <code>check</code> prints each finding as one line on standard error.</li>
+<li><code>--select</code> also accepts <code>clone</code>, which lists clones without failing the check.</li>
+</ul>
+<p>The <a href="../../cli/check/">check page</a> lists every flag. The <code>jscan</code> npm wrapper does not forward <code>check</code>. It exits 2 with a hint to run <code>polyscan check</code>.</p>
+<p>To gate on the health score, use the JSON output of <code>analyze</code>:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>src/<span class="w"> </span>&gt;<span class="w"> </span>report.json
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Fail below grade B</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>jq<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.summary.health_score &gt;= 75'</span><span class="w"> </span>report.json
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Fail on any high-complexity function</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>jq<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.summary.high_complexity_count == 0'</span><span class="w"> </span>report.json
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Fail on critical dead code or dependency cycles</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>jq<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.summary.critical_dead_code == 0 and .summary.deps_modules_in_cycles == 0'</span><span class="w"> </span>report.json
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>jq<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.summary.health_score &gt;= 75'</span><span class="w"> </span>report.json
 </span></code></pre></div>
-<p>The <a href="../../integrations/ci-cd/">CI/CD page</a> has complete pipeline configurations built this way. Note one behavioral difference: <code>jscan check</code> ran a fast subset of the analyses, while <code>analyze</code> runs whatever <code>--select</code> names — pass <code>--select complexity,deadcode,deps</code> to keep a gate fast.</p>
 <h2 id="the-deps-command">The <code>deps</code> command<a class="headerlink" href="#the-deps-command" title="Permanent link">&para;</a></h2>
 <p>Dependency analysis lives in <code>polyscan analyze --select deps</code>. The text output carries the summary and cycle list, and the <code>deps</code> section of the JSON output carries the graph, the per-module Martin metrics, and the coupling analysis:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>--select<span class="w"> </span>deps<span class="w"> </span>src/<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span><span class="s1">'.deps.analysis'</span>

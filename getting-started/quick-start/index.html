@@ -959,6 +959,8 @@
       
         
       
+        
+      
     
     
     
@@ -1030,6 +1032,34 @@
     
   
     analyze
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/check/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    check
   
 
     
@@ -1804,11 +1834,10 @@
 </span></code></pre></div>
 <p>The five values accepted by <code>--select</code> are <code>complexity</code>, <code>deadcode</code>, <code>clone</code>, <code>cbo</code>, and <code>deps</code>; the last three apply to JavaScript/TypeScript files only. Omitting the flag runs all five.</p>
 <h2 id="4-gate-a-pipeline-on-the-result">4. Gate a pipeline on the result<a class="headerlink" href="#4-gate-a-pipeline-on-the-result" title="Permanent link">&para;</a></h2>
-<p><code>polyscan analyze</code> always exits 0 when the analysis itself succeeds, because its job is to report rather than to judge. To fail a pipeline, gate on the JSON output:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>src/<span class="w"> </span>&gt;<span class="w"> </span>report.json
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>jq<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.summary.health_score &gt;= 75'</span><span class="w"> </span>report.json
+<p><code>polyscan analyze</code> always exits 0 when the analysis itself succeeds, because its job is to report rather than to judge. To fail a pipeline, run <code>polyscan check</code>:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>polyscan<span class="w"> </span>check<span class="w"> </span>src/
 </span></code></pre></div>
-<p><code>jq -e</code> exits non-zero when the expression is false, which fails the CI step. The <a href="../../integrations/ci-cd/">CI/CD page</a> has complete pipeline configurations and more precise gates, such as failing only on critical dead code.</p>
+<p><code>check</code> exits 1 when a function is too complex, when it finds critical dead code, or when it finds a circular dependency, and 2 when the analysis fails. The <a href="../../cli/check/">check page</a> lists its thresholds, and the <a href="../../integrations/ci-cd/">CI/CD page</a> has complete pipeline configurations.</p>
 <h2 id="5-configure-the-javascripttypescript-analysis">5. Configure the JavaScript/TypeScript analysis<a class="headerlink" href="#5-configure-the-javascripttypescript-analysis" title="Permanent link">&para;</a></h2>
 <p>The JavaScript/TypeScript analysis reads a <code>jscan.config.json</code> when the project has one — the configuration format carried over from jscan, the analyzer that merged into polyscan. It supplies complexity thresholds and exclude patterns:</p>
 <div class="language-json highlight"><span class="filename">jscan.config.json</span><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span>
