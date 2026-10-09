@@ -117,6 +117,7 @@ nav:
   - CLI Reference:
       - cli/index.md
       - analyze: cli/analyze.md
+      - check: cli/check.md
       - version: cli/version.md
   - Configuration:
       - configuration/index.md

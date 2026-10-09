@@ -75,7 +75,7 @@ All of these affect the JavaScript/TypeScript analysis inside `polyscan analyze`
 
 | Key group | Status |
 | --- | --- |
-| `complexity.max_complexity` | Was read by jscan's retired `check` command. Accepted without a warning, but nothing reads it now |
+| `complexity.max_complexity` | Was read by `jscan check`. Accepted without a warning, but nothing reads it now. `polyscan check` takes the limit from `--max-complexity` |
 | `dead_code.show_context`, `dead_code.context_lines` | Context lines are never shown. |
 | `dead_code.detect_*`, `dead_code.ignore_patterns` | All unreachable-code checks always run, and nothing is ignored. |
 | `dead_code.enabled`, `complexity.enabled` | Use `--select` to choose which analyses run. |

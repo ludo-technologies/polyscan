@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `polyscan check` checks the code against thresholds for a CI quality gate. It exits 0 when it finds no issues, 1 when it finds quality issues, and 2 when the analysis fails, including on an invalid flag. By default it fails on a function with cyclomatic complexity above 10, on critical JavaScript/TypeScript dead code, and on any circular dependency. A file that cannot be read or parsed also fails it. `--select`, `--max-complexity`, `--max-cycles`, `--allow-dead-code`, `--allow-circular-deps`, `--allow-parse-errors` and `--quiet` adjust the check (#182)
+
+### Changed
+
+- A JavaScript/TypeScript file that cannot be read or parsed no longer makes `analyze` print a JavaScript clone analysis error. The file is still listed under errors and charged to the health score, as it is for the other analyses
+
+### Fixed
+
+- A command error is printed once. Before, every error was printed twice
+
 ## [0.5.2] - 2026-10-08
 
 ### Fixed

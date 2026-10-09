@@ -1,8 +1,8 @@
 // Command polyscan is a code quality analyzer that detects the language of
 // each file by its extension.
 //
-// It has two subcommands: analyze runs the analysis and writes a report, and
-// version prints build information.
+// It has three subcommands: analyze runs the analysis and writes a report,
+// check gates CI on quality thresholds, and version prints build information.
 package main
 
 import (
@@ -16,7 +16,7 @@ import (
 func main() {
 	if err := rootCmd().Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		os.Exit(exitCodeFor(err))
 	}
 }
 
@@ -25,6 +25,8 @@ func rootCmd() *cobra.Command {
 		Use:          "polyscan",
 		Short:        "polyscan - multi-language static analyzer",
 		SilenceUsage: true,
+		// main prints the error itself, once.
+		SilenceErrors: true,
 		Long: "polyscan is a static analyzer that measures code quality across Go, Rust, C++, " +
 			"and JavaScript/TypeScript.\nIt analyzes cyclomatic complexity, code clones, " +
 			"dependencies, dead code, coupling (CBO), and cohesion (LCOM4), with availability " +
@@ -32,6 +34,7 @@ func rootCmd() *cobra.Command {
 		Version: version.Version,
 	}
 	cmd.AddCommand(analyzeCmd())
+	cmd.AddCommand(checkCmd())
 	cmd.AddCommand(versionCmd())
 	return cmd
 }

@@ -91,15 +91,16 @@ func (s *ComplexityServiceImpl) buildResponse(ctx context.Context, results []fil
 	summary := s.generateSummary(allFunctions, len(analyzedPaths), filesSkipped)
 
 	return &domain.ComplexityResponse{
-		Functions:     sortedFunctions,
-		ByDirectory:   byDirectory,
-		Summary:       summary,
-		ModuleRollups: moduleRollups,
-		Warnings:      warnings,
-		Errors:        errors,
-		GeneratedAt:   time.Now().Format(time.RFC3339),
-		Version:       version.Version,
-		Config:        s.buildConfigForResponse(req),
+		Functions:         sortedFunctions,
+		ByDirectory:       byDirectory,
+		Summary:           summary,
+		ModuleRollups:     moduleRollups,
+		AnalyzedFunctions: allFunctions,
+		Warnings:          warnings,
+		Errors:            errors,
+		GeneratedAt:       time.Now().Format(time.RFC3339),
+		Version:           version.Version,
+		Config:            s.buildConfigForResponse(req),
 	}, nil
 }
 

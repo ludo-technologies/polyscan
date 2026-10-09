@@ -64,6 +64,27 @@ type Result struct {
 	DepsErr       error
 }
 
+// Failures returns the error of each analysis that failed, each naming its
+// analysis.
+func (r *Result) Failures() []error {
+	var failures []error
+	for _, failure := range []struct {
+		name string
+		err  error
+	}{
+		{"complexity", r.ComplexityErr},
+		{"dead code", r.DeadCodeErr},
+		{"clone", r.ClonesErr},
+		{"CBO", r.CBOErr},
+		{"dependency", r.DepsErr},
+	} {
+		if failure.err != nil {
+			failures = append(failures, fmt.Errorf("JavaScript %s analysis error: %w", failure.name, failure.err))
+		}
+	}
+	return failures
+}
+
 // LoadConfig loads the configuration a command should run with and reports
 // the keys the file sets that reach no behavior.
 //

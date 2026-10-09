@@ -48,13 +48,19 @@ Bear in mind that cross-file analyses cannot say anything useful about one file.
 
 ### How do I fail CI on the results?
 
-`analyze` always exits 0 when the analysis ran; gate on the JSON output with `jq -e`:
+Run `polyscan check`. It exits 1 when it finds quality issues and 2 when the analysis fails:
+
+```bash
+polyscan check src/
+```
+
+`analyze` always exits 0 when the analysis ran. To gate on the health score, use the JSON output with `jq -e`:
 
 ```bash
 polyscan analyze --format json src/ 2>/dev/null | jq -e '.summary.health_score >= 75'
 ```
 
-The [CI/CD page](integrations/ci-cd.md) has complete jobs, including gates on complexity, critical dead code, and cycles.
+The [CI/CD page](integrations/ci-cd.md) has complete jobs.
 
 ### Why did my score go up when I changed nothing?
 

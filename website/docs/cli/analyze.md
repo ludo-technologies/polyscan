@@ -6,7 +6,7 @@ Runs the full analysis and produces a report. This is the command you reach for 
 polyscan analyze [path...]
 ```
 
-`analyze` always exits with code 0 when the analysis itself succeeds, no matter how poor the results are. To fail a pipeline on the results, gate on the JSON output as shown on the [CI/CD page](../integrations/ci-cd.md).
+`analyze` always exits with code 0 when the analysis itself succeeds, no matter how poor the results are. To fail a pipeline on the results, use [`check`](check.md).
 
 ## Synopsis
 

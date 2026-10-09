@@ -41,7 +41,7 @@ Must be greater than `low_threshold`.
 
 :material-minus-circle: **Not applied** &nbsp;&middot;&nbsp; integer &nbsp;&middot;&nbsp; default `0`
 
-Supplied the default threshold for jscan's retired `check` command. It is accepted without a warning for backward compatibility, but nothing reads it now. To gate a pipeline on complexity, use the JSON output as shown on the [CI/CD page](../integrations/ci-cd.md).
+Supplied the default threshold for jscan's `check` command. It is accepted without a warning for backward compatibility, but nothing reads it now. `polyscan check` takes the limit from its [`--max-complexity`](../cli/check.md#flags) flag.
 
 Must be either 0, meaning no limit, or greater than `medium_threshold`.
 
