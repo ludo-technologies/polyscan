@@ -15,11 +15,11 @@ process.stderr.write(
 
 const args = process.argv.slice(2);
 
-// Commands of the retired jscan CLI that polyscan does not have. Exit code 2
-// keeps jscan's convention of "could not run", as opposed to a failed gate.
+// Commands of the retired jscan CLI that are not forwarded: polyscan has no
+// deps or init, and its check takes different flags. Exit code 2 keeps
+// jscan's convention of "could not run", as opposed to a failed gate.
 const retired = {
-  check:
-    "gate on `polyscan analyze --format json` output in CI instead.",
+  check: "run `npx polyscan check` instead; see its --help for the flags.",
   deps: "run `polyscan analyze --select deps` for dependency analysis.",
   init: "polyscan still reads jscan.config.json when present; write it by hand.",
 };

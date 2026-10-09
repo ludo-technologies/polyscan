@@ -10,14 +10,16 @@ import (
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 )
 
-func TestCloneServiceDetectClones_AllFilesFailReturnsError(t *testing.T) {
+// A file that cannot be read or parsed is reported in the response, as the
+// other analyses report it, not returned as a failure of the analysis.
+func TestCloneServiceDetectClones_AllFilesFailReportsInResponse(t *testing.T) {
 	svc := NewCloneServiceWithDefaults()
 	req := domain.DefaultCloneRequest()
 	req.Paths = []string{"missing.js"}
 
 	resp, err := svc.DetectClones(context.Background(), req)
-	if err == nil {
-		t.Fatal("expected error when all clone inputs fail")
+	if err != nil {
+		t.Fatalf("expected no error for unreadable inputs, got %v", err)
 	}
 	if resp == nil {
 		t.Fatal("expected response even when analysis fails")
@@ -49,7 +51,7 @@ func TestCloneStatisticsIncludesGroupOnlyMembers(t *testing.T) {
 	}
 }
 
-func TestCloneServiceDetectClones_PartialFailureReturnsResponseAndError(t *testing.T) {
+func TestCloneServiceDetectClones_PartialFailureReportsInResponse(t *testing.T) {
 	svc := NewCloneServiceWithDefaults()
 	req := domain.DefaultCloneRequest()
 
@@ -69,8 +71,8 @@ func TestCloneServiceDetectClones_PartialFailureReturnsResponseAndError(t *testi
 	req.Paths = []string{validFile, filepath.Join(tempDir, "missing.js")}
 
 	resp, err := svc.DetectClones(context.Background(), req)
-	if err == nil {
-		t.Fatal("expected error when one input file fails")
+	if err != nil {
+		t.Fatalf("expected no error for an unreadable input, got %v", err)
 	}
 	if resp == nil {
 		t.Fatal("expected response for partial failure")

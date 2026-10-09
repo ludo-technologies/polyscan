@@ -729,3 +729,118 @@ func nullPaths(value any, path string) []string {
 	}
 	return nil
 }
+
+// writeFiles writes each named file into a new temporary directory and
+// returns the directory.
+func writeFiles(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestCheckExitCodes(t *testing.T) {
+	deadCode := writeFiles(t, map[string]string{
+		"dead.js": "export function f(a) {\n  return a;\n  console.log(a);\n}\n",
+	})
+	broken := writeFiles(t, map[string]string{
+		"ok.js":     "export function ok(a) { return a; }\n",
+		"broken.js": "function broken( {\n",
+	})
+	cycle := writeFiles(t, map[string]string{
+		"a.js": "import { b } from './b.js';\nexport function a() { return b(); }\n",
+		"b.js": "import { a } from './a.js';\nexport function b() { return a(); }\n",
+	})
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"clean", []string{"../../testdata/go"}, 0},
+		{"complexity above the limit", []string{"--max-complexity", "2", "../../testdata/go"}, exitCodeQualityIssues},
+		{"dead code", []string{deadCode}, exitCodeQualityIssues},
+		{"allowed dead code", []string{"--allow-dead-code", deadCode}, 0},
+		{"parse error", []string{broken}, exitCodeAnalysisError},
+		{"allowed parse error", []string{"--allow-parse-errors", broken}, 0},
+		{"cycle", []string{cycle}, exitCodeQualityIssues},
+		{"cycles within the limit", []string{"--max-cycles", "1", cycle}, 0},
+		{"allowed cycle", []string{"--allow-circular-deps", cycle}, 0},
+		{"cycle not selected", []string{"--select", "complexity,clone", cycle}, 0},
+		{"missing path", []string{filepath.Join(t.TempDir(), "missing")}, exitCodeAnalysisError},
+		{"no source files", []string{t.TempDir()}, exitCodeAnalysisError},
+		{"unknown flag", []string{"--bogus", "../../testdata/go"}, exitCodeAnalysisError},
+		{"analysis without a verdict", []string{"--select", "cbo", "../../testdata/go"}, exitCodeAnalysisError},
+		{"invalid complexity limit", []string{"--max-complexity", "0", "../../testdata/go"}, exitCodeAnalysisError},
+		{"negative cycle limit", []string{"--max-cycles", "-1", "../../testdata/go"}, exitCodeAnalysisError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, err := run(t, append([]string{"check"}, tc.args...)...)
+			got := 0
+			if err != nil {
+				got = exitCodeFor(err)
+			}
+			if got != tc.want {
+				t.Fatalf("exit code = %d, want %d (err: %v)\n%s", got, tc.want, err, out)
+			}
+		})
+	}
+}
+
+func TestCheckReportsFindings(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		"dead.js": "export function f(a) {\n  return a;\n  console.log(a);\n}\n",
+	})
+	out, err := run(t, "check", dir)
+	if err == nil || err.Error() != "found 1 quality issue(s)" {
+		t.Fatalf("err = %v, want one quality issue\n%s", err, out)
+	}
+	if want := "dead.js:3: Code after return statement is unreachable"; !strings.Contains(out, want) {
+		t.Errorf("output lacks %q:\n%s", want, out)
+	}
+
+	out, err = run(t, "check", "--select", "complexity", "--max-complexity", "4", "../../testdata/go")
+	if err == nil {
+		t.Fatalf("check passed a function above the complexity limit\n%s", out)
+	}
+	if want := "sample.go:11: Branches is too complex (5 > 4)"; !strings.Contains(out, want) {
+		t.Errorf("output lacks %q:\n%s", want, out)
+	}
+}
+
+func TestCheckQuiet(t *testing.T) {
+	out, err := run(t, "check", "--quiet", "../../testdata/go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out != "" {
+		t.Errorf("a passing quiet check printed:\n%s", out)
+	}
+
+	out, err = run(t, "check", "--quiet", "--select", "complexity,clone", "--max-complexity", "4", "../../testdata/go")
+	if err == nil {
+		t.Fatal("check passed a function above the complexity limit")
+	}
+	if !strings.Contains(out, "Branches is too complex") {
+		t.Errorf("a failing quiet check left out the issue:\n%s", out)
+	}
+	for _, unwanted := range []string{"Running quality check", "clone of"} {
+		if strings.Contains(out, unwanted) {
+			t.Errorf("a failing quiet check printed %q:\n%s", unwanted, out)
+		}
+	}
+}
+
+func TestAnalyzeErrorExitCode(t *testing.T) {
+	_, err := run(t, "analyze", filepath.Join(t.TempDir(), "missing"))
+	if err == nil {
+		t.Fatal("analyze returned nil error for a missing path")
+	}
+	if got := exitCodeFor(err); got != 1 {
+		t.Errorf("analyze exit code = %d, want 1", got)
+	}
+}

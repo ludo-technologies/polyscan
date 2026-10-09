@@ -95,11 +95,10 @@ Backend code is a better fit for stricter thresholds, and the express-style `rou
 }
 ```
 
-To enforce a hard complexity limit in CI, gate on the JSON output:
+To enforce a hard complexity limit in CI, run `check`:
 
 ```bash
-polyscan analyze --format json --select complexity src/ 2>/dev/null \
-  | jq -e '[.complexity.functions[] | select(.metrics.complexity > 20)] | length == 0'
+polyscan check --select complexity --max-complexity 20 src/
 ```
 
 ## Library or published package
@@ -124,9 +123,8 @@ A library's public exports are consumed by other repositories, so polyscan will 
 ```
 
 ```bash
-# Gate on critical findings only; the unused-export warnings are expected here
-polyscan analyze --format json src/ 2>/dev/null \
-  | jq -e '.summary.critical_dead_code == 0'
+# check fails only on critical dead code; the unused-export warnings are expected here
+polyscan check --select deadcode src/
 ```
 
 You still get value from the full dead code analysis in the report, where the critical findings, which are genuinely unreachable statements, are worth acting on even though the warnings are not.

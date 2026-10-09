@@ -1,19 +1,25 @@
 # CI/CD Integration
 
-polyscan has no gate command; `analyze` always exits 0 when the analysis itself ran. A pipeline gates on the JSON output instead: `--format json` writes one machine-readable document to standard output, and `jq -e` turns any condition over it into an exit code.
+`polyscan check` is the quality gate. It exits 0 when it finds no issues, 1 when it finds quality issues, and 2 when the analysis fails, so a broken job never passes as a clean one.
+
+```bash
+polyscan check src/
+```
+
+By default, `check` fails on a function with complexity above 10, on critical dead code, and on any circular dependency. The [check page](../cli/check.md) lists the flags that change these thresholds.
+
+`analyze` always exits 0 when the analysis itself ran. To gate on the health score or on any other field of the report, use its JSON output with `jq -e`, which exits 1 when the expression is false or null:
 
 ```bash
 polyscan analyze --format json src/ > report.json
 jq -e '.summary.health_score >= 75' report.json
 ```
 
-`jq -e` exits 0 when the expression is true and 1 when it is false or null, which is exactly what a CI step needs. A failure of polyscan itself surfaces as a non-zero exit from `analyze`, before `jq` runs, so a broken job fails visibly rather than passing an empty gate.
-
 ## Before you write the job
 
 Two things will otherwise waste your time.
 
-**Gate on critical dead code, not all of it.** The warning that an exported function is not imported by another analyzed file fires constantly in libraries, whose exports are consumed outside the analyzed directory. Start by requiring `critical_dead_code == 0` and tighten later.
+**Gate on critical dead code, not all of it.** The warning that an exported function is not imported by another analyzed file fires constantly in libraries, whose exports are consumed outside the analyzed directory. `check` fails only on critical dead code for this reason. A JSON gate should start with `critical_dead_code == 0`.
 
 **A gate is only as good as the file set it runs on.** Check the `Analyzing N files...` count against reality once, so that you know the gate covers your source tree. jscan versions up to 0.9.0 matched the exclude patterns `out` and `dist` against any part of a path and skipped `src/routes/`, `src/layout/`, and `src/checkout/`, which made a passing gate meaningless; polyscan matches whole names only, and see the [configuration reference](../configuration/reference.md#analysisexclude_patterns) for the current rules.
 
@@ -40,11 +46,7 @@ jobs:
           node-version: '20'
 
       - name: Quality gate
-        run: |
-          npx polyscan analyze --format json src/ 2>/dev/null > report.json
-          jq -e '.summary.critical_dead_code == 0
-                 and .summary.deps_modules_in_cycles == 0
-                 and .summary.high_complexity_count == 0' report.json
+        run: npx polyscan check src/
 ```
 
 Pin the polyscan version (`npx polyscan@X.Y.Z`) once you rely on the gate: it keeps a new release from turning a green pipeline red without a change to your code.
@@ -124,9 +126,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: |
-          npx polyscan analyze --format json packages/${{ matrix.package }}/src 2>/dev/null \
-            | jq -e '.summary.critical_dead_code == 0'
+      - run: npx polyscan check packages/${{ matrix.package }}/src
 ```
 
 `fail-fast: false` means one failing package does not cancel the others, so a single run tells you about all of them.
@@ -138,8 +138,7 @@ quality:
   stage: test
   image: node:20
   script:
-    - npx polyscan analyze --format json src/ 2>/dev/null > report.json
-    - jq -e '.summary.critical_dead_code == 0 and .summary.high_complexity_count == 0' report.json
+    - npx polyscan check src/
     - npx polyscan analyze --no-open --output polyscan-report.html src/
   artifacts:
     when: always
@@ -150,7 +149,7 @@ quality:
 
 `when: always` publishes the report even when the gate fails, which is exactly when you want to read it.
 
-Note the ordering. The gate runs first and stops the job on failure, so put the HTML run after it and rely on `when: always` to still collect the artifact. On a large repository, generate the report first and gate on a JSON run with a narrow `--select` if the double analysis costs too much time.
+Note the ordering. The gate runs first and stops the job on failure, so put the HTML run after it and rely on `when: always` to still collect the artifact. On a large repository, narrow the gate with `--select` if the double analysis costs too much time.
 
 ## Pre-commit hook
 
@@ -166,8 +165,7 @@ files=$(git diff --cached --name-only --diff-filter=ACM \
 [ -z "$files" ] && exit 0
 
 # shellcheck disable=SC2086
-npx polyscan analyze --format json --select complexity $files 2>/dev/null \
-  | jq -e '[.complexity.functions[] | select(.metrics.complexity > 20)] | length == 0'
+npx polyscan check --quiet --select complexity --max-complexity 20 $files
 ```
 
 Make it executable with `chmod +x .git/hooks/pre-commit`.
@@ -214,12 +212,13 @@ Two rules keep the series meaningful. Pin the polyscan version, since scoring ch
 Adopting the strictest settings on day one means a permanently red pipeline that people learn to ignore. A workable sequence is:
 
 1. **Report only.** Run `polyscan analyze` and publish the artifact. Nothing fails. Let the team look at it for a couple of weeks.
-2. **Gate on complexity alone**, at a threshold your codebase already passes, with the staged-files `jq` gate above.
+2. **Gate on complexity alone** with `polyscan check --select complexity --max-complexity N`, at a threshold `N` your codebase already passes.
 3. **Lower the threshold** by five whenever the pipeline has been comfortably green for a while.
-4. **Add the cycle check** once the circular imports are fixed: `.summary.deps_modules_in_cycles == 0`.
-5. **Add `critical_dead_code == 0`**, and extend to warnings only if your project is an application rather than a library. In a library the unused-export warnings never go away.
+4. **Add the cycle check** once the circular imports are fixed, by adding `deps` to `--select`.
+5. **Add `deadcode`** to `--select` once the unreachable code is removed. The selection is then the default, and `polyscan check` needs no `--select`.
 
 ## See also
 
-- [JSON schema](../output/json-schema.md) for every field a gate can read
+- [`polyscan check`](../cli/check.md) for every flag of the gate
+- [JSON schema](../output/json-schema.md) for every field a JSON gate can read
 - [Configuration examples](../configuration/examples.md) for files to commit alongside these jobs

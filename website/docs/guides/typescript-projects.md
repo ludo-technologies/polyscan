@@ -135,11 +135,10 @@ Component code accumulates conditional rendering, and each `&&`, `||`, `??`, and
 
 ### 4. Gate on critical findings first
 
-An exported symbol that no analyzed file imports produces a warning-level finding. In a library, or in any project analyzed one directory at a time, that describes most of your public API, so a CI gate should start by counting only the critical findings:
+An exported symbol that no analyzed file imports produces a warning-level finding. In a library, or in any project analyzed one directory at a time, that describes most of your public API, so a CI gate should start by counting only the critical findings. `polyscan check` does this:
 
 ```bash
-polyscan analyze --format json src/ 2>/dev/null \
-  | jq -e '.summary.critical_dead_code == 0'
+polyscan check --select deadcode src/
 ```
 
 Tighten the gate once the first round of fixes has landed. The [CI/CD page](../integrations/ci-cd.md) has complete jobs.

@@ -1,10 +1,11 @@
 # CLI Reference
 
-polyscan exposes two commands. `analyze` accepts one or more paths, and every path may be a file or a directory.
+polyscan exposes three commands. `analyze` and `check` accept one or more paths, and every path may be a file or a directory.
 
 | Command | Purpose | Fails the build? |
 | --- | --- | --- |
 | [`analyze`](analyze.md) | Run the full analysis and produce a report | No |
+| [`check`](check.md) | Check the code against thresholds for CI | Yes |
 | [`version`](version.md) | Print version information | No |
 
 ```console
@@ -17,6 +18,7 @@ Usage:
 
 Available Commands:
   analyze     Analyze source files
+  check       Check code quality against thresholds for CI
   completion  Generate the autocompletion script for the specified shell
   help        Help about any command
   version     Print version information
@@ -28,7 +30,7 @@ Flags:
 Use "polyscan [command] --help" for more information about a command.
 ```
 
-To fail a pipeline on the results, gate on the JSON output — there is no separate check command. The [CI/CD page](../integrations/ci-cd.md) shows how. If you are looking for jscan's `check`, `deps` or `init` commands, see [migrating from jscan](../getting-started/migrating-from-jscan.md).
+To fail a pipeline on the results, use [`check`](check.md). The [CI/CD page](../integrations/ci-cd.md) shows complete jobs. If you are looking for jscan's `deps` or `init` commands, see [migrating from jscan](../getting-started/migrating-from-jscan.md).
 
 ## Which files polyscan reads
 

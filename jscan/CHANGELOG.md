@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The hint that `jscan check` prints now points to `polyscan check`. The command still exits 2 and is not forwarded, because `polyscan check` takes different flags
+
 ## [0.11.1] - 2026-09-03
 
 ### Fixed

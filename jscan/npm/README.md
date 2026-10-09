@@ -22,7 +22,7 @@ exits with a hint instead, because polyscan discovers the file itself.
 | --- | --- |
 | `npx jscan analyze src/` | `npx polyscan analyze src/` |
 | `jscan analyze --json src/` | `polyscan analyze --format json src/` |
-| `jscan check src/` | Retired — gate on `polyscan analyze --format json` output |
+| `jscan check src/` | `polyscan check src/` |
 | `jscan deps src/` | `polyscan analyze --select deps src/` |
 | `jscan init` | Retired — polyscan still reads `jscan.config.json` when present |
 

@@ -186,7 +186,6 @@ func (s *CloneServiceImpl) detectFromExtraction(ctx context.Context, results []f
 		}
 		if len(errors) > 0 {
 			response.Error = strings.Join(errors, "; ")
-			return response, fmt.Errorf("clone analysis failed for %d file(s)", len(errors))
 		}
 		return response, nil
 	}
@@ -238,7 +237,6 @@ func (s *CloneServiceImpl) detectFromExtraction(ctx context.Context, results []f
 	}
 	if len(errors) > 0 {
 		response.Error = strings.Join(errors, "; ")
-		return response, fmt.Errorf("clone analysis completed with %d file error(s)", len(errors))
 	}
 	return response, nil
 }

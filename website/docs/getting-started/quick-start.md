@@ -61,14 +61,13 @@ The five values accepted by `--select` are `complexity`, `deadcode`, `clone`, `c
 
 ## 4. Gate a pipeline on the result
 
-`polyscan analyze` always exits 0 when the analysis itself succeeds, because its job is to report rather than to judge. To fail a pipeline, gate on the JSON output:
+`polyscan analyze` always exits 0 when the analysis itself succeeds, because its job is to report rather than to judge. To fail a pipeline, run `polyscan check`:
 
 ```bash
-polyscan analyze --format json src/ > report.json
-jq -e '.summary.health_score >= 75' report.json
+polyscan check src/
 ```
 
-`jq -e` exits non-zero when the expression is false, which fails the CI step. The [CI/CD page](../integrations/ci-cd.md) has complete pipeline configurations and more precise gates, such as failing only on critical dead code.
+`check` exits 1 when a function is too complex or when it finds critical dead code, and 2 when the analysis fails. The [check page](../cli/check.md) lists its thresholds, and the [CI/CD page](../integrations/ci-cd.md) has complete pipeline configurations.
 
 ## 5. Configure the JavaScript/TypeScript analysis
 

@@ -35,7 +35,7 @@ Progress bars are written only when the output is an interactive terminal, so re
 
 ## Exit codes
 
-`polyscan analyze` exits 0 when the analysis completed, no matter how poor the results, and 1 when it could not run at all. To fail a pipeline on the results, gate on the JSON output; the [CI/CD page](../integrations/ci-cd.md) shows how.
+`polyscan analyze` exits 0 when the analysis completed, no matter how poor the results, and 1 when it could not run at all. To fail a pipeline on the results, use [`polyscan check`](../cli/check.md#exit-codes). It exits 0 when it finds no issues, 1 when it finds quality issues, and 2 when the analysis fails.
 
 An individual analysis failing inside `analyze` does not fail the command. polyscan prints the error to standard error and reports the categories that did succeed, so a parse failure in one file never costs you the whole run.
 

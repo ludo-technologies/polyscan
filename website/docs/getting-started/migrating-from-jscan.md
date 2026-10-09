@@ -12,7 +12,7 @@ The [`jscan` npm package](https://www.npmjs.com/package/jscan) remains published
 | `jscan analyze --json src/` | `polyscan analyze --format json src/` |
 | `jscan analyze --text src/` | `polyscan analyze --format text src/` |
 | `jscan analyze -o report.html src/` | `polyscan analyze -o report.html src/` |
-| `jscan check src/` | Retired — [gate on the JSON output](#the-check-command) |
+| `jscan check src/` | `polyscan check src/`. See [the `check` command](#the-check-command) |
 | `jscan deps src/` | `polyscan analyze --select deps src/` |
 | `jscan init` | Retired — [write the file by hand](#the-init-command) |
 | `jscan version` | `polyscan version` |
@@ -28,22 +28,21 @@ The default HTML report file is now `polyscan-report.html` rather than `jscan-re
 
 ## The `check` command
 
-`jscan check` was retired with the merge; there is no gate command in polyscan yet. Gate on the JSON output instead, which can express the same thresholds:
+`polyscan check` replaces `jscan check` and keeps its exit codes: 0 for no issues, 1 for quality issues, and 2 when the analysis fails. The differences are in the flags:
+
+- The thresholds come from flags only. The configuration file's `complexity.max_complexity` key is not read, so pass `--max-complexity` instead. The `--config` flag is gone, as on `analyze`.
+- `--allow-parse-errors` waives only syntax errors. A file that cannot be read still fails the check with exit code 2.
+- The `--json` and `--verbose` flags are gone. `check` prints each finding as one line on standard error.
+- `--select` also accepts `clone`, which lists clones without failing the check.
+
+The [check page](../cli/check.md) lists every flag. The `jscan` npm wrapper does not forward `check`. It exits 2 with a hint to run `polyscan check`.
+
+To gate on the health score, use the JSON output of `analyze`:
 
 ```bash
 polyscan analyze --format json src/ > report.json
-
-# Fail below grade B
 jq -e '.summary.health_score >= 75' report.json
-
-# Fail on any high-complexity function
-jq -e '.summary.high_complexity_count == 0' report.json
-
-# Fail on critical dead code or dependency cycles
-jq -e '.summary.critical_dead_code == 0 and .summary.deps_modules_in_cycles == 0' report.json
 ```
-
-The [CI/CD page](../integrations/ci-cd.md) has complete pipeline configurations built this way. Note one behavioral difference: `jscan check` ran a fast subset of the analyses, while `analyze` runs whatever `--select` names — pass `--select complexity,deadcode,deps` to keep a gate fast.
 
 ## The `deps` command
 

@@ -94,26 +94,13 @@ Examples:
 			options.IncludeTests = includeTests
 
 			start := time.Now()
-			var generic *analysis.Report
-			if options != (analysis.Options{}) {
-				generic, err = analysis.Analyze(args, options, exclude)
-				if err != nil && !errors.Is(err, analysis.ErrNoFiles) {
-					return err
-				}
-			}
-			var javascript *js.Result
-			if selection != (js.Selection{}) {
-				javascript, err = analyzeJavaScript(args, selection, exclude, includeTests, cmd.ErrOrStderr())
-				if err != nil {
-					return err
-				}
-			}
-			if generic == nil && javascript == nil {
-				return analysis.ErrNoFiles
-			}
-			results, err := report.Combine(generic, javascript)
+			results, failures, err := runAnalyses(args, options, selection, exclude, includeTests, cmd.ErrOrStderr())
 			if err != nil {
 				return err
+			}
+			// A failed analysis is left out of the report, as in jscan.
+			for _, failure := range failures {
+				fmt.Fprintln(cmd.ErrOrStderr(), failure)
 			}
 			filterFunctions(results.Complexity, minComplexity)
 			duration := time.Since(start)
@@ -177,13 +164,52 @@ Examples:
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "Report path (HTML default: "+defaultReportPath+"; JSON/text default: stdout)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Don't open the HTML report in the browser")
 	cmd.Flags().IntVar(&minComplexity, "min-complexity", 1, "List only functions with at least this complexity")
-	cmd.Flags().StringSliceVar(&exclude, "exclude", nil,
+	addFileFlags(cmd, &exclude, &includeTests)
+	return cmd
+}
+
+// addFileFlags adds the flags that choose which files are analyzed.
+func addFileFlags(cmd *cobra.Command, exclude *[]string, includeTests *bool) {
+	cmd.Flags().StringSliceVar(exclude, "exclude", nil,
 		"Files and directories to leave out (comma-separated or repeated): a glob\n"+
 			"without a slash matches a file name or a directory anywhere on the path,\n"+
 			"one with a slash matches a path relative to the analyzed directory, with\n"+
 			"** for any number of segments (e.g. 'fixtures', 'src/generated/**')")
-	cmd.Flags().BoolVar(&includeTests, "include-tests", false, "Analyze test files and test code, which are left out by default")
-	return cmd
+	cmd.Flags().BoolVar(includeTests, "include-tests", false, "Analyze test files and test code, which are left out by default")
+}
+
+// runAnalyses runs the selected analyses over paths with the generic engine
+// and the JavaScript/TypeScript pipeline and combines them into one result
+// set. failures lists the JavaScript/TypeScript analyses that failed, which
+// the results leave out; the caller decides whether that is fatal.
+func runAnalyses(paths []string, options analysis.Options, selection js.Selection, exclude []string, includeTests bool, warn io.Writer) (jsdomain.AnalysisResults, []error, error) {
+	var generic *analysis.Report
+	var err error
+	if options != (analysis.Options{}) {
+		generic, err = analysis.Analyze(paths, options, exclude)
+		if err != nil && !errors.Is(err, analysis.ErrNoFiles) {
+			return jsdomain.AnalysisResults{}, nil, err
+		}
+	}
+	var javascript *js.Result
+	var failures []error
+	if selection != (js.Selection{}) {
+		javascript, err = analyzeJavaScript(paths, selection, exclude, includeTests, warn)
+		if err != nil {
+			return jsdomain.AnalysisResults{}, nil, err
+		}
+		if javascript != nil {
+			failures = javascript.Failures()
+		}
+	}
+	if generic == nil && javascript == nil {
+		return jsdomain.AnalysisResults{}, nil, analysis.ErrNoFiles
+	}
+	results, err := report.Combine(generic, javascript)
+	if err != nil {
+		return jsdomain.AnalysisResults{}, nil, err
+	}
+	return results, failures, nil
 }
 
 // analyzeJavaScript runs the selected jscan analyses over the JavaScript/
@@ -191,8 +217,7 @@ Examples:
 // files are collected with jscan's own configuration discovery and
 // exclusion rules, so a JavaScript project keeps exactly the analysis
 // jscan gave it, with the command line's exclude patterns added to the
-// configuration's own. An analysis that fails is reported on warn and left
-// out of the report, as in jscan.
+// configuration's own.
 //
 // A tree without JavaScript skips the pipeline before configuration
 // discovery, so a jscan configuration that would not load cannot fail the
@@ -218,22 +243,7 @@ func analyzeJavaScript(paths []string, selection js.Selection, exclude []string,
 		return nil, nil
 	}
 
-	result := js.Run(context.Background(), files, cfg, selection)
-	for _, failure := range []struct {
-		name string
-		err  error
-	}{
-		{"complexity", result.ComplexityErr},
-		{"dead code", result.DeadCodeErr},
-		{"clone", result.ClonesErr},
-		{"CBO", result.CBOErr},
-		{"dependency", result.DepsErr},
-	} {
-		if failure.err != nil {
-			fmt.Fprintf(warn, "JavaScript %s analysis error: %v\n", failure.name, failure.err)
-		}
-	}
-	return result, nil
+	return js.Run(context.Background(), files, cfg, selection), nil
 }
 
 // filterFunctions drops the listed functions below minComplexity. The summary
