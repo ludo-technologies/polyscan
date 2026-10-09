@@ -1,0 +1,38 @@
+name: Wrong result
+description: polyscan reported something wrong on your code
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: polyscan version
+      description: The output of `npx polyscan --version`.
+    validations:
+      required: true
+  - type: input
+    id: project
+    attributes:
+      label: Project
+      description: The project you ran polyscan on. Link it if it is public.
+    validations:
+      required: true
+  - type: textarea
+    id: finding
+    attributes:
+      label: What polyscan reported
+      description: The finding or score, copied from the report.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Why it is wrong
+      description: What you expected instead, and why.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: A small code sample that reproduces the result, if you have one.
+      render: text
