@@ -1,30 +1,46 @@
-# Contributing to polyscan core
+# Contributing to polyscan
 
-## Getting Started
+Thank you for your interest in polyscan. The most useful contribution is to run polyscan on a project you work on and tell us what it got wrong.
+
+## Start by Using polyscan
 
 ```bash
-git clone https://github.com/ludo-technologies/polyscan.git
-cd polyscan/core
-go test ./...
+npx polyscan analyze .
 ```
 
-Requires Go 1.24+.
+Run it on your own code and open the HTML report. Check whether the findings and the score match what you know about the project. A wrong finding, a score that seems too harsh or too lenient, and a file that polyscan could not parse are all worth reporting.
 
-## Development Workflow
+## Reporting a Wrong Result
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-change`)
-3. Make your changes
-4. Run tests and vet:
-   ```bash
-   cd core
-   go test ./... -count=1
-   go vet ./...
-   ```
-5. Commit with a descriptive message
-6. Push and open a Pull Request
+Open an issue with the **Wrong result** template. Tell us which finding is wrong and why, and include a small code sample that reproduces it if you can. Reports from real projects improve polyscan more than anything else, because they cover code that our test fixtures do not.
 
-## Commit Messages
+## Pull Requests
+
+We welcome pull requests, and the ones we can review best come from your own use of polyscan. If you hit a bug in your project and want to fix it, open an issue first and link it from your pull request.
+
+Issues labeled `good first issue` or `help wanted` are open to anyone. Before you start on one, run polyscan on a project of your own, so that you can see how the change shows up in a real report.
+
+The pull request template asks which project you ran polyscan on. The answer helps us review the change against real code.
+
+## Development
+
+The repository holds two Go modules:
+
+- `core/` is the shared analysis library used by polyscan and [pyscn](https://github.com/ludo-technologies/pyscn).
+- `polyscan/` is the polyscan CLI.
+
+Requires Go 1.24+. CI runs these checks in each module:
+
+```bash
+cd polyscan   # or core
+test -z "$(gofmt -l .)"
+go vet ./...
+go test -race ./...
+```
+
+All new behavior must come with tests. Prefer table-driven tests where they fit.
+
+### Commit Messages
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
@@ -34,30 +50,9 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 - `docs:` documentation only
 - `test:` adding or updating tests
 
-## Code Style
+### Constraints on core
 
-- Follow standard Go conventions (`gofmt`, `go vet`)
-- Keep exported APIs minimal and well-documented with godoc
-- All public types and functions must have godoc comments
-
-## Testing
-
-- All new functionality must include tests
-- Tests must pass before merging: `cd core && go test ./... -count=1`
-- Aim for table-driven tests where applicable
-
-## Architecture Notes
-
-polyscan core is a shared library used by [pyscn](https://github.com/ludo-technologies/pyscn) and the [polyscan CLI](polyscan/) (in this monorepo). Key constraints:
-
-- **No language-specific dependencies.** Language-specific behavior is injected via interfaces (`StatementClassifier`, `CostModel`, `ComplexityContributor`, etc.)
-- **No external dependencies.** The module has zero third-party dependencies by design
-- **Breaking changes require a major version bump.** Both pyscn and polyscan pin to specific versions
-
-## Reporting Issues
-
-Use [GitHub Issues](https://github.com/ludo-technologies/polyscan/issues). Include:
-
-- Go version (`go version`)
-- What you expected vs what happened
-- Minimal reproduction steps
+- **No language-specific dependencies.** Language-specific behavior is injected through interfaces (`StatementClassifier`, `CostModel`, `ComplexityContributor`, and others).
+- **No external dependencies.** The module has no third-party dependencies by design.
+- **Breaking changes require a major version bump.** Both pyscn and polyscan pin core to specific versions.
+- All exported types and functions must have godoc comments.
