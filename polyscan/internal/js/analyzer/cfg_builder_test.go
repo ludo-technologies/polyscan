@@ -1319,6 +1319,9 @@ export function exported(x) {
   function inExported(y) { if (y) { return 1; } return 0; }
   return inExported(x);
 }
+function top(items) {
+  return items.map((x) => { if (x) { return 1; } return 0; });
+}
 `
 	ast := parseJS(t, code)
 	builder := NewCFGBuilder()
@@ -1327,14 +1330,25 @@ export function exported(x) {
 		t.Fatalf("BuildAll failed: %v", err)
 	}
 
-	want := []string{"inArrow", "inMethod", "inNamed", "inExported", "named", "exported"}
+	want := []string{"inArrow", "inMethod", "inNamed", "inExported", "named", "exported", "top"}
 	for _, name := range want {
 		if cfgs[name] == nil {
 			t.Errorf("missing CFG %q; got %v", name, cfgNames(cfgs))
 		}
 	}
+	// Callback arrow inside top should be discovered (anonymous_<line>).
+	foundCallback := false
 	for name := range cfgs {
-		if strings.Contains(name, "_") && name != domain.ModuleFunctionName {
+		if strings.HasPrefix(name, "anonymous_") {
+			foundCallback = true
+			break
+		}
+	}
+	if !foundCallback {
+		t.Errorf("callback arrow inside top not discovered; got %v", cfgNames(cfgs))
+	}
+	for name := range cfgs {
+		if strings.Contains(name, "_") && !strings.HasPrefix(name, "anonymous_") && name != domain.ModuleFunctionName {
 			t.Errorf("duplicate function CFG %q; got %v", name, cfgNames(cfgs))
 		}
 	}

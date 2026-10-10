@@ -225,12 +225,13 @@ func (b *CFGBuilder) BuildAll(node *parser.Node) (map[string]*CFG, error) {
 
 		funcName := resolveFunctionName(n)
 
-		// Skip if already discovered. Return false so a second walk of the same
-		// node (Children and Body can both point at it) does not descend and
-		// emit a name_<line> duplicate of a nested declaration.
+		// Skip if already discovered (markFunctionLocations prevents name_<line>
+		// duplicates from Children/Body double visits). Still return true so the
+		// walk continues into function bodies and finds callbacks / nested
+		// function expressions that were not previously recorded.
 		locationKey := fmt.Sprintf("%d:%d", n.Location.StartLine, n.Location.StartCol)
 		if discoveredLocations[locationKey] {
-			return false
+			return true
 		}
 		discoveredLocations[locationKey] = true
 
@@ -246,7 +247,7 @@ func (b *CFGBuilder) BuildAll(node *parser.Node) (map[string]*CFG, error) {
 				markFunctionLocations(nestedCFG, discoveredLocations)
 			}
 		}
-		return false // Don't descend into this function's body (Build handles it)
+		return true // Continue walk into body to discover nested callbacks
 	})
 
 	return allCFGs, nil
