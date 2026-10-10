@@ -156,12 +156,32 @@ fn real() {}
 
 #[cfg(any(test, feature = "x"))]
 fn maybe() {}
+
+// A comment between the marker and the item does not hide it, because a
+// comment is a separator rather than an attribute.
+#[test]
+// explains the test below
+fn comment_after_test() {}
+
+#[cfg(test)]
+// explains the module below
+mod comment_after_cfg { fn helper4() {} }
+
+#[cfg(all(test, unix))]
+/* explains the module below */
+mod comment_after_all { fn helper5() {} }
+
+// A comment on the marker itself matches too.
+// #[test]
+fn comment_above_test() {}
 `)
 	for name, want := range map[string]bool{
 		"production": false, "unit": true, "tests::helper": true, "tests::in_module": true, "feature::gated": false,
 		"test_then_cfg": true, "cfg_then_test": true, "more_tests::helper2": true,
 		"test_helper": true, "S::fixture": true, "TestOnly::provided": true, "unix_tests::helper3": true,
 		"real": false, "maybe": false,
+		"comment_after_test": true, "comment_after_cfg::helper4": true, "comment_after_all::helper5": true,
+		"comment_above_test": false,
 	} {
 		if got := functions[name].IsTest; got != want {
 			t.Errorf("%s: IsTest = %v, want %v", name, got, want)
