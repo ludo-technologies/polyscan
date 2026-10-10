@@ -125,48 +125,50 @@ func CalculateComplexityWithConfig(cfg *CFG, complexityConfig *config.Complexity
 		}
 	}
 
-	// Determine risk level based on thresholds
-	riskLevel := complexityConfig.AssessRiskLevel(coreResult.McCabe)
-
 	result := &ComplexityResult{
-		Complexity:        coreResult.McCabe,
-		Edges:             edges,
-		Nodes:             nodes,
-		IfStatements:      coreResult.DecisionPoints,
-		LoopStatements:    coreResult.EdgeBreakdown[corecfg.EdgeLoop],
-		ExceptionHandlers: coreResult.EdgeBreakdown[corecfg.EdgeException],
-		LogicalOperators:  logicalOperators,
-		TernaryOperators:  ternaryOperators,
-		RiskLevel:         riskLevel,
-		FunctionName:      cfg.Name,
+		Complexity:       coreResult.McCabe,
+		Edges:            edges,
+		Nodes:            nodes,
+		IfStatements:     coreResult.DecisionPoints,
+		LoopStatements:   coreResult.EdgeBreakdown[corecfg.EdgeLoop],
+		LogicalOperators: logicalOperators,
+		TernaryOperators: ternaryOperators,
+		FunctionName:     cfg.Name,
 	}
 
 	if functionNode, ok := jsNode(cfg.FunctionNode); ok {
 		result.StartLine = functionNode.Location.StartLine
 		result.StartCol = functionNode.Location.StartCol
 		result.EndLine = functionNode.Location.EndLine
-		result.SwitchCases = countSwitchCases(functionNode)
+		result.SwitchCases = countOwnNodes(functionNode, parser.NodeCaseClause)
 		result.NestingDepth = CalculateNestingDepth(functionNode)
+		// A catch clause is the decision point of a try statement. The CFG
+		// cannot supply it because a throw reaches its target over the same
+		// exception edge type, and a throw is a terminator, not a branch.
+		result.ExceptionHandlers = countOwnNodes(functionNode, parser.NodeCatchClause)
+		result.Complexity += result.ExceptionHandlers
 	}
 
+	result.RiskLevel = complexityConfig.AssessRiskLevel(result.Complexity)
 	return result
 }
 
-// countSwitchCases counts the case clauses of every switch statement owned by
-// this function. Default clauses are excluded, matching the treatment of else,
-// and nested functions are skipped because they get their own CFG and result.
-func countSwitchCases(functionNode *parser.Node) int {
-	switchCases := 0
+// countOwnNodes counts the nodes of the given type owned by this function, such
+// as case clauses (default clauses have their own type and are excluded,
+// matching the treatment of else) or catch clauses. Nested functions are
+// skipped because they get their own CFG and result.
+func countOwnNodes(functionNode *parser.Node, nodeType parser.NodeType) int {
+	count := 0
 	functionNode.Walk(func(current *parser.Node) bool {
 		if current != functionNode && isFunctionNode(current) {
 			return false
 		}
-		if current.Type == parser.NodeCaseClause {
-			switchCases++
+		if current.Type == nodeType {
+			count++
 		}
 		return true
 	})
-	return switchCases
+	return count
 }
 
 // CalculateNestingDepth returns the deepest chain of nested control structures
@@ -174,7 +176,7 @@ func countSwitchCases(functionNode *parser.Node) int {
 // branch is depth 1.
 //
 // Nested functions are skipped because they get their own CFG and result, the
-// same boundary countSwitchCases uses.
+// same boundary countOwnNodes uses.
 func CalculateNestingDepth(node *parser.Node) int {
 	if node == nil {
 		return 0
