@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/ludo-technologies/polyscan/core/domain"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/pathmatch"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -94,8 +95,13 @@ func Default() *Config {
 	}
 }
 
-// Validate reports the first value out of range.
+// Validate reports the first value out of range or malformed.
 func (c *Config) Validate() error {
+	for _, pattern := range c.Analysis.Exclude {
+		if err := pathmatch.Validate(pattern); err != nil {
+			return fmt.Errorf("analysis.exclude: %w", err)
+		}
+	}
 	if c.Complexity.LowThreshold < 1 {
 		return fmt.Errorf("complexity.low_threshold must be at least 1, got %d", c.Complexity.LowThreshold)
 	}

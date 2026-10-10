@@ -128,6 +128,7 @@ func TestLoadRejectsInvalidFiles(t *testing.T) {
 		"medium threshold": {"[complexity]\nlow_threshold = 20\n", "complexity.medium_threshold (19) must be greater"},
 		"max complexity":   {"[check]\nmax_complexity = 0\n", "check.max_complexity must be at least 1"},
 		"max cycles":       {"[check]\nmax_cycles = -1\n", "check.max_cycles must not be negative"},
+		"exclude pattern":  {"[analysis]\nexclude = [\"gen\", \"src/[\"]\n", `analysis.exclude: invalid pattern "src/["`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()

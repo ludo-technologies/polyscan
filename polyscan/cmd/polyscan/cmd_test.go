@@ -922,3 +922,19 @@ func TestConfigRejectsJscanFile(t *testing.T) {
 		t.Error("analyze ignored jscan.config.json")
 	}
 }
+
+func TestCheckRejectsMalformedExclude(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		".polyscan.toml": "[analysis]\nexclude = [\"src/[\"]\n",
+		"branches.js":    branchesJS,
+	})
+	out, err := run(t, "check", "--select", "complexity", "--max-complexity", "100", dir)
+	if err == nil || exitCodeFor(err) != exitCodeAnalysisError || !strings.Contains(err.Error(), `analysis.exclude: invalid pattern "src/["`) {
+		t.Errorf("err = %v, want an analysis error naming the pattern\n%s", err, out)
+	}
+
+	dir = writeFiles(t, map[string]string{"branches.js": branchesJS})
+	if _, err := run(t, "check", "--exclude", "src/[", dir); err == nil || !strings.Contains(err.Error(), `--exclude: invalid pattern "src/["`) {
+		t.Errorf("err = %v, want the --exclude pattern named", err)
+	}
+}

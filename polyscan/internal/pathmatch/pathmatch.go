@@ -4,6 +4,7 @@
 package pathmatch
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -20,8 +21,8 @@ import (
 // Treating the two differently would drop such a file with nothing said
 // about it.
 //
-// Note: filepath.Match errors are ignored throughout (invalid patterns simply
-// don't match) so that the remaining valid patterns still apply.
+// A malformed pattern matches nothing. Patterns a user wrote are checked with
+// Validate before they get here, so that a typo fails the run instead.
 func Matches(path string, patterns []string) bool {
 	segments := strings.Split(strings.ToLower(filepath.ToSlash(path)), "/")
 	baseName := segments[len(segments)-1]
@@ -53,6 +54,17 @@ func Matches(path string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// Validate reports a pattern that Matches cannot match because one of its
+// globs is malformed, such as an unclosed "[".
+func Validate(pattern string) error {
+	for _, segment := range strings.Split(strings.Trim(filepath.ToSlash(pattern), "/"), "/") {
+		if _, err := filepath.Match(segment, ""); err != nil {
+			return fmt.Errorf("invalid pattern %q: %w", pattern, err)
+		}
+	}
+	return nil
 }
 
 // matchesPathPattern reports whether a multi-segment pattern such as

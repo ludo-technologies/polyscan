@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/ludo-technologies/polyscan/polyscan/internal/config"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/pathmatch"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +32,11 @@ func (f *fileFlags) add(cmd *cobra.Command) {
 // over it: --exclude adds to the file's patterns, and --include-tests, when
 // given, replaces its setting.
 func (f *fileFlags) load(cmd *cobra.Command, target string) (*config.Config, error) {
+	for _, pattern := range f.exclude {
+		if err := pathmatch.Validate(pattern); err != nil {
+			return nil, fmt.Errorf("--exclude: %w", err)
+		}
+	}
 	cfg, err := config.Load(f.config, target)
 	if err != nil {
 		return nil, err
