@@ -21,7 +21,7 @@ const args = process.argv.slice(2);
 const retired = {
   check: "run `npx polyscan check` instead; see its --help for the flags.",
   deps: "run `polyscan analyze --select deps` for dependency analysis.",
-  init: "polyscan still reads jscan.config.json when present; write it by hand.",
+  init: "polyscan reads .polyscan.toml instead of jscan.config.json; write it by hand.",
 };
 
 if (args.length > 0 && Object.prototype.hasOwnProperty.call(retired, args[0])) {
@@ -44,7 +44,8 @@ function translateAnalyzeFlags(args) {
     } else if (arg === "-c" || arg === "--config" || arg.startsWith("--config=")) {
       console.error(
         "jscan analyze --config was retired when jscan merged into polyscan; " +
-          "polyscan finds jscan.config.json by searching upward from the analyzed path."
+          "polyscan reads .polyscan.toml instead of jscan.config.json. " +
+          "Move the settings there and run `npx polyscan analyze`."
       );
       process.exit(2);
     } else {

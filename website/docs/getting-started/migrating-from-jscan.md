@@ -2,7 +2,7 @@
 
 jscan, the JavaScript/TypeScript analyzer, has merged into polyscan. The same analysis — complexity, dead code, clone detection, coupling, dependencies, and the health score — now runs from the `polyscan` CLI, alongside Go, Rust and C++ support.
 
-The [`jscan` npm package](https://www.npmjs.com/package/jscan) remains published as a thin wrapper that prints a deprecation notice and runs polyscan, so an existing `npx jscan analyze` keeps working while you migrate: the wrapper translates the `--json`, `--text` and `--html` shorthands to `--format`, and exits with a hint on `--config`. New setups should call `polyscan` directly.
+The [`jscan` npm package](https://www.npmjs.com/package/jscan) remains published as a thin wrapper that prints a deprecation notice and runs polyscan, so an existing `npx jscan analyze` keeps working while you migrate: the wrapper translates the `--json`, `--text` and `--html` shorthands to `--format`, and exits with a hint on `--config`, because jscan's `--config` pointed at a jscan-format file that polyscan no longer reads. New setups should call `polyscan` directly.
 
 ## Command mapping
 
@@ -22,7 +22,7 @@ The default HTML report file is now `polyscan-report.html` rather than `jscan-re
 ## Flag changes on `analyze`
 
 - The `--json`, `--text` and `--html` shorthands are gone; use `--format json|text|html`.
-- The `--config` / `-c` flag is gone. The configuration file is discovered automatically, [searching upward from the analyzed path](../configuration/index.md#how-polyscan-finds-your-config-file).
+- The `--config` / `-c` flag exists, but it takes a `.polyscan.toml` file, not a jscan configuration file. Without it, the configuration file is discovered automatically, [searching upward from the analyzed path](../configuration/index.md#how-polyscan-finds-your-config-file).
 - `--min-complexity` is now a flag on `analyze`; it limits which functions the report lists without changing any score.
 - Everything else — `--select`, `--no-open`, `-o/--output` — is unchanged.
 
@@ -30,7 +30,7 @@ The default HTML report file is now `polyscan-report.html` rather than `jscan-re
 
 `polyscan check` replaces `jscan check` and keeps its exit codes: 0 for no issues, 1 for quality issues, and 2 when the analysis fails. The differences are in the flags:
 
-- The thresholds come from flags only. The configuration file's `complexity.max_complexity` key is not read, so pass `--max-complexity` instead. The `--config` flag is gone, as on `analyze`.
+- The thresholds come from flags or from the `[check]` section of `.polyscan.toml`. jscan's `complexity.max_complexity` key is gone. Use `--max-complexity`, or `check.max_complexity` in the new file. The `--config` flag takes a `.polyscan.toml` file, as on `analyze`.
 - `--allow-parse-errors` waives only syntax errors. A file that cannot be read still fails the check with exit code 2.
 - The `--json` and `--verbose` flags are gone. `check` prints each finding as one line on standard error.
 - `--select` also accepts `clone`, which lists clones without failing the check.
@@ -56,11 +56,20 @@ The Graphviz DOT export (`jscan deps --dot`) was retired with the command. The n
 
 ## The `init` command
 
-`jscan init` was retired. polyscan still reads the same configuration file — `jscan.config.json` or any of the [other accepted names](../configuration/index.md#accepted-filenames) — it just no longer generates one. The [configuration examples](../configuration/examples.md) page has complete files to copy.
+`jscan init` was retired. polyscan does not generate a configuration file. Write a `.polyscan.toml` by hand, or copy one from the [configuration examples](../configuration/examples.md) page.
 
-## Configuration is unchanged
+## The configuration file changed
 
-Your existing `jscan.config.json` keeps working as-is for the JavaScript/TypeScript analysis: same discovery order, same keys, same validation, including the `JSCAN_CONFIG` environment variable. See the [configuration guide](../configuration/index.md).
+polyscan no longer reads `jscan.config.json` or any other jscan configuration file. One file, `.polyscan.toml`, now configures every language. If polyscan reaches a directory that has a jscan configuration file and no `.polyscan.toml`, the run fails with an error that names the file, so settings never stop applying without notice. Setting the `JSCAN_CONFIG` environment variable is an error too.
+
+To migrate, create a `.polyscan.toml` next to the old file:
+
+- `complexity.low_threshold` and `complexity.medium_threshold` carry over unchanged.
+- `analysis.exclude_patterns` becomes `analysis.exclude`. The built-in exclude list is always applied and can no longer be replaced, so you only need the entries beyond the defaults.
+- `output.min_complexity` becomes the `--min-complexity` flag of `polyscan analyze`.
+- Every other key is dropped. polyscan rejects unknown keys, so leaving one in the new file is an error.
+
+The [configuration guide](../configuration/index.md#migrating-from-a-jscan-configuration-file) has a worked example and lists the dropped keys.
 
 ## The npm package
 

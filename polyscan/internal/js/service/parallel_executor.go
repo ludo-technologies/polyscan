@@ -8,19 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ludo-technologies/polyscan/polyscan/internal/js/config"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 	"golang.org/x/sync/errgroup"
 )
 
-// Default values for parallel executor
-const (
-	// DefaultMaxConcurrency is used when config value is invalid.
-	// NewParallelExecutor() uses runtime.NumCPU() for optimal CPU utilization,
-	// while NewParallelExecutorFromConfig() falls back to this constant.
-	DefaultMaxConcurrency = 4
-	DefaultTimeout        = 5 * time.Minute
-)
+// DefaultTimeout bounds a parallel execution.
+const DefaultTimeout = 5 * time.Minute
 
 // TaskError represents a single task failure
 type TaskError struct {
@@ -81,24 +74,6 @@ func NewParallelExecutor() *ParallelExecutorImpl {
 	return &ParallelExecutorImpl{
 		maxConcurrency: runtime.NumCPU(),
 		timeout:        DefaultTimeout,
-	}
-}
-
-// NewParallelExecutorFromConfig creates a parallel executor from configuration
-func NewParallelExecutorFromConfig(cfg *config.PerformanceConfig) *ParallelExecutorImpl {
-	maxConcurrency := cfg.MaxGoroutines
-	if maxConcurrency <= 0 {
-		maxConcurrency = DefaultMaxConcurrency
-	}
-
-	timeout := time.Duration(cfg.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = DefaultTimeout
-	}
-
-	return &ParallelExecutorImpl{
-		maxConcurrency: maxConcurrency,
-		timeout:        timeout,
 	}
 }
 

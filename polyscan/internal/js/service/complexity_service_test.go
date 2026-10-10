@@ -35,7 +35,6 @@ func TestComplexityService_Analyze_EmptyPaths(t *testing.T) {
 	cfg := &config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 		ReportUnchanged: true,
 	}
 
@@ -61,7 +60,6 @@ func TestComplexityService_Analyze_NonexistentFile(t *testing.T) {
 	cfg := &config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 		ReportUnchanged: true,
 	}
 
@@ -106,7 +104,6 @@ function complex(x) {
 	cfg := &config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 		ReportUnchanged: true,
 	}
 
@@ -149,7 +146,6 @@ func TestComplexityService_Analyze_ContextCancellation(t *testing.T) {
 	cfg := &config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 	}
 
 	service := NewComplexityService(cfg)
@@ -179,7 +175,6 @@ func TestComplexityService_AnalyzeFile(t *testing.T) {
 	cfg := &config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 		ReportUnchanged: true,
 	}
 
@@ -220,7 +215,6 @@ function branchy(x) {
 		service := NewComplexityService(&config.ComplexityConfig{
 			LowThreshold:    5,
 			MediumThreshold: 10,
-			Enabled:         true,
 			ReportUnchanged: reportUnchanged,
 		})
 
@@ -285,7 +279,6 @@ function branchy(x) {
 	service := NewComplexityService(&config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 		ReportUnchanged: true,
 	})
 
@@ -339,7 +332,6 @@ function branchy(x) {
 	service := NewComplexityService(&config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 		ReportUnchanged: true,
 	})
 
@@ -374,7 +366,6 @@ func TestComplexityService_filterFunctions(t *testing.T) {
 	cfg := &config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 		ReportUnchanged: false, // Don't report unchanged (complexity = 1)
 	}
 
@@ -615,7 +606,6 @@ func TestComplexityService_Analyze_ResponseFields(t *testing.T) {
 	cfg := &config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 		ReportUnchanged: true,
 	}
 
@@ -659,7 +649,7 @@ func TestComplexityService_Analyze_NoFunctions(t *testing.T) {
 	if err := os.WriteFile(path, []byte("export const x: number = 1;\nexport type T = { a: string };\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	service := NewComplexityService(&config.ComplexityConfig{LowThreshold: 5, MediumThreshold: 10, Enabled: true, ReportUnchanged: true})
+	service := NewComplexityService(&config.ComplexityConfig{LowThreshold: 5, MediumThreshold: 10, ReportUnchanged: true})
 
 	response, err := service.Analyze(context.Background(), domain.ComplexityRequest{Paths: []string{path}})
 	if err != nil {

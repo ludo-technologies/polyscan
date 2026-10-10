@@ -1,302 +1,188 @@
 # Configuration Reference
 
-Every key polyscan accepts, with its type, its default, and whether it currently changes anything. The configuration file tunes the JavaScript/TypeScript analysis only; Go, Rust and C++ run with built-in defaults.
+Every key that `.polyscan.toml` accepts, with its type, its default, and its rules. The file configures every language: Go, Rust, C++ and JavaScript/TypeScript. These are all the keys. A key or section that is not listed here is an error. The [configuration guide](index.md) explains how polyscan finds the file and how flags combine with it.
 
-Keys marked :material-check-circle:{ title="Applied" } **Applied** affect the analysis. Keys marked :material-minus-circle:{ title="Not applied" } **Not applied** are parsed and validated, then ignored, and polyscan warns on stderr when your file sets one. The [configuration guide](index.md#which-keys-take-effect-today) explains why that distinction exists.
-
-All examples use JSON. YAML and TOML files accept the same keys with the same names.
-
----
-
-## `complexity`
-
-Controls cyclomatic complexity analysis for JavaScript/TypeScript functions.
-
-### `complexity.low_threshold`
-
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; integer &nbsp;&middot;&nbsp; default `9`
-
-Upper bound of the low risk band, inclusive. A function at or below this value is reported as low risk.
-
-Must be at least 1.
-
-### `complexity.medium_threshold`
-
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; integer &nbsp;&middot;&nbsp; default `19`
-
-Upper bound of the medium risk band, inclusive. Functions above it are high risk.
-
-Must be greater than `low_threshold`.
-
-```json
-{
-  "complexity": {
-    "low_threshold": 10,
-    "medium_threshold": 20
-  }
-}
-```
-
-### `complexity.max_complexity`
-
-:material-minus-circle: **Not applied** &nbsp;&middot;&nbsp; integer &nbsp;&middot;&nbsp; default `0`
-
-Supplied the default threshold for jscan's `check` command. It is accepted without a warning for backward compatibility, but nothing reads it now. `polyscan check` takes the limit from its [`--max-complexity`](../cli/check.md#flags) flag.
-
-Must be either 0, meaning no limit, or greater than `medium_threshold`.
-
-### `complexity.enabled`
-
-:material-minus-circle: **Not applied** &nbsp;&middot;&nbsp; boolean &nbsp;&middot;&nbsp; default `true`
-
-Intended to switch complexity analysis off. No command reads it. Use `--select` to choose analyses instead.
-
-### `complexity.report_unchanged`
-
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; boolean &nbsp;&middot;&nbsp; default `true`
-
-Set it to `false` to leave out functions whose complexity is exactly 1, which on most codebases is the majority of them.
-
-This differs from setting `output.min_complexity` to 2 in what the counts say afterwards. A function dropped by `min_complexity` is still counted as parsed, so the report shows `12 reported / 340 parsed`; a function dropped by `report_unchanged` is not counted at all, because it was never meant to be part of the report.
-
----
-
-## `output`
-
-### `output.min_complexity`
-
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; integer &nbsp;&middot;&nbsp; default `1`
-
-JavaScript/TypeScript functions below this complexity are excluded from the report. The default of 1 keeps every function, since no function scores lower than 1. The `--min-complexity` flag applies the same filter to every language on the command line.
-
-Must be at least 1.
-
-Raising it is the most effective way to shorten the report on a large codebase:
-
-```json
-{
-  "output": {
-    "min_complexity": 5
-  }
-}
-```
-
-When this filter removes functions, the text and JSON output disclose both counts, reported as `12 reported / 340 parsed`, so a filtered report never looks like a complete one.
-
-### `output.format`
-
-:material-minus-circle: **Not applied** &nbsp;&middot;&nbsp; string &nbsp;&middot;&nbsp; default `"text"`
-
-Validated against `text`, `json`, `yaml`, `csv`, and `html`, then ignored. The output format comes from the `--format` flag. An invalid value here still fails the whole run, so keep it to one of the five.
-
-### `output.show_details`
-
-:material-minus-circle: **Not applied** &nbsp;&middot;&nbsp; boolean &nbsp;&middot;&nbsp; default `false`
-
-### `output.sort_by`
-
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; string &nbsp;&middot;&nbsp; default `"complexity"`
-
-Order of the functions in the complexity report. One of:
-
-| Value | Order |
-| --- | --- |
-| `complexity` | Complexity, highest first |
-| `name` | Function name, alphabetical |
-| `risk` | Risk band, high risk first |
-
-Functions the criterion cannot separate are ordered by source location, so the report is stable across runs. The text report names the criterion in its `Functions (sorted by ...)` heading.
-
-### `output.directory`
-
-:material-minus-circle: **Not applied** &nbsp;&middot;&nbsp; string &nbsp;&middot;&nbsp; default `""`
-
-Use `polyscan analyze --output <path>` to choose where the HTML report goes.
+A key that the file leaves out keeps its default.
 
 ---
 
 ## `analysis`
 
-These keys select which JavaScript/TypeScript files are analyzed. Go, Rust and C++ files are collected by extension alone and are not affected by them.
+These keys choose which files every analysis covers.
 
-### `analysis.exclude_patterns`
+### `analysis.exclude`
 
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; array of strings
+array of strings &nbsp;&middot;&nbsp; default `[]` &nbsp;&middot;&nbsp; flag `--exclude`
 
-Directory names and filename patterns to skip. A value here **replaces** the default list rather than extending it.
+Further files and directories to leave out, for every language and every analysis. The patterns are added to the [built-in skips](#built-in-skips) and never replace them.
 
-The default is:
-
-```json
-{
-  "analysis": {
-    "exclude_patterns": [
-      "node_modules",
-      "bower_components",
-      "jspm_packages",
-      "vendor",
-      "assets",
-      "overrides",
-      "third_party",
-      "third-party",
-      "extern",
-      "external",
-      "dist",
-      "build",
-      "out",
-      ".output",
-      ".next",
-      ".nuxt",
-      ".vercel",
-      ".cache",
-      ".turbo",
-      "coverage",
-      ".git",
-      "*.min.js",
-      "*.min.mjs",
-      "*.min.cjs",
-      "*.bundle.js",
-      "*.map"
-    ]
-  }
-}
+```toml
+[analysis]
+exclude = ["fixtures", "src/generated/**"]
 ```
 
-A pattern is matched against whole names, never against part of one, and matching ignores case, so `*.min.js` also skips `Vendor.MIN.JS`.
+The syntax is the same as the syntax of the `--exclude` flag:
 
-A pattern **without a slash** is compared to the file's own name and to each directory name above it. `dist` skips every directory named `dist` at any depth along with everything inside it, and it leaves `src/utils/distance.ts` alone, because no name in that path is exactly `dist`. Glob characters apply to a single name, so `*.min.js` matches file names and `__*__` matches a directory named `__tests__`.
+- A glob **without a slash** matches a file name or a directory name anywhere on the path. `fixtures` skips every directory named `fixtures` at any depth, along with everything inside it. It leaves `src/fixtures_loader.ts` alone, because no name in that path is exactly `fixtures`. Glob characters apply to a single name, so `*.min.js` matches file names and `__*__` matches a directory named `__tests__`.
+- A glob **with a slash** matches a path relative to the analyzed directory, where `**` stands for any number of path segments. `src/generated` skips that directory and everything under it. `src/generated/**` skips every file below it. `**/dist/**` skips every file below any directory named `dist`.
 
-A pattern **containing a slash** is compared to the path itself, where `**` stands for any number of directory levels. `src/generated` skips that directory and everything under it. `**/dist/**` skips every file below any directory named `dist`.
+A pattern is matched against whole names, never against part of one. Patterns are matched relative to the path you pass to polyscan, so the directories above it are never considered.
 
-Patterns are matched relative to the path you pass to polyscan, so the directories above it are never considered. A project stored at `/home/me/build/myapp` is analyzed normally even though `build` is on the default list. A file you name directly on the command line is matched on its own name alone, so `polyscan analyze src/dist/bundle.js` analyzes that file.
+When you also pass `--exclude` on the command line, both sets of patterns apply.
 
-!!! note "Behavior changed in jscan 0.10.0"
+### `analysis.include_tests`
 
-    Earlier jscan versions also skipped a file when a pattern appeared anywhere in its path as a plain substring. The default entries `out` and `dist` therefore removed `src/routes/api.ts`, `src/layout/Header.tsx`, `src/checkout/Cart.ts`, and `src/utils/distance.ts` without reporting anything. If you worked around that by trimming the short entries out of your `exclude_patterns`, you can now go back to the default list.
+boolean &nbsp;&middot;&nbsp; default `false` &nbsp;&middot;&nbsp; flag `--include-tests`
 
-Because your list replaces the default, start from the list above and append to it rather than writing a short one from scratch. Omitting `node_modules` in particular will make polyscan analyze your entire dependency tree.
+Analyze test files and test code too. By default they are left out of every analysis. The output of `polyscan analyze --help` lists what counts as test code in each language.
 
-### `analysis.include_patterns`
-
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; array of strings
-
-Which files to analyze, of those the JavaScript/TypeScript analysis can parse. A file is analyzed when it matches at least one pattern here and no pattern in `exclude_patterns`.
-
-The default is every extension the JavaScript/TypeScript analysis understands:
-
-```json
-{
-  "analysis": {
-    "include_patterns": [
-      "**/*.js",
-      "**/*.ts",
-      "**/*.jsx",
-      "**/*.tsx",
-      "**/*.mjs",
-      "**/*.cjs",
-      "**/*.mts",
-      "**/*.cts"
-    ]
-  }
-}
+```toml
+[analysis]
+include_tests = true
 ```
 
-Patterns use the same matching rules as [`exclude_patterns`](#analysisexclude_patterns), including the part that catches people out: they are matched relative to the path you pass on the command line, so `src/**/*.ts` matches nothing when you run `polyscan analyze src/`. Prefer a leading `**/` unless you mean to depend on where the command is run from.
-
-This key cannot widen the analysis. The JavaScript/TypeScript extensions are fixed at `.js`, `.jsx`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.mts`, and `.cts`, so adding `**/*.vue` changes nothing, and Go, Rust and C++ files are collected independently of this list.
-
-A file you name directly on the command line is analyzed whether or not it matches, on the grounds that naming it is a clearer statement of intent than the config file is.
-
-### `analysis.recursive`
-
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; boolean &nbsp;&middot;&nbsp; default `true`
-
-Set it to `false` to analyze only the JavaScript/TypeScript files directly inside each directory you pass, without descending into subdirectories. Files named directly on the command line are unaffected.
-
-### `analysis.follow_symlinks`
-
-:material-minus-circle: **Not applied** &nbsp;&middot;&nbsp; boolean &nbsp;&middot;&nbsp; default `false`
-
-Symbolic links are never followed.
+The `--include-tests` flag replaces this value only when you give it. A run without the flag uses the value from the file.
 
 ---
 
-## `dead_code`
+## `complexity`
 
-Two keys in this group reach the analysis. The rest are validated and ignored: every unreachable-code check always runs, context lines are never shown, and nothing is ignored.
+Sets the risk bands of cyclomatic complexity. They apply to every language, and the HTML report's complexity histogram follows them.
 
-### `dead_code.min_severity`
+### `complexity.low_threshold`
 
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; string &nbsp;&middot;&nbsp; default `"info"`
+integer &nbsp;&middot;&nbsp; default `9`
 
-Findings below this severity are dropped before anything is reported or counted. One of `critical`, `warning`, or `info`.
+The highest complexity of the low risk band, inclusive. A function at or below this value is low risk.
 
-The default of `info` keeps every finding, which is what the health score is calibrated against. Raising it to `warning` also raises the score, so compare scores only between runs that used the same floor.
+Must be at least 1.
 
-### `dead_code.sort_by`
+### `complexity.medium_threshold`
 
-:material-check-circle: **Applied** &nbsp;&middot;&nbsp; string &nbsp;&middot;&nbsp; default `"severity"`
+integer &nbsp;&middot;&nbsp; default `19`
 
-Order of the files in the dead code report. One of `severity`, `line`, `file`, or `function`. Files that the criterion cannot separate are ordered by path, so the report is stable across runs.
+The highest complexity of the medium risk band, inclusive. A function above it is high risk.
 
-### Not applied
+Must be greater than `low_threshold`.
 
-| Key | Type | Default | Validation |
-| --- | --- | --- | --- |
-| `dead_code.enabled` | boolean | `true` | |
-| `dead_code.show_context` | boolean | `false` | |
-| `dead_code.context_lines` | integer | `3` | From 0 to 20 |
-| `dead_code.detect_after_return` | boolean | `true` | |
-| `dead_code.detect_after_break` | boolean | `true` | |
-| `dead_code.detect_after_continue` | boolean | `true` | |
-| `dead_code.detect_after_throw` | boolean | `true` | |
-| `dead_code.detect_unreachable_branches` | boolean | `true` | |
-| `dead_code.ignore_patterns` | array of strings | `[]` | |
+```toml
+[complexity]
+low_threshold = 10
+medium_threshold = 20
+```
 
-To leave dead code out of a run, use `--select` without `deadcode`.
+The `config` object in the [JSON output](../output/json-schema.md) reports the thresholds a run used.
 
 ---
 
-## `clones`
+## `check`
 
-:material-minus-circle: **Not applied.** Clone detection runs with the built-in defaults, which for JavaScript/TypeScript are:
+Sets the thresholds of [`polyscan check`](../cli/check.md). Each key is the default of the flag with the same name, and the flag takes precedence when you give it. `polyscan analyze` reads this section but does not use it.
 
-| Setting | Default |
+### `check.max_complexity`
+
+integer &nbsp;&middot;&nbsp; default `10` &nbsp;&middot;&nbsp; flag `--max-complexity`
+
+The highest cyclomatic complexity a function may have before the check fails.
+
+Must be at least 1.
+
+### `check.max_cycles`
+
+integer &nbsp;&middot;&nbsp; default `0` &nbsp;&middot;&nbsp; flag `--max-cycles`
+
+The number of circular dependency cycles the check allows.
+
+Must be at least 0.
+
+### `check.allow_dead_code`
+
+boolean &nbsp;&middot;&nbsp; default `false` &nbsp;&middot;&nbsp; flag `--allow-dead-code`
+
+Print critical dead code without failing the check.
+
+### `check.allow_circular_deps`
+
+boolean &nbsp;&middot;&nbsp; default `false` &nbsp;&middot;&nbsp; flag `--allow-circular-deps`
+
+Print circular dependencies without failing the check.
+
+### `check.allow_parse_errors`
+
+boolean &nbsp;&middot;&nbsp; default `false` &nbsp;&middot;&nbsp; flag `--allow-parse-errors`
+
+Skip files with a syntax error without failing the check. A file that cannot be read still fails.
+
+```toml
+[check]
+max_complexity = 15
+max_cycles = 2
+allow_dead_code = true
+```
+
+---
+
+## Built-in skips
+
+Some files are left out before `analysis.exclude` applies. These skips are fixed behavior and not keys. The `exclude` key adds to them and cannot remove any of them.
+
+### Go, Rust and C++
+
+polyscan skips any directory whose name starts with a dot, and directories named `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called.
+
+### JavaScript/TypeScript
+
+polyscan skips the files and directories that match this list:
+
+```text
+node_modules
+bower_components
+jspm_packages
+vendor
+assets
+overrides
+third_party
+third-party
+extern
+external
+dist
+build
+out
+.output
+.next
+.nuxt
+.vercel
+.cache
+.turbo
+coverage
+.git
+*.min.js
+*.min.mjs
+*.min.cjs
+*.bundle.js
+*.map
+```
+
+The entries follow the matching rules of a glob without a slash, described under [`analysis.exclude`](#analysisexclude). An entry is matched against whole names, never against part of one, and matching ignores case, so `*.min.js` also skips `Vendor.MIN.JS`. `dist` skips every directory named `dist` and leaves `src/utils/distance.ts` alone.
+
+Patterns are matched relative to the path you pass to polyscan. A project stored at `/home/me/build/myapp` is analyzed normally even though `build` is on the list. A file you name directly on the command line is matched on its own name alone, so `polyscan analyze src/dist/bundle.js` analyzes that file.
+
+polyscan also reads the `.gitignore` at the root of the analyzed path and skips what it ignores. See [the `.gitignore` section](index.md#the-gitignore) of the guide.
+
+---
+
+## Keys that no longer exist
+
+Earlier polyscan releases read a jscan-era configuration file. Its keys are not part of `.polyscan.toml`, and putting one in the file is an error. The JavaScript/TypeScript-only keys that used to take effect have no replacement in the file:
+
+| Old key | What to do instead |
 | --- | --- |
-| Minimum fragment size | 10 lines and 20 syntax tree nodes |
-| Enabled clone types | Type 1, Type 2, and Type 4 |
-| Type 1 similarity threshold | 0.85 |
-| Type 2 similarity threshold | 0.75 |
-| Type 3 similarity threshold | 0.70 |
-| Type 4 similarity threshold | 0.65 |
-| Grouping strategy | Connected components |
-| Locality-sensitive hashing | Enabled automatically above 500 fragments |
+| `analysis.include_patterns` | Nothing. Use `analysis.exclude` to leave files out |
+| `analysis.recursive` | Nothing |
+| `output.min_complexity` | Use the `--min-complexity` flag of `polyscan analyze` |
+| `output.sort_by` | Nothing |
+| `dead_code.min_severity` | Nothing |
+| `dead_code.sort_by` | Nothing |
+| `complexity.report_unchanged` | Nothing |
 
-Type 3 is excluded from the enabled set because near-miss matches produce too many false positives for everyday use. Go, Rust and C++ clone detection uses the same fragment size and thresholds but reports Type 1, Type 2 and Type 3, with no Type 4; see the [analyze reference](../cli/analyze.md#clone).
-
----
-
-## Reserved groups
-
-These four groups exist in the schema for planned features. All of them default to disabled and none of them is read by any command today.
-
-| Group | Intended purpose |
-| --- | --- |
-| `system_analysis` | Combining the individual analyses into one system-level view |
-| `dependencies` | Filtering and reporting options for dependency analysis |
-| `architecture` | Layer definitions and rules for validating architectural boundaries |
-| `module_analysis` | Import resolution options, including path alias handling |
-
-Values inside them are unmarshalled without validation. Writing them today is harmless and has no effect.
-
----
-
-## Environment variables
-
-| Variable | Effect |
-| --- | --- |
-| `JSCAN_CONFIG` | Path to a configuration file, consulted late in the search order |
-| `PYSCN_CONFIG` | Same, kept for backward compatibility |
-| `XDG_CONFIG_HOME` | Changes where polyscan looks for a user-level `jscan/` config directory |
-
-The two config variables are checked only after every directory in the search has been tried, so a `jscan.config.json` anywhere above your source will take priority over them. See [config discovery](index.md#how-polyscan-finds-your-config-file) for the full order.
+The keys that were parsed and then ignored, such as `clones.*`, `output.format` and `system_analysis.*`, are gone as well. See [migrating a jscan configuration file](index.md#migrating-from-a-jscan-configuration-file).

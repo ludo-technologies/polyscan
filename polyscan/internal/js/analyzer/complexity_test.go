@@ -12,7 +12,6 @@ func testComplexityConfig() *config.ComplexityConfig {
 	return &config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 	}
 }
 

@@ -36,7 +36,7 @@ func fixtures(t *testing.T) string {
 }
 
 func TestAnalyzeComplexity(t *testing.T) {
-	report, err := Analyze([]string{fixtures(t)}, Options{Complexity: true}, nil)
+	report, err := Analyze([]string{fixtures(t)}, Options{Complexity: true, ComplexityThresholds: testThresholds}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -117,10 +117,13 @@ func TestAnalyzeClones(t *testing.T) {
 }
 
 func TestAnalyzeWithoutSupportedFiles(t *testing.T) {
-	if _, err := Analyze([]string{t.TempDir()}, Options{Complexity: true}, nil); err == nil || !strings.Contains(err.Error(), "no supported source files") {
+	if _, err := Analyze([]string{t.TempDir()}, Options{Complexity: true, ComplexityThresholds: testThresholds}, nil); err == nil || !strings.Contains(err.Error(), "no supported source files") {
 		t.Errorf("err = %v, want no supported source files", err)
 	}
 }
+
+// testThresholds are the default risk bands.
+var testThresholds = ComplexityThresholds{Low: domain.DefaultComplexityLowThreshold, Medium: domain.DefaultComplexityMediumThreshold}
 
 func TestRiskLevel(t *testing.T) {
 	cases := map[int]domain.RiskLevel{
@@ -129,7 +132,7 @@ func TestRiskLevel(t *testing.T) {
 		20: domain.RiskLevelHigh,
 	}
 	for complexity, want := range cases {
-		if got := RiskLevel(complexity); got != want {
+		if got := testThresholds.RiskLevel(complexity); got != want {
 			t.Errorf("RiskLevel(%d) = %s, want %s", complexity, got, want)
 		}
 	}
@@ -169,7 +172,7 @@ func Dispatch(key int) int {
 	if err := os.WriteFile(filepath.Join(dir, "dispatch.go"), []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	report, err := Analyze([]string{dir}, Options{Complexity: true}, nil)
+	report, err := Analyze([]string{dir}, Options{Complexity: true, ComplexityThresholds: testThresholds}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -205,7 +208,7 @@ func Valid(s Spec) bool {
 	if err := os.WriteFile(filepath.Join(dir, "valid.go"), []byte(source), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	report, err := Analyze([]string{dir}, Options{Complexity: true}, nil)
+	report, err := Analyze([]string{dir}, Options{Complexity: true, ComplexityThresholds: testThresholds}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -222,7 +225,7 @@ func Valid(s Spec) bool {
 }
 
 func TestAnalyzeRust(t *testing.T) {
-	report, err := Analyze([]string{"../../testdata/rust"}, Options{Complexity: true, Clones: true}, nil)
+	report, err := Analyze([]string{"../../testdata/rust"}, Options{Complexity: true, Clones: true, ComplexityThresholds: testThresholds}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -323,7 +326,7 @@ func TestRankOrdersGroupsLikeCore(t *testing.T) {
 }
 
 func TestAnalyzeCpp(t *testing.T) {
-	report, err := Analyze([]string{"../../testdata/cpp"}, Options{Complexity: true, Clones: true}, nil)
+	report, err := Analyze([]string{"../../testdata/cpp"}, Options{Complexity: true, Clones: true, ComplexityThresholds: testThresholds}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -430,7 +433,7 @@ func TestDisplayPathOutsideCwd(t *testing.T) {
 	t.Chdir(elsewhere)
 
 	wantRel := filepath.Join("..", "mix", "pkg", "p.go")
-	report, err := Analyze([]string{filepath.Join("..", "mix")}, Options{Complexity: true}, nil)
+	report, err := Analyze([]string{filepath.Join("..", "mix")}, Options{Complexity: true, ComplexityThresholds: testThresholds}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}
@@ -445,7 +448,7 @@ func TestDisplayPathOutsideCwd(t *testing.T) {
 
 	absTarget := filepath.Join(root, "mix")
 	wantAbs := filepath.Join(absTarget, "pkg", "p.go")
-	report, err = Analyze([]string{absTarget}, Options{Complexity: true}, nil)
+	report, err = Analyze([]string{absTarget}, Options{Complexity: true, ComplexityThresholds: testThresholds}, nil)
 	if err != nil {
 		t.Fatalf("Analyze abs: %v", err)
 	}
@@ -464,7 +467,7 @@ func TestDisplayPathUnderCwd(t *testing.T) {
 		"p.go": "package p\n\nfunc F() {}\n",
 	})
 	t.Chdir(dir)
-	report, err := Analyze([]string{"."}, Options{Complexity: true}, nil)
+	report, err := Analyze([]string{"."}, Options{Complexity: true, ComplexityThresholds: testThresholds}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}

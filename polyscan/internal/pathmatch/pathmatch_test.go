@@ -24,3 +24,18 @@ func TestMatches(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate(t *testing.T) {
+	for pattern, valid := range map[string]bool{
+		"fixtures":         true,
+		"src/generated/**": true,
+		"*_[a-z].go":       true,
+		"src/[":            false,
+		"[":                false,
+		"a/**/b[^/c":       false,
+	} {
+		if err := Validate(pattern); (err == nil) != valid {
+			t.Errorf("Validate(%q) = %v, want valid %v", pattern, err, valid)
+		}
+	}
+}

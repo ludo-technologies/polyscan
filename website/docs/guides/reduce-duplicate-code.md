@@ -112,7 +112,7 @@ Not every clone should be merged. Work through these questions in order.
 
 **Is the duplication accidental or structural?** Two functions that are similar because both iterate a list and filter it are structurally similar without being duplicated. polyscan cannot tell the difference, and Type 4 findings in particular often fall into this category.
 
-**Is it test code?** Test files repeat setup deliberately, because a test that reads top to bottom without indirection is easier to debug. polyscan already excludes test code from clone detection for Go, Rust and C++; for JavaScript/TypeScript, exclude test directories with `analysis.exclude_patterns` if the findings are noise.
+**Is it test code?** Test files repeat setup deliberately, because a test that reads top to bottom without indirection is easier to debug. polyscan already excludes test code from clone detection for Go, Rust and C++; for JavaScript/TypeScript, exclude test directories with `analysis.exclude` if the findings are noise.
 
 When you do merge, extract the varying parts as parameters. In the example above, the two functions differ only in their variable names, so a single `summarize(rows)` replaces both directly.
 

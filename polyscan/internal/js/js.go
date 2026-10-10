@@ -1,14 +1,12 @@
 // Package js runs the jscan JavaScript/TypeScript analyses as one pipeline
 // for polyscan analyze. The packages below it are the jscan implementation;
-// this file is the entry point that loads configuration, collects files and
-// runs the analyses.
+// this file is the entry point that configures, collects files and runs the
+// analyses.
 package js
 
 import (
 	"context"
 	"fmt"
-	"io"
-	"strings"
 	"sync"
 
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/analyzer"
@@ -17,9 +15,6 @@ import (
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/service"
 )
-
-// ConfigDocsURL documents which configuration keys change behavior.
-const ConfigDocsURL = "https://docs.codescan.dev/polyscan/configuration/#which-keys-take-effect-today"
 
 // Selection selects the analyses to run.
 type Selection struct {
@@ -85,35 +80,19 @@ func (r *Result) Failures() []error {
 	return failures
 }
 
-// LoadConfig loads the configuration a command should run with and reports
-// the keys the file sets that reach no behavior.
-//
-// The report goes to warn rather than stdout, which commands reserve for the
-// results themselves, and it is written for every format: a key that quietly
-// does nothing is exactly what the user needs to hear about.
-func LoadConfig(configPath, targetPath string, warn io.Writer) (*config.Config, error) {
-	result, err := config.Load(configPath, targetPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(result.IgnoredKeys) > 0 {
-		noun := "keys"
-		if len(result.IgnoredKeys) == 1 {
-			noun = "key"
-		}
-		fmt.Fprintf(warn, "Warning: %s sets %d %s that no command reads: %s\n",
-			result.Path, len(result.IgnoredKeys), noun, strings.Join(result.IgnoredKeys, ", "))
-		fmt.Fprintf(warn, "  See %s\n", ConfigDocsURL)
-	}
-
-	return result.Config, nil
+// Config returns the settings of the JavaScript/TypeScript analysis: jscan's
+// defaults, with the complexity risk bands given and the exclude patterns
+// added to jscan's own.
+func Config(lowThreshold, mediumThreshold int, exclude []string) *config.Config {
+	cfg := config.DefaultConfig()
+	cfg.Complexity.LowThreshold = lowThreshold
+	cfg.Complexity.MediumThreshold = mediumThreshold
+	cfg.Analysis.ExcludePatterns = append(cfg.Analysis.ExcludePatterns, exclude...)
+	return cfg
 }
 
 // ContainsFiles reports whether any JavaScript/TypeScript file exists under
-// the paths. Configuration plays no part: polyscan analyze asks before the
-// JavaScript configuration is even discovered, so a tree with no JavaScript
-// never loads — or fails on — one.
+// the paths, before any include or exclude pattern applies.
 func ContainsFiles(paths []string) (bool, error) {
 	files, err := app.NewFileHelper().CollectJSFiles(paths, true, nil, nil)
 	if err != nil {

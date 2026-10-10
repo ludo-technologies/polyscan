@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ludo-technologies/polyscan/polyscan/internal/js/config"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 )
 
@@ -60,38 +59,6 @@ func TestNewParallelExecutor(t *testing.T) {
 	}
 	if executor.maxConcurrency <= 0 {
 		t.Errorf("maxConcurrency should be > 0, got %d", executor.maxConcurrency)
-	}
-	if executor.timeout != DefaultTimeout {
-		t.Errorf("timeout should be %v, got %v", DefaultTimeout, executor.timeout)
-	}
-}
-
-func TestNewParallelExecutorFromConfig(t *testing.T) {
-	cfg := &config.PerformanceConfig{
-		MaxGoroutines:  8,
-		TimeoutSeconds: 120,
-	}
-
-	executor := NewParallelExecutorFromConfig(cfg)
-
-	if executor.maxConcurrency != 8 {
-		t.Errorf("maxConcurrency should be 8, got %d", executor.maxConcurrency)
-	}
-	if executor.timeout != 120*time.Second {
-		t.Errorf("timeout should be 120s, got %v", executor.timeout)
-	}
-}
-
-func TestNewParallelExecutorFromConfig_Defaults(t *testing.T) {
-	cfg := &config.PerformanceConfig{
-		MaxGoroutines:  0, // Invalid, should use default
-		TimeoutSeconds: 0, // Invalid, should use default
-	}
-
-	executor := NewParallelExecutorFromConfig(cfg)
-
-	if executor.maxConcurrency != DefaultMaxConcurrency {
-		t.Errorf("maxConcurrency should be %d, got %d", DefaultMaxConcurrency, executor.maxConcurrency)
 	}
 	if executor.timeout != DefaultTimeout {
 		t.Errorf("timeout should be %v, got %v", DefaultTimeout, executor.timeout)
@@ -297,11 +264,7 @@ func TestParallelExecutor_AllDisabledTasks(t *testing.T) {
 }
 
 func TestParallelExecutor_ConcurrencyLimit(t *testing.T) {
-	cfg := &config.PerformanceConfig{
-		MaxGoroutines:  2,
-		TimeoutSeconds: 30,
-	}
-	executor := NewParallelExecutorFromConfig(cfg)
+	executor := &ParallelExecutorImpl{maxConcurrency: 2, timeout: 30 * time.Second}
 	ctx := context.Background()
 
 	var currentConcurrency atomic.Int32

@@ -46,4 +46,4 @@ To fail a pipeline on the results, use [`check`](check.md). The [CI/CD page](../
 
 Header files, `.h` included, are analyzed as C++.
 
-The JavaScript/TypeScript collection additionally honors the project's [configuration file](../configuration/index.md) and the `.gitignore` at the root of the analyzed path, exactly as jscan did. The other languages are collected by extension alone.
+Every language skips its built-in directories and honors the `exclude` patterns of the project's [configuration file](../configuration/index.md) and the `--exclude` flag. The JavaScript/TypeScript collection additionally honors the `.gitignore` at the root of the analyzed path.

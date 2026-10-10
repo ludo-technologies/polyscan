@@ -40,11 +40,34 @@ polyscan analyze --exclude 'src/generated/**' .
 polyscan analyze --include-tests .
 ```
 
-`--select` takes any of `complexity`, `deadcode`, `clone`, `cbo`, `lcom` and `deps` (default: all); `deps` exists for Go and JavaScript/TypeScript, `cbo` for Go, Rust and JavaScript/TypeScript, `lcom` for Go and Rust, `deadcode` for JavaScript/TypeScript only, and a deselected or missing dimension is left out of the health score. JavaScript/TypeScript honors a `jscan.config.json` when the project has one. The JSON output is one document for every language, with `language` on every function and clone fragment.
+`--select` takes any of `complexity`, `deadcode`, `clone`, `cbo`, `lcom` and `deps` (default: all); `deps` exists for Go and JavaScript/TypeScript, `cbo` for Go, Rust and JavaScript/TypeScript, `lcom` for Go and Rust, `deadcode` for JavaScript/TypeScript only, and a deselected or missing dimension is left out of the health score. The JSON output is one document for every language, with `language` on every function and clone fragment.
 
-Version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. `--exclude` leaves out further files and directories, for every language and every analysis: a pattern without a slash is a glob matched against the file name and against each directory on the path, so `fixtures` drops every `fixtures` directory; a pattern with a slash is matched against the path relative to the analyzed directory, with `**` standing for any number of segments, so `src/generated/**` drops that tree. The flag takes a comma-separated list or may be repeated, and for JavaScript/TypeScript its patterns are added to the `exclude_patterns` of `jscan.config.json`.
+Version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. `--exclude` leaves out further files and directories, for every language and every analysis: a pattern without a slash is a glob matched against the file name and against each directory on the path, so `fixtures` drops every `fixtures` directory; a pattern with a slash is matched against the path relative to the analyzed directory, with `**` standing for any number of segments, so `src/generated/**` drops that tree. The flag takes a comma-separated list or may be repeated.
 
 Test files and test code are left out of every analysis unless `--include-tests` is given. For Go that is `*_test.go`; for C++ it is `*_test.*`, `*_tests.*`, `test_*.*` and `*Test.*` source files and any `test` or `tests` directory; for Rust it is `#[test]` functions, items under `#[cfg(test)]` or `#[cfg(all(test, ...))]`, `tests.rs` and `*_tests.rs` files and any `tests` directory, the conventional homes of a test module split into its own file and of Cargo's integration tests; for JavaScript/TypeScript it is `*.test.*` and `*.spec.*` files and any `__tests__` directory. With `--include-tests` the test code is analyzed for complexity and dead code, but it still stays out of clone detection, cohesion, coupling and dependency analysis: test functions share a skeleton by convention, and a test's types and imports describe the tests, not the package. A file that cannot be read is skipped and listed under `Errors`. A file with a syntax error is analyzed without the functions that contain the error, counted as partial, and listed under `Warnings`; C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
+
+## Configuration
+
+One `.polyscan.toml` configures every language. polyscan reads the nearest one in the first analyzed path or a directory above it, or the file given with `--config`/`-c`. A flag takes precedence over the file, and `--exclude` adds to its patterns. An unknown key or an invalid value fails the run.
+
+```toml
+[analysis]
+exclude = ["src/generated/**"]  # added to the built-in skips
+include_tests = false
+
+[complexity]
+low_threshold = 9     # highest complexity of the low risk band
+medium_threshold = 19 # highest complexity of the medium risk band
+
+[check]               # thresholds of polyscan check
+max_complexity = 10
+max_cycles = 0
+allow_dead_code = false
+allow_circular_deps = false
+allow_parse_errors = false
+```
+
+The jscan configuration files, such as `jscan.config.json`, are no longer read. A run that finds one before any `.polyscan.toml` fails and names the file.
 
 ## Complexity
 

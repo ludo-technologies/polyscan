@@ -402,7 +402,7 @@ impl Foo {
 
 func TestAnalyzeCohesionAbsentWithoutSupportedLanguage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"a.cpp": "struct S { int a; void m() { a = 1; } };\n"})
-	report, err := Analyze([]string{dir}, Options{LCOM: true, Complexity: true}, nil)
+	report, err := Analyze([]string{dir}, Options{LCOM: true, Complexity: true, ComplexityThresholds: testThresholds}, nil)
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
 	}

@@ -14,7 +14,8 @@ This package is now a thin wrapper that runs the polyscan CLI, so existing
 `npx jscan` invocations keep working while you migrate. It prints a
 deprecation notice and forwards every command to polyscan, translating the
 retired `--json`, `--text` and `--html` shorthands to `--format`. `--config`
-exits with a hint instead, because polyscan discovers the file itself.
+exits with a hint instead, because polyscan reads `.polyscan.toml` and no
+longer reads `jscan.config.json`.
 
 ## Migrating
 
@@ -24,7 +25,8 @@ exits with a hint instead, because polyscan discovers the file itself.
 | `jscan analyze --json src/` | `polyscan analyze --format json src/` |
 | `jscan check src/` | `polyscan check src/` |
 | `jscan deps src/` | `polyscan analyze --select deps src/` |
-| `jscan init` | Retired — polyscan still reads `jscan.config.json` when present |
+| `jscan init` | Retired. Write a `.polyscan.toml` by hand |
+| `jscan.config.json` | `.polyscan.toml`; polyscan fails on a `jscan.config.json` until it is moved |
 
 ## Documentation
 
