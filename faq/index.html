@@ -1661,39 +1661,6 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#i-set-a-value-in-my-config-file-and-nothing-changed-why" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        I set a value in my config file and nothing changed. Why?
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#why-does-adding-exclude_patterns-make-polyscan-analyze-more-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why does adding exclude_patterns make polyscan analyze more files?
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#can-i-use-yaml-or-toml-instead-of-json" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Can I use YAML or TOML instead of JSON?
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#which-config-file-does-polyscan-use" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1709,6 +1676,39 @@
     <span class="md-ellipsis">
       
         Is there a config file for Go, Rust or C++?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#polyscan-fails-with-unknown-key-what-is-wrong" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        polyscan fails with "unknown key". What is wrong?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#polyscan-fails-with-is-no-longer-read-what-do-i-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        polyscan fails with "is no longer read". What do I do?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#does-adding-to-exclude-stop-polyscan-from-skipping-node_modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Does adding to exclude stop polyscan from skipping node_modules?
       
     </span>
   </a>
@@ -2093,39 +2093,6 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#i-set-a-value-in-my-config-file-and-nothing-changed-why" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        I set a value in my config file and nothing changed. Why?
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#why-does-adding-exclude_patterns-make-polyscan-analyze-more-files" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Why does adding exclude_patterns make polyscan analyze more files?
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#can-i-use-yaml-or-toml-instead-of-json" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Can I use YAML or TOML instead of JSON?
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#which-config-file-does-polyscan-use" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2141,6 +2108,39 @@
     <span class="md-ellipsis">
       
         Is there a config file for Go, Rust or C++?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#polyscan-fails-with-unknown-key-what-is-wrong" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        polyscan fails with "unknown key". What is wrong?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#polyscan-fails-with-is-no-longer-read-what-do-i-do" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        polyscan fails with "is no longer read". What do I do?
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#does-adding-to-exclude-stop-polyscan-from-skipping-node_modules" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Does adding to exclude stop polyscan from skipping node_modules?
       
     </span>
   </a>
@@ -2364,9 +2364,9 @@
 <h3 id="what-happened-to-jscan">What happened to jscan?<a class="headerlink" href="#what-happened-to-jscan" title="Permanent link">&para;</a></h3>
 <p>It merged into polyscan: <code>polyscan analyze</code> runs the full jscan analysis on JavaScript/TypeScript files. The <code>jscan</code> npm package remains published as a deprecated wrapper that runs polyscan. The <a href="../getting-started/migrating-from-jscan/">migration page</a> maps every old command and flag to its replacement.</p>
 <h3 id="why-did-polyscan-analyze-far-fewer-files-than-my-project-has">Why did polyscan analyze far fewer files than my project has?<a class="headerlink" href="#why-did-polyscan-analyze-far-fewer-files-than-my-project-has" title="Permanent link">&para;</a></h3>
-<p>For JavaScript/TypeScript, check your exclude patterns first. A pattern in <code>analysis.exclude_patterns</code> matches a whole file or directory name, so <code>dist</code> skips a directory named <code>dist</code> and leaves <code>src/utils/distance.ts</code> alone. A pattern that names a directory you did not mean to exclude removes every file under it, and nothing in the output names the missing files. Compare the <code>Analyzing N files...</code> line against a <code>find</code> count to confirm. The <a href="../configuration/reference/#analysisexclude_patterns">configuration reference</a> describes the matching rules.</p>
-<p>A second possibility is your <code>.gitignore</code>. polyscan reads the one at the root of the analyzed directory and skips whatever JavaScript/TypeScript files it ignores.</p>
-<p>Go, Rust and C++ files are collected by extension alone: the config file, its exclude patterns and the <code>.gitignore</code> do not apply to them, so a vendored dependency tree written in those languages is analyzed unless you point polyscan below it.</p>
+<p>Check your exclude patterns first. A pattern in <code>analysis.exclude</code> or in <code>--exclude</code> that has no slash matches a whole file or directory name, so <code>dist</code> skips a directory named <code>dist</code> and leaves <code>src/utils/distance.ts</code> alone. A pattern that names a directory you did not mean to exclude removes every file under it, and nothing in the output names the missing files. Compare the <code>Analyzing N files...</code> line against a <code>find</code> count to confirm. The <a href="../configuration/reference/#analysisexclude">configuration reference</a> describes the matching rules.</p>
+<p>A second possibility is the built-in skips. Go, Rust and C++ skip every directory whose name starts with a dot, and directories named <code>node_modules</code>, <code>vendor</code>, <code>target</code>, <code>build</code>, <code>dist</code> and <code>third_party</code>. JavaScript/TypeScript skips a longer built-in list. The <a href="../configuration/reference/#built-in-skips">reference</a> lists both. A path named on the command line is analyzed whatever it is called.</p>
+<p>A third possibility is your <code>.gitignore</code>. polyscan reads the one at the root of the analyzed directory and skips whatever JavaScript/TypeScript files it ignores. The <code>.gitignore</code> does not apply to Go, Rust and C++ files.</p>
 <h3 id="why-is-every-one-of-my-exports-reported-as-unused">Why is every one of my exports reported as unused?<a class="headerlink" href="#why-is-every-one-of-my-exports-reported-as-unused" title="Permanent link">&para;</a></h3>
 <p>The unused-export check compares imports against exports across the files in the current run only. It has no way to see importers outside that set.</p>
 <p>This happens in two situations. Analyzing a subdirectory, such as <code>src/components/</code>, means the importers in the rest of <code>src/</code> were never read. Pass the whole source root instead. Analyzing a library means the importers are in other repositories entirely, and there is nothing to do about it except gate on <code>critical_dead_code</code> rather than the full count.</p>
@@ -2392,24 +2392,16 @@
 <h3 id="why-did-my-score-go-up-when-i-changed-nothing">Why did my score go up when I changed nothing?<a class="headerlink" href="#why-did-my-score-go-up-when-i-changed-nothing" title="Permanent link">&para;</a></h3>
 <p>Check whether the <code>--select</code> value changed, or whether the analyzed language mix changed. The score is computed over the dimensions that ran, so a narrower selection is scored against a smaller budget and the numbers are not comparable. Always use the same selection on the same tree when tracking the score over time. See <a href="../output/health-score/#selecting-fewer-analyses-changes-the-budget">the health score page</a>.</p>
 <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
-<h3 id="i-set-a-value-in-my-config-file-and-nothing-changed-why">I set a value in my config file and nothing changed. Why?<a class="headerlink" href="#i-set-a-value-in-my-config-file-and-nothing-changed-why" title="Permanent link">&para;</a></h3>
-<p>polyscan validates the whole configuration schema but acts on only part of it, and the file applies to the JavaScript/TypeScript analysis only. These keys change behavior today:</p>
-<ul>
-<li><code>complexity.low_threshold</code> and <code>complexity.medium_threshold</code></li>
-<li><code>complexity.report_unchanged</code></li>
-<li><code>dead_code.min_severity</code> and <code>dead_code.sort_by</code></li>
-<li><code>output.min_complexity</code> and <code>output.sort_by</code></li>
-<li><code>analysis.include_patterns</code>, <code>analysis.exclude_patterns</code>, <code>analysis.recursive</code></li>
-</ul>
-<p>Everything else is parsed and then ignored, with a warning on stderr. The <a href="../configuration/#which-keys-take-effect-today">configuration guide</a> has the full list of both kinds.</p>
-<h3 id="why-does-adding-exclude_patterns-make-polyscan-analyze-more-files">Why does adding <code>exclude_patterns</code> make polyscan analyze <em>more</em> files?<a class="headerlink" href="#why-does-adding-exclude_patterns-make-polyscan-analyze-more-files" title="Permanent link">&para;</a></h3>
-<p>Your value replaces the default list rather than extending it. The default is 26 entries long and covers dependency directories, build outputs, framework caches, and minified files. A short custom list therefore removes most of that protection. Copy the <a href="../configuration/reference/#analysisexclude_patterns">full default list</a> and add to it.</p>
-<h3 id="can-i-use-yaml-or-toml-instead-of-json">Can I use YAML or TOML instead of JSON?<a class="headerlink" href="#can-i-use-yaml-or-toml-instead-of-json" title="Permanent link">&para;</a></h3>
-<p>Yes. The format is chosen from the file extension. <code>jscan.yaml</code>, <code>jscan.yml</code>, and <code>.jscan.toml</code> all work, with the same keys.</p>
 <h3 id="which-config-file-does-polyscan-use">Which config file does polyscan use?<a class="headerlink" href="#which-config-file-does-polyscan-use" title="Permanent link">&para;</a></h3>
-<p>It searches upward from the path you asked it to analyze, then falls back to the current directory, the XDG config directory, <code>~/.config/jscan/</code>, your home directory, and finally the <code>JSCAN_CONFIG</code> environment variable. The first file found wins. See <a href="../configuration/#how-polyscan-finds-your-config-file">config discovery</a>.</p>
+<p><code>.polyscan.toml</code>, for every language. polyscan checks the directory of the first path you asked it to analyze, then each parent directory up to the filesystem root, and reads the first <code>.polyscan.toml</code> it finds. It searches nowhere else: not the current directory, not your home directory, and not an environment variable. <code>--config</code> names a file explicitly and skips the search. See <a href="../configuration/#how-polyscan-finds-your-config-file">config discovery</a>.</p>
 <h3 id="is-there-a-config-file-for-go-rust-or-c">Is there a config file for Go, Rust or C++?<a class="headerlink" href="#is-there-a-config-file-for-go-rust-or-c" title="Permanent link">&para;</a></h3>
-<p>Not yet. Those languages run with the built-in defaults: the shared complexity thresholds (10 and 20), the shared clone fragment minimums, and a built-in definition of test code that is excluded from clone detection.</p>
+<p>Yes. The same <code>.polyscan.toml</code> configures Go, Rust, C++ and JavaScript/TypeScript. It sets the complexity thresholds, the files to leave out, whether test code is analyzed, and the limits of <code>polyscan check</code>. The <a href="../configuration/reference/">reference</a> lists every key.</p>
+<h3 id="polyscan-fails-with-unknown-key-what-is-wrong">polyscan fails with "unknown key". What is wrong?<a class="headerlink" href="#polyscan-fails-with-unknown-key-what-is-wrong" title="Permanent link">&para;</a></h3>
+<p>The file contains a key or section that polyscan does not have, and the error names it. polyscan rejects unknown keys so that a misspelled key never silently does nothing. Compare the name in the message with the <a href="../configuration/reference/">reference</a>.</p>
+<h3 id="polyscan-fails-with-is-no-longer-read-what-do-i-do">polyscan fails with "is no longer read". What do I do?<a class="headerlink" href="#polyscan-fails-with-is-no-longer-read-what-do-i-do" title="Permanent link">&para;</a></h3>
+<p>Discovery reached a jscan configuration file, such as <code>jscan.config.json</code>, in a directory that has no <code>.polyscan.toml</code>. Move its settings to a <code>.polyscan.toml</code> in the same directory. The <a href="../configuration/#migrating-from-a-jscan-configuration-file">migration steps</a> show which keys carry over.</p>
+<h3 id="does-adding-to-exclude-stop-polyscan-from-skipping-node_modules">Does adding to <code>exclude</code> stop polyscan from skipping <code>node_modules</code>?<a class="headerlink" href="#does-adding-to-exclude-stop-polyscan-from-skipping-node_modules" title="Permanent link">&para;</a></h3>
+<p>No. <code>analysis.exclude</code> and <code>--exclude</code> add to the built-in skips and never replace them.</p>
 <h2 id="results">Results<a class="headerlink" href="#results" title="Permanent link">&para;</a></h2>
 <h3 id="what-counts-toward-cyclomatic-complexity">What counts toward cyclomatic complexity?<a class="headerlink" href="#what-counts-toward-cyclomatic-complexity" title="Permanent link">&para;</a></h3>
 <p>Each decision point adds one to a baseline of 1. For JavaScript/TypeScript that is: <code>if</code>, <code>else if</code>, each loop, each <code>catch</code>, each <code>case</code> label, each ternary, and each <code>&amp;&amp;</code>, <code>||</code>, or <code>??</code>. A <code>default</code> clause adds nothing, the same as <code>else</code>, and neither does optional chaining with <code>?.</code>. A function with no branching scores 1.</p>

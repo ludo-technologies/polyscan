@@ -2102,7 +2102,7 @@
 <li><strong>Maximum depth is understated</strong>, because chains are broken at every alias.</li>
 </ul>
 <p>Relative imports such as <code>./util</code> and <code>../lib/util</code> resolve correctly, so a project that uses relative imports throughout gets an accurate graph.</p>
-<p>There is a <code>module_analysis.alias_patterns</code> key in the configuration schema, defaulting to <code>["@/", "~/"]</code>, but no command reads it yet. See the <a href="../../configuration/reference/#reserved-groups">configuration reference</a>.</p>
+<p>There is no configuration key for path aliases.</p>
 <div class="admonition tip">
 <p class="admonition-title">Getting an accurate graph today</p>
 <p>If the dependency graph matters to you more than your import style does, relative imports give correct results now. Otherwise, read the <code>deps</code> numbers as a lower bound on your real coupling, and rely on the complexity, dead code, and clone analyses, none of which depend on import resolution.</p>
@@ -2111,27 +2111,11 @@
 <p><code>.vue</code> files are not collected, so the <code>&lt;script&gt;</code> block inside them is never analyzed. The <code>.ts</code> and <code>.js</code> files in a Vue or Nuxt project are analyzed normally. Support is on the roadmap.</p>
 <h2 id="recommended-setup">Recommended setup<a class="headerlink" href="#recommended-setup" title="Permanent link">&para;</a></h2>
 <h3 id="1-check-the-exclude-patterns-first">1. Check the exclude patterns first<a class="headerlink" href="#1-check-the-exclude-patterns-first" title="Permanent link">&para;</a></h3>
-<p>An exclude pattern matches a whole file or directory name, so <code>dist</code> skips a directory named <code>dist</code> and leaves <code>src/utils/distance.ts</code> alone. Any pattern that names a directory you did not mean to exclude removes every file under it, and nothing in the output mentions the missing files. The only clue is a low count on the <code>Analyzing N files...</code> line.</p>
+<p>An exclude pattern without a slash matches a whole file or directory name, so <code>dist</code> skips a directory named <code>dist</code> and leaves <code>src/utils/distance.ts</code> alone. Any pattern that names a directory you did not mean to exclude removes every file under it, and nothing in the output mentions the missing files. The only clue is a low count on the <code>Analyzing N files...</code> line.</p>
 <p>jscan versions up to 0.9.0 matched a pattern against any part of a path, so the default entries <code>out</code> and <code>dist</code> silently dropped <code>src/routes/</code>, <code>src/layout/</code>, <code>app/**/layout.tsx</code>, <code>src/checkout/</code>, and <code>src/utils/distance.ts</code>. polyscan matches whole names only.</p>
-<p>A short explicit list is still worth writing, because your own list replaces the default rather than extending it:</p>
-<div class="language-json highlight"><span class="filename">jscan.config.json</span><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">"complexity"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">    </span><span class="nt">"low_threshold"</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">    </span><span class="nt">"medium_threshold"</span><span class="p">:</span><span class="w"> </span><span class="mi">24</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="p">},</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="nt">"analysis"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="nt">"exclude_patterns"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">      </span><span class="s2">"node_modules"</span><span class="p">,</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">      </span><span class="s2">"coverage"</span><span class="p">,</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">      </span><span class="s2">".git"</span><span class="p">,</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">      </span><span class="s2">".next"</span><span class="p">,</span>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">      </span><span class="s2">".nuxt"</span><span class="p">,</span>
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">      </span><span class="s2">".turbo"</span><span class="p">,</span>
-</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">      </span><span class="s2">"*.min.js"</span><span class="p">,</span>
-</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">      </span><span class="s2">"*.map"</span>
-</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a><span class="w">    </span><span class="p">]</span>
-</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">  </span><span class="p">}</span>
-</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="p">}</span>
+<p>For JavaScript/TypeScript, polyscan already skips <code>node_modules</code>, <code>dist</code>, <code>build</code>, <code>.next</code>, <code>.nuxt</code>, <code>.turbo</code>, <code>coverage</code>, minified files and the rest of a built-in list, and it adds your <code>analysis.exclude</code> patterns to that list. You only write what is specific to your project:</p>
+<div class="language-toml highlight"><span class="filename">.polyscan.toml</span><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[analysis]</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"storybook-static"</span><span class="p">,</span><span class="w"> </span><span class="s2">"src/generated/**"</span><span class="p">]</span>
 </span></code></pre></div>
 <p>Then confirm the file count matches reality:</p>
 <div class="language-console highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="gp">$ </span>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>text<span class="w"> </span>src/<span class="w"> </span><span class="p">|</span><span class="w"> </span>head<span class="w"> </span>-1
@@ -2148,12 +2132,9 @@
 <p>Pass the whole source root rather than a subdirectory. The unused-export analysis compares imports against exports across the analyzed files only, so running it on <code>src/components/</code> alone reports every component as unused, because the importers in the rest of <code>src/</code> were never read.</p>
 <h3 id="3-raise-the-complexity-thresholds">3. Raise the complexity thresholds<a class="headerlink" href="#3-raise-the-complexity-thresholds" title="Permanent link">&para;</a></h3>
 <p>Component code accumulates conditional rendering, and each <code>&amp;&amp;</code>, <code>||</code>, <code>??</code>, and <code>?:</code> counts toward cyclomatic complexity. A React component that is entirely readable can score 12 to 15 on that measure. Thresholds of 12 and 24 rather than the default 9 and 19 give a truer picture.</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">"complexity"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">"low_threshold"</span><span class="p">:</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">"medium_threshold"</span><span class="p">:</span><span class="w"> </span><span class="mi">24</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="p">}</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">}</span>
+<div class="language-toml highlight"><span class="filename">.polyscan.toml</span><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[complexity]</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">low_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">12</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">medium_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">24</span>
 </span></code></pre></div>
 <h3 id="4-gate-on-critical-findings-first">4. Gate on critical findings first<a class="headerlink" href="#4-gate-on-critical-findings-first" title="Permanent link">&para;</a></h3>
 <p>An exported symbol that no analyzed file imports produces a warning-level finding. In a library, or in any project analyzed one directory at a time, that describes most of your public API, so a CI gate should start by counting only the critical findings. <code>polyscan check</code> does this:</p>
@@ -2167,7 +2148,7 @@
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-e<span class="w"> </span><span class="s1">'.summary.critical_dead_code == 0'</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">exit</span><span class="w"> </span><span class="m">1</span>
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="k">done</span>
 </span></code></pre></div>
-<p>Because config discovery walks upward from the analyzed path, each package can carry its own <code>jscan.config.json</code> and fall back to a root file when it has none. The <a href="../../configuration/examples/#monorepo">monorepo example</a> shows the layout.</p>
+<p>Because config discovery walks upward from the analyzed path, each package can carry its own <code>.polyscan.toml</code> and use a root file when it has none. The nearest file wins, and files are not merged. The <a href="../../configuration/examples/#monorepo">monorepo example</a> shows the layout.</p>
 <p>Cross-package imports usually go through a workspace alias such as <code>@myorg/core</code>, which polyscan does not resolve, so a per-package run cannot see them. Run <code>polyscan analyze packages/</code> for the combined view and per-package runs for the gates.</p>
 <h2 id="frameworks">Frameworks<a class="headerlink" href="#frameworks" title="Permanent link">&para;</a></h2>
 <h3 id="nextjs">Next.js<a class="headerlink" href="#nextjs" title="Permanent link">&para;</a></h3>

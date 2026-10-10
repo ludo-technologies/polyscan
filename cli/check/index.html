@@ -1053,6 +1053,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1697,6 +1708,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1794,7 +1816,7 @@
 </tr>
 <tr>
 <td><code>2</code></td>
-<td>The analysis failed, so the result is not a verdict about the code. An invalid flag, a missing path, a path with no supported source files, and a file that cannot be read or parsed all exit 2</td>
+<td>The analysis failed, so the result is not a verdict about the code. An invalid flag, an invalid configuration file, a missing path, a path with no supported source files, and a file that cannot be read or parsed all exit 2</td>
 </tr>
 </tbody>
 </table>
@@ -1844,6 +1866,7 @@
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--allow-dead-code<span class="w"> </span>.<span class="w">              </span><span class="c1"># Report dead code without failing</span>
 </span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--allow-parse-errors<span class="w"> </span>.<span class="w">           </span><span class="c1"># Skip unparsable files without failing</span>
 </span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--quiet<span class="w"> </span>.<span class="w">                        </span><span class="c1"># Print only warnings unless issues are found</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>polyscan<span class="w"> </span>check<span class="w"> </span>-c<span class="w"> </span>ci.polyscan.toml<span class="w"> </span>.<span class="w">            </span><span class="c1"># Read the thresholds from a named file</span>
 </span></code></pre></div>
 <h2 id="flags">Flags<a class="headerlink" href="#flags" title="Permanent link">&para;</a></h2>
 <table>
@@ -1896,7 +1919,13 @@
 <td><code>--quiet</code></td>
 <td><code>-q</code></td>
 <td><code>false</code></td>
-<td>Print nothing unless issues are found, apart from warnings such as a configuration key that no command reads. Clones and allowed findings are not printed</td>
+<td>Print nothing unless issues are found, apart from warnings. Clones and allowed findings are not printed</td>
+</tr>
+<tr>
+<td><code>--config</code></td>
+<td><code>-c</code></td>
+<td></td>
+<td>The <code>.polyscan.toml</code> file to read. Skips discovery. The file must exist</td>
 </tr>
 <tr>
 <td><code>--exclude</code></td>
@@ -1921,7 +1950,13 @@
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="go">circular dependency: src/a.js -&gt; src/b.js</span>
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="go">Error: found 3 quality issue(s)</span>
 </span></code></pre></div>
-<p>The JavaScript/TypeScript configuration file is discovered the same way as for <code>analyze</code>. Its <code>complexity.max_complexity</code> key is not read. Use <code>--max-complexity</code> to set the limit.</p>
+<h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h2>
+<p><code>check</code> finds <code>.polyscan.toml</code> the same way as <code>analyze</code>: the nearest file in the first path or a directory above it, or the file named with <code>--config</code>. The <code>[check]</code> section sets the default of each threshold flag: <code>max_complexity</code>, <code>max_cycles</code>, <code>allow_dead_code</code>, <code>allow_circular_deps</code> and <code>allow_parse_errors</code>. A flag you give on the command line takes precedence. The <code>complexity</code> and <code>analysis</code> sections apply as well. See the <a href="../../configuration/reference/#check">reference</a>.</p>
+<div class="language-toml highlight"><span class="filename">.polyscan.toml</span><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[check]</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">max_complexity</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">15</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">max_cycles</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+</span></code></pre></div>
+<p>Any configuration error exits with code 2, because the check cannot give a verdict without its settings.</p>
 
 
 

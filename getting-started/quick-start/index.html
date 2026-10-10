@@ -724,10 +724,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#5-configure-the-javascripttypescript-analysis" class="md-nav__link">
+  <a href="#5-configure-polyscan" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Configure the JavaScript/TypeScript analysis
+        5. Configure polyscan
       
     </span>
   </a>
@@ -1698,10 +1698,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#5-configure-the-javascripttypescript-analysis" class="md-nav__link">
+  <a href="#5-configure-polyscan" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5. Configure the JavaScript/TypeScript analysis
+        5. Configure polyscan
       
     </span>
   </a>
@@ -1838,16 +1838,16 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>polyscan<span class="w"> </span>check<span class="w"> </span>src/
 </span></code></pre></div>
 <p><code>check</code> exits 1 when a function is too complex, when it finds critical dead code, or when it finds a circular dependency, and 2 when the analysis fails. The <a href="../../cli/check/">check page</a> lists its thresholds, and the <a href="../../integrations/ci-cd/">CI/CD page</a> has complete pipeline configurations.</p>
-<h2 id="5-configure-the-javascripttypescript-analysis">5. Configure the JavaScript/TypeScript analysis<a class="headerlink" href="#5-configure-the-javascripttypescript-analysis" title="Permanent link">&para;</a></h2>
-<p>The JavaScript/TypeScript analysis reads a <code>jscan.config.json</code> when the project has one — the configuration format carried over from jscan, the analyzer that merged into polyscan. It supplies complexity thresholds and exclude patterns:</p>
-<div class="language-json highlight"><span class="filename">jscan.config.json</span><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span><span class="nt">"complexity"</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">    </span><span class="nt">"low_threshold"</span><span class="p">:</span><span class="w"> </span><span class="mi">10</span><span class="p">,</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="nt">"medium_threshold"</span><span class="p">:</span><span class="w"> </span><span class="mi">20</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span><span class="p">}</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="p">}</span>
+<h2 id="5-configure-polyscan">5. Configure polyscan<a class="headerlink" href="#5-configure-polyscan" title="Permanent link">&para;</a></h2>
+<p>polyscan reads a <code>.polyscan.toml</code> when the project has one. It searches the analyzed directory and then each parent directory, and the same file configures Go, Rust, C++ and JavaScript/TypeScript. It supplies complexity thresholds, extra files to leave out, and the limits of <code>polyscan check</code>:</p>
+<div class="language-toml highlight"><span class="filename">.polyscan.toml</span><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[complexity]</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">low_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">medium_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="k">[analysis]</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"fixtures"</span><span class="p">,</span><span class="w"> </span><span class="s2">"src/generated/**"</span><span class="p">]</span>
 </span></code></pre></div>
-<p>Be aware that polyscan reads only part of that file. The <a href="../../configuration/">configuration guide</a> states plainly which keys take effect and which are accepted but not applied. There is no configuration file for the other languages yet.</p>
+<p>The file is strict. A key that polyscan does not know is an error that names the key, so a misspelled setting is never silently ignored. The <a href="../../configuration/">configuration guide</a> describes discovery, the <code>--config</code> flag, and how flags combine with the file.</p>
 <h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
 <ul>
 <li>The <a href="../../cli/">CLI reference</a> documents every command and flag.</li>

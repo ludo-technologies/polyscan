@@ -763,10 +763,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configuration-is-unchanged" class="md-nav__link">
+  <a href="#the-configuration-file-changed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configuration is unchanged
+        The configuration file changed
       
     </span>
   </a>
@@ -1720,10 +1720,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#configuration-is-unchanged" class="md-nav__link">
+  <a href="#the-configuration-file-changed" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Configuration is unchanged
+        The configuration file changed
       
     </span>
   </a>
@@ -1816,7 +1816,7 @@
 
 <h1 id="migrating-from-jscan">Migrating from jscan<a class="headerlink" href="#migrating-from-jscan" title="Permanent link">&para;</a></h1>
 <p>jscan, the JavaScript/TypeScript analyzer, has merged into polyscan. The same analysis — complexity, dead code, clone detection, coupling, dependencies, and the health score — now runs from the <code>polyscan</code> CLI, alongside Go, Rust and C++ support.</p>
-<p>The <a href="https://www.npmjs.com/package/jscan"><code>jscan</code> npm package</a> remains published as a thin wrapper that prints a deprecation notice and runs polyscan, so an existing <code>npx jscan analyze</code> keeps working while you migrate: the wrapper translates the <code>--json</code>, <code>--text</code> and <code>--html</code> shorthands to <code>--format</code>, and exits with a hint on <code>--config</code>. New setups should call <code>polyscan</code> directly.</p>
+<p>The <a href="https://www.npmjs.com/package/jscan"><code>jscan</code> npm package</a> remains published as a thin wrapper that prints a deprecation notice and runs polyscan, so an existing <code>npx jscan analyze</code> keeps working while you migrate: the wrapper translates the <code>--json</code>, <code>--text</code> and <code>--html</code> shorthands to <code>--format</code>, and exits with a hint on <code>--config</code>, because jscan's <code>--config</code> pointed at a jscan-format file that polyscan no longer reads. New setups should call <code>polyscan</code> directly.</p>
 <h2 id="command-mapping">Command mapping<a class="headerlink" href="#command-mapping" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1864,14 +1864,14 @@
 <h2 id="flag-changes-on-analyze">Flag changes on <code>analyze</code><a class="headerlink" href="#flag-changes-on-analyze" title="Permanent link">&para;</a></h2>
 <ul>
 <li>The <code>--json</code>, <code>--text</code> and <code>--html</code> shorthands are gone; use <code>--format json|text|html</code>.</li>
-<li>The <code>--config</code> / <code>-c</code> flag is gone. The configuration file is discovered automatically, <a href="../../configuration/#how-polyscan-finds-your-config-file">searching upward from the analyzed path</a>.</li>
+<li>The <code>--config</code> / <code>-c</code> flag exists, but it takes a <code>.polyscan.toml</code> file, not a jscan configuration file. Without it, the configuration file is discovered automatically, <a href="../../configuration/#how-polyscan-finds-your-config-file">searching upward from the analyzed path</a>.</li>
 <li><code>--min-complexity</code> is now a flag on <code>analyze</code>; it limits which functions the report lists without changing any score.</li>
 <li>Everything else — <code>--select</code>, <code>--no-open</code>, <code>-o/--output</code> — is unchanged.</li>
 </ul>
 <h2 id="the-check-command">The <code>check</code> command<a class="headerlink" href="#the-check-command" title="Permanent link">&para;</a></h2>
 <p><code>polyscan check</code> replaces <code>jscan check</code> and keeps its exit codes: 0 for no issues, 1 for quality issues, and 2 when the analysis fails. The differences are in the flags:</p>
 <ul>
-<li>The thresholds come from flags only. The configuration file's <code>complexity.max_complexity</code> key is not read, so pass <code>--max-complexity</code> instead. The <code>--config</code> flag is gone, as on <code>analyze</code>.</li>
+<li>The thresholds come from flags or from the <code>[check]</code> section of <code>.polyscan.toml</code>. jscan's <code>complexity.max_complexity</code> key is gone. Use <code>--max-complexity</code>, or <code>check.max_complexity</code> in the new file. The <code>--config</code> flag takes a <code>.polyscan.toml</code> file, as on <code>analyze</code>.</li>
 <li><code>--allow-parse-errors</code> waives only syntax errors. A file that cannot be read still fails the check with exit code 2.</li>
 <li>The <code>--json</code> and <code>--verbose</code> flags are gone. <code>check</code> prints each finding as one line on standard error.</li>
 <li><code>--select</code> also accepts <code>clone</code>, which lists clones without failing the check.</li>
@@ -1887,9 +1887,17 @@
 </span></code></pre></div>
 <p>The Graphviz DOT export (<code>jscan deps --dot</code>) was retired with the command. The nodes and edges are in <code>.deps.graph</code> of the JSON output if you want to render the graph yourself.</p>
 <h2 id="the-init-command">The <code>init</code> command<a class="headerlink" href="#the-init-command" title="Permanent link">&para;</a></h2>
-<p><code>jscan init</code> was retired. polyscan still reads the same configuration file — <code>jscan.config.json</code> or any of the <a href="../../configuration/#accepted-filenames">other accepted names</a> — it just no longer generates one. The <a href="../../configuration/examples/">configuration examples</a> page has complete files to copy.</p>
-<h2 id="configuration-is-unchanged">Configuration is unchanged<a class="headerlink" href="#configuration-is-unchanged" title="Permanent link">&para;</a></h2>
-<p>Your existing <code>jscan.config.json</code> keeps working as-is for the JavaScript/TypeScript analysis: same discovery order, same keys, same validation, including the <code>JSCAN_CONFIG</code> environment variable. See the <a href="../../configuration/">configuration guide</a>.</p>
+<p><code>jscan init</code> was retired. polyscan does not generate a configuration file. Write a <code>.polyscan.toml</code> by hand, or copy one from the <a href="../../configuration/examples/">configuration examples</a> page.</p>
+<h2 id="the-configuration-file-changed">The configuration file changed<a class="headerlink" href="#the-configuration-file-changed" title="Permanent link">&para;</a></h2>
+<p>polyscan no longer reads <code>jscan.config.json</code> or any other jscan configuration file. One file, <code>.polyscan.toml</code>, now configures every language. If polyscan reaches a directory that has a jscan configuration file and no <code>.polyscan.toml</code>, the run fails with an error that names the file, so settings never stop applying without notice. Setting the <code>JSCAN_CONFIG</code> environment variable is an error too.</p>
+<p>To migrate, create a <code>.polyscan.toml</code> next to the old file:</p>
+<ul>
+<li><code>complexity.low_threshold</code> and <code>complexity.medium_threshold</code> carry over unchanged.</li>
+<li><code>analysis.exclude_patterns</code> becomes <code>analysis.exclude</code>. The built-in exclude list is always applied and can no longer be replaced, so you only need the entries beyond the defaults.</li>
+<li><code>output.min_complexity</code> becomes the <code>--min-complexity</code> flag of <code>polyscan analyze</code>.</li>
+<li>Every other key is dropped. polyscan rejects unknown keys, so leaving one in the new file is an error.</li>
+</ul>
+<p>The <a href="../../configuration/#migrating-from-a-jscan-configuration-file">configuration guide</a> has a worked example and lists the dropped keys.</p>
 <h2 id="the-npm-package">The npm package<a class="headerlink" href="#the-npm-package" title="Permanent link">&para;</a></h2>
 <p>Replace <code>jscan</code> with <code>polyscan</code> in <code>devDependencies</code> and scripts. Version numbers restart from polyscan's own line, so <code>jscan@0.10.0</code> is older code than the first polyscan releases despite the higher number; jscan's release history up to the merge is in the repository's <a href="https://github.com/ludo-technologies/polyscan/blob/main/jscan/CHANGELOG.md"><code>jscan/CHANGELOG.md</code></a>.</p>
 <p>If you install with Go, the path changed too:</p>

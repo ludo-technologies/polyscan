@@ -1706,7 +1706,7 @@
 </tbody>
 </table>
 <p>Header files, <code>.h</code> included, are analyzed as C++.</p>
-<p>The JavaScript/TypeScript collection additionally honors the project's <a href="../configuration/">configuration file</a> and the <code>.gitignore</code> at the root of the analyzed path, exactly as jscan did. The other languages are collected by extension alone.</p>
+<p>Every language skips its built-in directories and honors the <code>exclude</code> patterns of the project's <a href="../configuration/">configuration file</a> and the <code>--exclude</code> flag. The JavaScript/TypeScript collection additionally honors the <code>.gitignore</code> at the root of the analyzed path.</p>
 
 
 
