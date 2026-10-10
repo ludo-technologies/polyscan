@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-10
+
 ### Added
 
 - `polyscan check` checks the code against thresholds for a CI quality gate. It exits 0 when it finds no issues, 1 when it finds quality issues, and 2 when the analysis fails, including on an invalid flag. By default it fails on a function with cyclomatic complexity above 10, on critical JavaScript/TypeScript dead code, and on any circular dependency. A file that cannot be read or parsed also fails it. `--select`, `--max-complexity`, `--max-cycles`, `--allow-dead-code`, `--allow-circular-deps`, `--allow-parse-errors` and `--quiet` adjust the check (#182)
@@ -21,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A command error is printed once. Before, every error was printed twice
+- A JavaScript/TypeScript `throw` no longer counts as a decision point in cyclomatic complexity, and it is no longer counted in `exception_handlers`. Each `catch` clause counts as one decision point and one exception handler instead, as in C++. Before, every `throw` added one to the complexity of its function, so complexity scores and risk levels were too high on code that throws (#171)
+- A JavaScript/TypeScript function declaration nested in another function is reported once in complexity analysis. Before, a declaration nested in a function declaration was left out, and a declaration nested in an arrow function, a method or an exported function was reported a second time as `name_<line>`, which also inflated `total_functions` (#135)
+- Rust cohesion (LCOM4) links `self.x`, `self.m()` and `Self::f()` inside macro arguments, such as those of `format!`, `write!` or `assert!`, to the methods that use them. Before, those accesses were not seen, so methods lost their links and a method whose only field accesses were inside a macro was left out as a stub (#177)
 
 ## [0.5.2] - 2026-10-08
 
