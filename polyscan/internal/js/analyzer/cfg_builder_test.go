@@ -1299,6 +1299,69 @@ func TestCFGBuilder_BuildAll_Mixed(t *testing.T) {
 	}
 }
 
+func TestCFGBuilder_BuildAll_NestedFunctionDeclarations(t *testing.T) {
+	code := `
+const arrow = () => {
+  function inArrow(x) { if (x) { return 1; } return 0; }
+  return inArrow(1);
+};
+class K {
+  m() {
+    function inMethod(x) { if (x) { return 1; } return 0; }
+    return inMethod(1);
+  }
+}
+function named() {
+  function inNamed(x) { if (x) { return 1; } return 0; }
+  return inNamed(1);
+}
+export function exported(x) {
+  function inExported(y) { if (y) { return 1; } return 0; }
+  return inExported(x);
+}
+function top(items) {
+  return items.map((x) => { if (x) { return 1; } return 0; });
+}
+`
+	ast := parseJS(t, code)
+	builder := NewCFGBuilder()
+	cfgs, err := builder.BuildAll(ast)
+	if err != nil {
+		t.Fatalf("BuildAll failed: %v", err)
+	}
+
+	want := []string{"inArrow", "inMethod", "inNamed", "inExported", "named", "exported", "top"}
+	for _, name := range want {
+		if cfgs[name] == nil {
+			t.Errorf("missing CFG %q; got %v", name, cfgNames(cfgs))
+		}
+	}
+	// Callback arrow inside top should be discovered (anonymous_<line>).
+	foundCallback := false
+	for name := range cfgs {
+		if strings.HasPrefix(name, "anonymous_") {
+			foundCallback = true
+			break
+		}
+	}
+	if !foundCallback {
+		t.Errorf("callback arrow inside top not discovered; got %v", cfgNames(cfgs))
+	}
+	for name := range cfgs {
+		if strings.Contains(name, "_") && !strings.HasPrefix(name, "anonymous_") && name != domain.ModuleFunctionName {
+			t.Errorf("duplicate function CFG %q; got %v", name, cfgNames(cfgs))
+		}
+	}
+}
+
+func cfgNames(cfgs map[string]*CFG) []string {
+	names := make([]string, 0, len(cfgs))
+	for name := range cfgs {
+		names = append(names, name)
+	}
+	return names
+}
+
 // Helper visitor for checking edge types
 type edgeTypeChecker struct {
 	onEdge func(*Edge)

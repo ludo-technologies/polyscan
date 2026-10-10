@@ -118,6 +118,52 @@ func (b *CFGBuilder) Build(node *parser.Node) (*CFG, error) {
 	return b.cfg, nil
 }
 
+// uniqueFunctionName returns name, or name_<line> when name is already used.
+func uniqueFunctionName(existing map[string]*CFG, name string, line int) string {
+	if _, exists := existing[name]; !exists {
+		return name
+	}
+	candidate := fmt.Sprintf("%s_%d", name, line)
+	if _, exists := existing[candidate]; !exists {
+		return candidate
+	}
+	for seq := 2; ; seq++ {
+		candidate = fmt.Sprintf("%s_%d_%d", name, line, seq)
+		if _, exists := existing[candidate]; !exists {
+			return candidate
+		}
+	}
+}
+
+// absorbNestedFunctionCFGs copies function CFGs built while analyzing a
+// parent function. Nested declarations are not rebuilt later, so dropping
+// them here omits them from the report.
+func absorbNestedFunctionCFGs(dest, nested map[string]*CFG) {
+	for name, cfg := range nested {
+		if _, exists := dest[name]; exists {
+			continue
+		}
+		dest[name] = cfg
+	}
+}
+
+// markFunctionLocations records function statements already represented by a
+// CFG so a later walk does not emit a second entry for the same source span.
+func markFunctionLocations(cfg *CFG, discovered map[string]bool) {
+	if cfg == nil {
+		return
+	}
+	for _, block := range cfg.Blocks {
+		for _, value := range block.Statements {
+			stmt, ok := jsNode(value)
+			if !ok || !stmt.IsFunction() {
+				continue
+			}
+			discovered[fmt.Sprintf("%d:%d", stmt.Location.StartLine, stmt.Location.StartCol)] = true
+		}
+	}
+}
+
 // resolveFunctionName returns the name of a function node, or a generated name
 // based on its source location if it is anonymous.
 func resolveFunctionName(node *parser.Node) string {
@@ -179,37 +225,29 @@ func (b *CFGBuilder) BuildAll(node *parser.Node) (map[string]*CFG, error) {
 
 		funcName := resolveFunctionName(n)
 
-		// Skip if already discovered
+		// Skip if already discovered (markFunctionLocations prevents name_<line>
+		// duplicates from Children/Body double visits). Still return true so the
+		// walk continues into function bodies and finds callbacks / nested
+		// function expressions that were not previously recorded.
 		locationKey := fmt.Sprintf("%d:%d", n.Location.StartLine, n.Location.StartCol)
 		if discoveredLocations[locationKey] {
 			return true
 		}
 		discoveredLocations[locationKey] = true
 
-		// Already have this name? Find a unique suffix
-		if _, exists := allCFGs[funcName]; exists {
-			base := funcName
-			funcName = fmt.Sprintf("%s_%d", base, n.Location.StartLine)
-			for seq := 2; ; seq++ {
-				if _, exists := allCFGs[funcName]; !exists {
-					break
-				}
-				funcName = fmt.Sprintf("%s_%d_%d", base, n.Location.StartLine, seq)
-			}
-		}
+		funcName = uniqueFunctionName(allCFGs, funcName, n.Location.StartLine)
 
 		funcBuilder := NewCFGBuilder()
 		funcCFG, err := funcBuilder.Build(n)
 		if err == nil {
 			allCFGs[funcName] = funcCFG
-			// Also discover nested functions from this builder
-			for nestedName, nestedCFG := range funcBuilder.functionCFGs {
-				if _, exists := allCFGs[nestedName]; !exists {
-					allCFGs[nestedName] = nestedCFG
-				}
+			absorbNestedFunctionCFGs(allCFGs, funcBuilder.functionCFGs)
+			markFunctionLocations(funcCFG, discoveredLocations)
+			for _, nestedCFG := range funcBuilder.functionCFGs {
+				markFunctionLocations(nestedCFG, discoveredLocations)
 			}
 		}
-		return false // Don't descend into this function's body (Build handles it)
+		return true // Continue walk into body to discover nested callbacks
 	})
 
 	return allCFGs, nil
@@ -299,7 +337,10 @@ func (b *CFGBuilder) processStatement(node *parser.Node) {
 		funcBuilder := NewCFGBuilder()
 		funcCFG, err := funcBuilder.Build(node)
 		if err == nil {
-			b.functionCFGs[funcName] = funcCFG
+			// Keep declarations nested inside this function. Their nodes are
+			// recorded on the child CFG, so BuildAll will not rebuild them.
+			b.functionCFGs[uniqueFunctionName(b.functionCFGs, funcName, node.Location.StartLine)] = funcCFG
+			absorbNestedFunctionCFGs(b.functionCFGs, funcBuilder.functionCFGs)
 		}
 
 		// Add function expression as statement in current block
