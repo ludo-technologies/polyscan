@@ -26,8 +26,9 @@ func run(t *testing.T, args ...string) (string, error) {
 type analyzeJSON struct {
 	Complexity *struct {
 		Functions []struct {
-			Name     string `json:"name"`
-			Language string `json:"language"`
+			Name      string `json:"name"`
+			Language  string `json:"language"`
+			RiskLevel string `json:"risk_level"`
 		} `json:"functions"`
 		Summary struct {
 			TotalFunctions int `json:"total_functions"`
@@ -343,27 +344,6 @@ func TestAnalyzeJavaScriptOnly(t *testing.T) {
 	}
 	if !strings.Contains(out, "polyscan Analysis Report") || !strings.Contains(out, "Health Score") {
 		t.Errorf("expected the unified text report, got:\n%s", out)
-	}
-}
-
-func TestAnalyzeIgnoresJSConfigWithoutJSFiles(t *testing.T) {
-	dir := t.TempDir()
-	src, err := os.ReadFile("../../testdata/go/sample.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "sample.go"), src, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "jscan.config.json"), []byte("{not json"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	out, err := run(t, "analyze", "--format", "text", dir)
-	if err != nil {
-		t.Fatalf("a JavaScript configuration must not fail a tree without JavaScript: %v\n%s", err, out)
-	}
-	if !strings.Contains(out, "Server.Handle: 8") {
-		t.Errorf("unexpected output:\n%s", out)
 	}
 }
 
@@ -736,7 +716,11 @@ func writeFiles(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	for name, content := range files {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -845,23 +829,96 @@ func TestAnalyzeErrorExitCode(t *testing.T) {
 	}
 }
 
-// The configuration's output.min_complexity only limits which functions the
-// report lists, so a function it hides must still fail the check.
-func TestCheckIgnoresReportFilters(t *testing.T) {
+// branchesJS has cyclomatic complexity 4.
+const branchesJS = "export function branches(a) {\n" +
+	"  if (a > 1) { return 1; }\n" +
+	"  if (a > 2) { return 2; }\n" +
+	"  if (a > 3) { return 3; }\n" +
+	"  return 0;\n" +
+	"}\n"
+
+func TestCheckReadsConfigFile(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
-		"jscan.config.json": `{"output":{"min_complexity":20}}`,
-		"branches.js": "export function branches(a) {\n" +
-			"  if (a > 1) { return 1; }\n" +
-			"  if (a > 2) { return 2; }\n" +
-			"  if (a > 3) { return 3; }\n" +
-			"  return 0;\n" +
-			"}\n",
+		".polyscan.toml":        "[analysis]\nexclude = [\"gen\"]\n\n[check]\nmax_complexity = 2\n",
+		"src/branches.js":       branchesJS,
+		"src/gen/generated.js":  branchesJS,
+		"src/gen/generated2.js": branchesJS,
 	})
-	out, err := run(t, "check", "--select", "complexity", "--max-complexity", "2", dir)
-	if err == nil || exitCodeFor(err) != exitCodeQualityIssues {
-		t.Fatalf("err = %v, want a quality failure\n%s", err, out)
+	target := filepath.Join(dir, "src")
+
+	out, err := run(t, "check", "--select", "complexity", target)
+	if err == nil || exitCodeFor(err) != exitCodeQualityIssues || err.Error() != "found 1 quality issue(s)" {
+		t.Fatalf("err = %v, want one quality issue from [check] max_complexity\n%s", err, out)
 	}
-	if want := "branches.js:1: branches is too complex (4 > 2)"; !strings.Contains(out, want) {
+	if want := "branches is too complex (4 > 2)"; !strings.Contains(out, want) {
 		t.Errorf("output lacks %q:\n%s", want, out)
+	}
+
+	// A flag takes precedence over the file.
+	if out, err := run(t, "check", "--select", "complexity", "--max-complexity", "4", target); err != nil {
+		t.Errorf("--max-complexity 4 did not override the file: %v\n%s", err, out)
+	}
+	// --exclude adds to the file's patterns.
+	if out, err := run(t, "check", "--select", "complexity", "--exclude", "branches.js", target); err == nil || exitCodeFor(err) != exitCodeAnalysisError {
+		t.Errorf("err = %v, want no files left to check\n%s", err, out)
+	}
+}
+
+func TestConfigFlag(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		".polyscan.toml": "[check]\nmax_complexity = 2\n",
+		"ci.toml":        "[check]\nmax_complexity = 4\n",
+		"branches.js":    branchesJS,
+	})
+	out, err := run(t, "check", "--select", "complexity", "-c", filepath.Join(dir, "ci.toml"), dir)
+	if err != nil {
+		t.Errorf("the --config file did not replace the discovered one: %v\n%s", err, out)
+	}
+}
+
+func TestConfigComplexityThresholds(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		".polyscan.toml": "[complexity]\nlow_threshold = 2\nmedium_threshold = 3\n",
+		"branches.js":    branchesJS,
+	})
+	src, err := os.ReadFile("../../testdata/go/sample.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "sample.go"), src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := run(t, "analyze", "--format", "json", "--select", "complexity", dir)
+	if err != nil {
+		t.Fatalf("analyze: %v\n%s", err, out)
+	}
+	doc := decodeAnalyzeJSON(t, out)
+	// Both complexity 4, above medium_threshold 3, in either language.
+	want := map[string]bool{"branches": true, "Branches": true}
+	for _, fn := range doc.Complexity.Functions {
+		if want[fn.Name] {
+			if fn.RiskLevel != "high" {
+				t.Errorf("%s risk = %s, want high", fn.Name, fn.RiskLevel)
+			}
+			delete(want, fn.Name)
+		}
+	}
+	if len(want) > 0 {
+		t.Errorf("functions missing from the report: %v\n%s", want, out)
+	}
+}
+
+func TestConfigRejectsJscanFile(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		"jscan.config.json": "{}",
+		"branches.js":       branchesJS,
+	})
+	out, err := run(t, "check", dir)
+	if err == nil || exitCodeFor(err) != exitCodeAnalysisError || !strings.Contains(err.Error(), "jscan.config.json is no longer read") {
+		t.Errorf("err = %v, want an analysis error naming jscan.config.json\n%s", err, out)
+	}
+	if _, err := run(t, "analyze", "--format", "text", dir); err == nil {
+		t.Error("analyze ignored jscan.config.json")
 	}
 }

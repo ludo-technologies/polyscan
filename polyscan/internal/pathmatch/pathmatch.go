@@ -1,5 +1,6 @@
-// Package pathmatch matches paths against the exclude and include patterns
-// polyscan accepts on the command line and in jscan.config.json.
+// Package pathmatch matches paths against exclude and include patterns: the
+// ones polyscan accepts on the command line and in .polyscan.toml, and the
+// built-in JavaScript/TypeScript lists.
 package pathmatch
 
 import (

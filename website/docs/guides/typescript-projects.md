@@ -57,7 +57,7 @@ The effects are:
 
 Relative imports such as `./util` and `../lib/util` resolve correctly, so a project that uses relative imports throughout gets an accurate graph.
 
-There is a `module_analysis.alias_patterns` key in the configuration schema, defaulting to `["@/", "~/"]`, but no command reads it yet. See the [configuration reference](../configuration/reference.md#reserved-groups).
+There is no configuration key for path aliases.
 
 !!! tip "Getting an accurate graph today"
 
@@ -71,31 +71,15 @@ There is a `module_analysis.alias_patterns` key in the configuration schema, def
 
 ### 1. Check the exclude patterns first
 
-An exclude pattern matches a whole file or directory name, so `dist` skips a directory named `dist` and leaves `src/utils/distance.ts` alone. Any pattern that names a directory you did not mean to exclude removes every file under it, and nothing in the output mentions the missing files. The only clue is a low count on the `Analyzing N files...` line.
+An exclude pattern without a slash matches a whole file or directory name, so `dist` skips a directory named `dist` and leaves `src/utils/distance.ts` alone. Any pattern that names a directory you did not mean to exclude removes every file under it, and nothing in the output mentions the missing files. The only clue is a low count on the `Analyzing N files...` line.
 
 jscan versions up to 0.9.0 matched a pattern against any part of a path, so the default entries `out` and `dist` silently dropped `src/routes/`, `src/layout/`, `app/**/layout.tsx`, `src/checkout/`, and `src/utils/distance.ts`. polyscan matches whole names only.
 
-A short explicit list is still worth writing, because your own list replaces the default rather than extending it:
+For JavaScript/TypeScript, polyscan already skips `node_modules`, `dist`, `build`, `.next`, `.nuxt`, `.turbo`, `coverage`, minified files and the rest of a built-in list, and it adds your `analysis.exclude` patterns to that list. You only write what is specific to your project:
 
-```json title="jscan.config.json"
-{
-  "complexity": {
-    "low_threshold": 12,
-    "medium_threshold": 24
-  },
-  "analysis": {
-    "exclude_patterns": [
-      "node_modules",
-      "coverage",
-      ".git",
-      ".next",
-      ".nuxt",
-      ".turbo",
-      "*.min.js",
-      "*.map"
-    ]
-  }
-}
+```toml title=".polyscan.toml"
+[analysis]
+exclude = ["storybook-static", "src/generated/**"]
 ```
 
 Then confirm the file count matches reality:
@@ -124,13 +108,10 @@ Pass the whole source root rather than a subdirectory. The unused-export analysi
 
 Component code accumulates conditional rendering, and each `&&`, `||`, `??`, and `?:` counts toward cyclomatic complexity. A React component that is entirely readable can score 12 to 15 on that measure. Thresholds of 12 and 24 rather than the default 9 and 19 give a truer picture.
 
-```json
-{
-  "complexity": {
-    "low_threshold": 12,
-    "medium_threshold": 24
-  }
-}
+```toml title=".polyscan.toml"
+[complexity]
+low_threshold = 12
+medium_threshold = 24
 ```
 
 ### 4. Gate on critical findings first
@@ -154,7 +135,7 @@ for pkg in packages/*/; do
 done
 ```
 
-Because config discovery walks upward from the analyzed path, each package can carry its own `jscan.config.json` and fall back to a root file when it has none. The [monorepo example](../configuration/examples.md#monorepo) shows the layout.
+Because config discovery walks upward from the analyzed path, each package can carry its own `.polyscan.toml` and use a root file when it has none. The nearest file wins, and files are not merged. The [monorepo example](../configuration/examples.md#monorepo) shows the layout.
 
 Cross-package imports usually go through a workspace alias such as `@myorg/core`, which polyscan does not resolve, so a per-package run cannot see them. Run `polyscan analyze packages/` for the combined view and per-package runs for the gates.
 

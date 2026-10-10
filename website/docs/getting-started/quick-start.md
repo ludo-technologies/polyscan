@@ -69,20 +69,20 @@ polyscan check src/
 
 `check` exits 1 when a function is too complex, when it finds critical dead code, or when it finds a circular dependency, and 2 when the analysis fails. The [check page](../cli/check.md) lists its thresholds, and the [CI/CD page](../integrations/ci-cd.md) has complete pipeline configurations.
 
-## 5. Configure the JavaScript/TypeScript analysis
+## 5. Configure polyscan
 
-The JavaScript/TypeScript analysis reads a `jscan.config.json` when the project has one — the configuration format carried over from jscan, the analyzer that merged into polyscan. It supplies complexity thresholds and exclude patterns:
+polyscan reads a `.polyscan.toml` when the project has one. It searches the analyzed directory and then each parent directory, and the same file configures Go, Rust, C++ and JavaScript/TypeScript. It supplies complexity thresholds, extra files to leave out, and the limits of `polyscan check`:
 
-```json title="jscan.config.json"
-{
-  "complexity": {
-    "low_threshold": 10,
-    "medium_threshold": 20
-  }
-}
+```toml title=".polyscan.toml"
+[complexity]
+low_threshold = 10
+medium_threshold = 20
+
+[analysis]
+exclude = ["fixtures", "src/generated/**"]
 ```
 
-Be aware that polyscan reads only part of that file. The [configuration guide](../configuration/index.md) states plainly which keys take effect and which are accepted but not applied. There is no configuration file for the other languages yet.
+The file is strict. A key that polyscan does not know is an error that names the key, so a misspelled setting is never silently ignored. The [configuration guide](../configuration/index.md) describes discovery, the `--config` flag, and how flags combine with the file.
 
 ## Where to go next
 

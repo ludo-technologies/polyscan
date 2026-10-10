@@ -56,9 +56,9 @@ An agent will report what polyscan says, and polyscan has limitations that are e
 
 **Unused exports depend on what was analyzed.** If the agent runs polyscan on one directory, every export in it is reported as unused, because the importers elsewhere were never read. Ask the agent to analyze the whole source root before acting on those findings.
 
-**A clean report only covers the files that were read.** If an agent reports a clean codebase, ask it to confirm the file count on the `Analyzing N files...` line against the number of source files you actually have. The [configuration reference](../configuration/reference.md#analysisexclude_patterns) describes how the exclude patterns match.
+**A clean report only covers the files that were read.** If an agent reports a clean codebase, ask it to confirm the file count on the `Analyzing N files...` line against the number of source files you actually have. The [configuration reference](../configuration/reference.md#analysisexclude) describes how the exclude patterns match.
 
-Committing a `jscan.config.json` records your exclude list for every future agent run, since the agent picks the file up automatically.
+Committing a `.polyscan.toml` records your exclude list and thresholds for every future agent run, since polyscan picks up the nearest file automatically.
 
 ## Working with Python too?
 

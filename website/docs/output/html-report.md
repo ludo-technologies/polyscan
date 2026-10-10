@@ -34,7 +34,7 @@ The **verdict** pairs the health score ring with a sentence naming which dimensi
 
 The **score breakdown** gives each dimension its own card with the score, a bar, and the two figures that produced it. Clicking a card jumps to the tab that explains it. Dimensions that did not run — because `--select` excluded them, or because no analyzed language has them — are absent rather than shown as clean.
 
-The **complexity distribution** buckets every analyzed function by cyclomatic complexity. The bucket edges follow the thresholds the run actually used, so the colored buckets hold only functions that really are medium or high risk, and the dashed line marks the complexity where risk begins. Change the JavaScript/TypeScript thresholds with [`complexity.low_threshold`](../configuration/reference.md#complexitylow_threshold) and [`complexity.medium_threshold`](../configuration/reference.md#complexitymedium_threshold).
+The **complexity distribution** buckets every analyzed function by cyclomatic complexity. The bucket edges follow the thresholds the run actually used, so the colored buckets hold only functions that really are medium or high risk, and the dashed line marks the complexity where risk begins. Change the thresholds, for every language, with [`complexity.low_threshold`](../configuration/reference.md#complexitylow_threshold) and [`complexity.medium_threshold`](../configuration/reference.md#complexitymedium_threshold).
 
 **Hotspot files** ranks the eight files with the most high-risk functions, then by maximum complexity, joining complexity, dead code, and clone counts per file across every language. The Functions tab has the complete list.
 
@@ -59,11 +59,9 @@ The dead code limit applies to the table as a whole rather than per function. Us
 
 ## Sorting
 
-Each table is sorted by the metric it is about, worst first. Functions are ordered by descending complexity, classes by descending coupling, and clone groups by descending similarity. Since the tables are truncated, this means you always see the worst offenders rather than an arbitrary sample.
+Each table is sorted by the metric it is about, worst first, and no configuration key changes the order. Functions are ordered by descending complexity, classes by descending coupling, and clone groups by descending similarity. Since the tables are truncated, this means you always see the worst offenders rather than an arbitrary sample.
 
 The two full-length tables on the Functions tab, **All modules** and **Directory complexity**, are sortable in the browser: click a column heading to sort by it and click again to reverse.
-
-The most-complex-functions table is the one exception to worst-first: it follows [`output.sort_by`](../configuration/reference.md#outputsort_by). Setting that key to `name` therefore leaves you with the first 20 functions alphabetically rather than the 20 worst, which is rarely what you want in the HTML report. The other tables ignore it.
 
 ## Dark mode
 

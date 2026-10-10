@@ -169,11 +169,11 @@ func genericComplexity(report *analysis.Report) (*domain.ComplexityResponse, err
 		Errors:      domain.DiagnosticMessages(report.Diagnostics),
 		GeneratedAt: time.Now().Format(time.RFC3339),
 		Version:     version.Version,
-		// The generic engine classifies risk with the shared defaults; the
-		// report reads the thresholds back from here to band its histogram.
+		// The report reads the thresholds back from here to band its
+		// histogram.
 		Config: map[string]interface{}{
-			"low_threshold":    coredomain.DefaultComplexityLowThreshold,
-			"medium_threshold": coredomain.DefaultComplexityMediumThreshold,
+			"low_threshold":    src.Thresholds.Low,
+			"medium_threshold": src.Thresholds.Medium,
 		},
 	}, nil
 }

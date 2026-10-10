@@ -10,9 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `polyscan check` checks the code against thresholds for a CI quality gate. It exits 0 when it finds no issues, 1 when it finds quality issues, and 2 when the analysis fails, including on an invalid flag. By default it fails on a function with cyclomatic complexity above 10, on critical JavaScript/TypeScript dead code, and on any circular dependency. A file that cannot be read or parsed also fails it. `--select`, `--max-complexity`, `--max-cycles`, `--allow-dead-code`, `--allow-circular-deps`, `--allow-parse-errors` and `--quiet` adjust the check (#182)
+- One configuration file, `.polyscan.toml`, configures every language. polyscan reads the nearest one in the first analyzed path or a directory above it, or the file given with the new `--config`/`-c` flag of `analyze` and `check`. `[analysis]` sets `exclude` and `include_tests`, `[complexity]` sets the risk thresholds, and `[check]` sets the thresholds of `polyscan check`. A flag takes precedence over the file, and `--exclude` adds to its patterns. An unknown key or an invalid value fails the run (#183)
 
 ### Changed
 
+- polyscan no longer reads the jscan configuration files, such as `jscan.config.json`, or the `JSCAN_CONFIG` variable. A run that finds one before any `.polyscan.toml` fails with a message that names the file. Move `complexity.low_threshold` and `complexity.medium_threshold` to `.polyscan.toml` as they are, and move the `analysis.exclude_patterns` entries beyond the built-in list to `analysis.exclude`. The other jscan keys have no replacement in the file. They include `analysis.include_patterns`, `analysis.recursive`, `output.min_complexity`, `output.sort_by`, `dead_code.min_severity` and `dead_code.sort_by`. Use `--min-complexity` in place of `output.min_complexity` (#183)
+- The complexity risk thresholds apply to Go, Rust and C++ as well as to JavaScript/TypeScript. Before, Go, Rust and C++ always used the defaults of 9 and 19 (#183)
 - A JavaScript/TypeScript file that cannot be read or parsed no longer makes `analyze` print a JavaScript clone analysis error. The file is still listed under errors and charged to the health score, as it is for the other analyses
 
 ### Fixed

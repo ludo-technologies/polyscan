@@ -18,6 +18,9 @@ polyscan analyze --format text src/                      # Text to standard outp
 polyscan analyze --no-open src/                          # HTML report, no browser
 polyscan analyze -o reports/quality.html src/            # Custom output path
 polyscan analyze --min-complexity 10 .                   # List only functions at or above 10
+polyscan analyze --exclude 'src/generated/**' .          # Leave a directory out of every analysis
+polyscan analyze --include-tests .                       # Analyze test files and test code too
+polyscan analyze -c ci.polyscan.toml .                   # Read the settings from a named file
 polyscan analyze src/ test/ scripts/build.ts             # Several paths at once
 ```
 
@@ -30,14 +33,17 @@ polyscan analyze src/ test/ scripts/build.ts             # Several paths at once
 | `--no-open` | | `false` | Write the HTML report without opening a browser |
 | `--output` | `-o` | `polyscan-report.html` | Path for the HTML report file |
 | `--min-complexity` | | `1` | List only functions with at least this complexity. Scores and summaries still cover every function |
+| `--config` | `-c` | | The `.polyscan.toml` file to read. Skips discovery. The file must exist |
+| `--exclude` | | | Files and directories to leave out, comma-separated or repeated. A glob without a slash matches a file name or a directory name anywhere on the path. A glob with a slash matches a path relative to the analyzed directory, with `**` for any number of segments. The patterns are added to those of the configuration file |
+| `--include-tests` | | `false` | Analyze test files and test code, which are left out by default. When given, it replaces `analysis.include_tests` in the configuration file |
 
-The configuration file for the JavaScript/TypeScript analysis is discovered automatically; there is no `--config` flag. See [how polyscan finds your config file](../configuration/index.md#how-polyscan-finds-your-config-file).
+Without `--config`, polyscan reads the nearest `.polyscan.toml` in the first path or a directory above it. The file sets the complexity thresholds, the files to leave out and whether test code is analyzed for every language, and a flag takes precedence over it. See [how polyscan finds your config file](../configuration/index.md#how-polyscan-finds-your-config-file). A configuration error ends the command with exit code 1.
 
 ## Language coverage
 
 The language of each file is detected from its extension. Complexity and clone detection cover every supported language. Dependency analysis covers Go and JavaScript/TypeScript. Coupling (CBO) covers Go, Rust and JavaScript/TypeScript, and cohesion (LCOM4) Go and Rust. Dead code exists for JavaScript/TypeScript only, and the health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.
 
-For Go, Rust and C++, version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. JavaScript/TypeScript exclusions come from `jscan.config.json`. A file that cannot be read is skipped and listed under errors. A file with a syntax error is analyzed without the functions that contain it, counted as partial, and listed under warnings. C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
+For Go, Rust and C++, version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. JavaScript/TypeScript additionally skips a longer built-in list and the files its root `.gitignore` ignores. Further exclusions for every language come from `analysis.exclude` in the configuration file and from `--exclude`; see the [built-in skips](../configuration/reference.md#built-in-skips). A file that cannot be read is skipped and listed under errors. A file with a syntax error is analyzed without the functions that contain it, counted as partial, and listed under warnings. C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
 
 ## Output behavior
 
@@ -73,7 +79,7 @@ The other languages count decision points the same way on their own constructs:
 
 In Go, Rust and C++, function literals, closures and lambdas are not reported on their own: their decision points count toward the enclosing function, so the Go numbers match gocyclo.
 
-Functions are assigned a risk level from two thresholds, configurable for JavaScript/TypeScript and fixed at the defaults for the other languages:
+Functions are assigned a risk level from two thresholds, which are the same for every language and are set by `complexity.low_threshold` and `complexity.medium_threshold` in the configuration file:
 
 | Risk | Condition | Default range |
 | --- | --- | --- |
@@ -81,7 +87,7 @@ Functions are assigned a risk level from two thresholds, configurable for JavaSc
 | Medium | `low_threshold` < complexity ≤ `medium_threshold` | 10 to 19 |
 | High | complexity > `medium_threshold` | 20 and above |
 
-Functions below `--min-complexity` (or `output.min_complexity` in the config file, for JavaScript/TypeScript) are dropped from the listing; the summary and every score still cover the complete analyzed population.
+Functions below `--min-complexity` are dropped from the listing; the summary and every score still cover the complete analyzed population.
 
 ### Dead code {#dead-code}
 
@@ -173,5 +179,5 @@ The progress bar shown during an interactive run is driven by an elapsed-time es
 ## See also
 
 - [Output formats](../output/index.md) for the shape of each report
-- [Configuration reference](../configuration/reference.md) for the keys that change the JavaScript/TypeScript thresholds
+- [Configuration reference](../configuration/reference.md) for the keys that change the thresholds and the files analyzed
 - [CI/CD integration](../integrations/ci-cd.md) for gating a pipeline on the results

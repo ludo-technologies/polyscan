@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ludo-technologies/polyscan/polyscan/internal/config"
 	jsdomain "github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 	"github.com/spf13/cobra"
 )
@@ -47,15 +48,12 @@ func exitCodeFor(err error) int {
 var checkAnalyses = []string{selectComplexity, selectDeadCode, selectClone, selectDeps}
 
 type checkOptions struct {
-	selected          []string
-	maxComplexity     int
-	maxCycles         int
-	allowDeadCode     bool
-	allowCircularDeps bool
-	allowParseErrors  bool
-	quiet             bool
-	exclude           []string
-	includeTests      bool
+	selected []string
+	quiet    bool
+	files    fileFlags
+	// limits holds the threshold flags until load lays them over the
+	// configuration's, and the merged thresholds after.
+	limits config.Check
 }
 
 func checkCmd() *cobra.Command {
@@ -77,6 +75,11 @@ Complexity, dead code and dependency analysis run by default. Clone detection
 runs only when selected with --select, and clones never fail the check. With no
 path, the current directory is checked.
 
+The thresholds and the files to check are read from the [check] and
+[analysis] sections of the nearest ` + config.FileName + ` in the first path or a
+directory above it, or of the file given with --config. A flag takes
+precedence over the file, and --exclude adds to its patterns.
+
 Exit codes:
   0  No issues found
   1  Quality issues found
@@ -94,7 +97,11 @@ Examples:
 			if len(args) == 0 {
 				args = []string{"."}
 			}
-			issues, err := opts.run(args, cmd.ErrOrStderr())
+			cfg, err := opts.load(cmd, args[0])
+			if err != nil {
+				return &analysisError{err: err}
+			}
+			issues, err := opts.run(args, cfg, cmd.ErrOrStderr())
 			if err != nil {
 				return &analysisError{err: err}
 			}
@@ -113,25 +120,42 @@ Examples:
 	cmd.Flags().StringSliceVarP(&opts.selected, "select", "s",
 		[]string{selectComplexity, selectDeadCode, selectDeps},
 		"Analyses to run (comma-separated): "+strings.Join(checkAnalyses, ","))
-	cmd.Flags().IntVar(&opts.maxComplexity, "max-complexity", 10, "Maximum allowed cyclomatic complexity of a function")
-	cmd.Flags().IntVar(&opts.maxCycles, "max-cycles", 0, "Maximum allowed circular dependency cycles")
-	cmd.Flags().BoolVar(&opts.allowDeadCode, "allow-dead-code", false, "Report dead code without failing")
-	cmd.Flags().BoolVar(&opts.allowCircularDeps, "allow-circular-deps", false, "Report circular dependencies without failing")
-	cmd.Flags().BoolVar(&opts.allowParseErrors, "allow-parse-errors", false, "Skip unparsable files without failing; unreadable files still fail")
+	defaults := config.Default().Check
+	cmd.Flags().IntVar(&opts.limits.MaxComplexity, "max-complexity", defaults.MaxComplexity, "Maximum allowed cyclomatic complexity of a function")
+	cmd.Flags().IntVar(&opts.limits.MaxCycles, "max-cycles", defaults.MaxCycles, "Maximum allowed circular dependency cycles")
+	cmd.Flags().BoolVar(&opts.limits.AllowDeadCode, "allow-dead-code", defaults.AllowDeadCode, "Report dead code without failing")
+	cmd.Flags().BoolVar(&opts.limits.AllowCircularDeps, "allow-circular-deps", defaults.AllowCircularDeps, "Report circular dependencies without failing")
+	cmd.Flags().BoolVar(&opts.limits.AllowParseErrors, "allow-parse-errors", defaults.AllowParseErrors, "Skip unparsable files without failing; unreadable files still fail")
 	cmd.Flags().BoolVarP(&opts.quiet, "quiet", "q", false, "Print nothing but warnings unless issues are found")
-	addFileFlags(cmd, &opts.exclude, &opts.includeTests)
+	opts.files.add(cmd)
 	return cmd
+}
+
+// load loads the configuration for a check of target and lays the threshold
+// flags given on the command line over its [check] section.
+func (o *checkOptions) load(cmd *cobra.Command, target string) (*config.Config, error) {
+	cfg, err := o.files.load(cmd, target)
+	if err != nil {
+		return nil, err
+	}
+	override(cmd, "max-complexity", &cfg.Check.MaxComplexity, o.limits.MaxComplexity)
+	override(cmd, "max-cycles", &cfg.Check.MaxCycles, o.limits.MaxCycles)
+	override(cmd, "allow-dead-code", &cfg.Check.AllowDeadCode, o.limits.AllowDeadCode)
+	override(cmd, "allow-circular-deps", &cfg.Check.AllowCircularDeps, o.limits.AllowCircularDeps)
+	override(cmd, "allow-parse-errors", &cfg.Check.AllowParseErrors, o.limits.AllowParseErrors)
+	o.limits = cfg.Check
+	return cfg, nil
 }
 
 // run analyzes paths and writes each finding to w. It returns the number of
 // quality issues, or an error when the analysis could not give a verdict.
 // Lines that inform without failing the check, such as clones and allowed
 // findings, are left out in quiet mode.
-func (o checkOptions) run(paths []string, w io.Writer) (int, error) {
-	if o.maxComplexity < 1 {
+func (o checkOptions) run(paths []string, cfg *config.Config, w io.Writer) (int, error) {
+	if o.limits.MaxComplexity < 1 {
 		return 0, fmt.Errorf("--max-complexity must be at least 1")
 	}
-	if o.maxCycles < 0 {
+	if o.limits.MaxCycles < 0 {
 		return 0, fmt.Errorf("--max-cycles must not be negative")
 	}
 	for _, name := range o.selected {
@@ -143,7 +167,6 @@ func (o checkOptions) run(paths []string, w io.Writer) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	options.IncludeTests = o.includeTests
 
 	info := w
 	if o.quiet {
@@ -151,7 +174,7 @@ func (o checkOptions) run(paths []string, w io.Writer) (int, error) {
 	}
 	fmt.Fprintf(info, "Running quality check (%s)...\n", strings.Join(o.selected, ", "))
 
-	results, failures, err := runAnalyses(paths, options, selection, o.exclude, o.includeTests, w)
+	results, failures, err := runAnalyses(paths, options, selection, cfg)
 	if err != nil {
 		return 0, err
 	}
@@ -189,7 +212,7 @@ func (o checkOptions) run(paths []string, w io.Writer) (int, error) {
 func (o checkOptions) checkDiagnostics(diagnostics []jsdomain.AnalysisDiagnostic, w, info io.Writer) error {
 	blocking := 0
 	for _, diagnostic := range diagnostics {
-		if o.allowParseErrors && diagnostic.Code == jsdomain.DiagnosticCodeParse {
+		if o.limits.AllowParseErrors && diagnostic.Code == jsdomain.DiagnosticCodeParse {
 			fmt.Fprintln(info, diagnostic)
 			continue
 		}
@@ -199,7 +222,7 @@ func (o checkOptions) checkDiagnostics(diagnostics []jsdomain.AnalysisDiagnostic
 	if blocking == 0 {
 		return nil
 	}
-	if o.allowParseErrors {
+	if o.limits.AllowParseErrors {
 		return fmt.Errorf("%d file(s) could not be read", blocking)
 	}
 	return fmt.Errorf("%d file(s) could not be analyzed (use --allow-parse-errors to skip parse errors)", blocking)
@@ -213,10 +236,10 @@ func (o checkOptions) complexityIssues(complexity *jsdomain.ComplexityResponse, 
 	}
 	issues := 0
 	for _, fn := range complexity.AnalyzedFunctions {
-		if fn.Metrics.Complexity > o.maxComplexity {
+		if fn.Metrics.Complexity > o.limits.MaxComplexity {
 			issues++
 			fmt.Fprintf(w, "%s:%d: %s is too complex (%d > %d)\n",
-				fn.FilePath, fn.StartLine, fn.Name, fn.Metrics.Complexity, o.maxComplexity)
+				fn.FilePath, fn.StartLine, fn.Name, fn.Metrics.Complexity, o.limits.MaxComplexity)
 		}
 	}
 	return issues
@@ -229,7 +252,7 @@ func (o checkOptions) deadCodeIssues(deadCode *jsdomain.DeadCodeResponse, w, inf
 		return 0
 	}
 	out := w
-	if o.allowDeadCode {
+	if o.limits.AllowDeadCode {
 		out = info
 	}
 	found := 0
@@ -247,7 +270,7 @@ func (o checkOptions) deadCodeIssues(deadCode *jsdomain.DeadCodeResponse, w, inf
 		}
 		report(file.FileLevelFindings)
 	}
-	if o.allowDeadCode {
+	if o.limits.AllowDeadCode {
 		if found > 0 {
 			fmt.Fprintf(info, "Found %d dead code issue(s) (allowed by --allow-dead-code)\n", found)
 		}
@@ -276,7 +299,7 @@ func (o checkOptions) cycleIssues(deps *jsdomain.DependencyGraphResponse, w, inf
 		return 0
 	}
 	cycles := deps.Analysis.CircularDependencies.CircularDependencies
-	failing := len(cycles) > o.maxCycles && !o.allowCircularDeps
+	failing := len(cycles) > o.limits.MaxCycles && !o.limits.AllowCircularDeps
 	out := info
 	if failing {
 		out = w
@@ -287,10 +310,10 @@ func (o checkOptions) cycleIssues(deps *jsdomain.DependencyGraphResponse, w, inf
 	switch {
 	case failing:
 		return len(cycles)
-	case len(cycles) > o.maxCycles:
+	case len(cycles) > o.limits.MaxCycles:
 		fmt.Fprintf(info, "Found %d circular dependency cycle(s) (allowed by --allow-circular-deps)\n", len(cycles))
 	case len(cycles) > 0:
-		fmt.Fprintf(info, "Found %d circular dependency cycle(s) (within --max-cycles %d)\n", len(cycles), o.maxCycles)
+		fmt.Fprintf(info, "Found %d circular dependency cycle(s) (within --max-cycles %d)\n", len(cycles), o.limits.MaxCycles)
 	}
 	return 0
 }

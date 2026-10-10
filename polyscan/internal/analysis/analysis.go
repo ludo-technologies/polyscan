@@ -18,7 +18,7 @@ import (
 	"github.com/ludo-technologies/polyscan/polyscan/internal/lang/golang"
 )
 
-// Options selects the analyses to run.
+// Options selects the analyses to run and tunes them.
 type Options struct {
 	Complexity bool
 	Clones     bool
@@ -37,6 +37,33 @@ type Options struct {
 	// dropped from the complexity report as they are from every other
 	// analysis.
 	IncludeTests bool
+	// ComplexityThresholds bands the risk level of each function. The
+	// complexity analysis requires them.
+	ComplexityThresholds ComplexityThresholds
+}
+
+// Selected reports whether any analysis is selected.
+func (o Options) Selected() bool {
+	return o.Complexity || o.Clones || o.Deps || o.LCOM || o.CBO
+}
+
+// ComplexityThresholds are the highest complexities of the low and medium
+// risk bands.
+type ComplexityThresholds struct {
+	Low    int
+	Medium int
+}
+
+// RiskLevel classifies a complexity.
+func (t ComplexityThresholds) RiskLevel(complexity int) domain.RiskLevel {
+	switch {
+	case complexity <= t.Low:
+		return domain.RiskLevelLow
+	case complexity <= t.Medium:
+		return domain.RiskLevelMedium
+	default:
+		return domain.RiskLevelHigh
+	}
 }
 
 // Function is the complexity result for one function.
@@ -81,6 +108,8 @@ type Complexity struct {
 	// Functions is sorted by descending complexity, then by location.
 	Functions []Function        `json:"functions"`
 	Summary   ComplexitySummary `json:"summary"`
+	// Thresholds banded the functions' risk levels.
+	Thresholds ComplexityThresholds `json:"-"`
 }
 
 // Files counts the files a run covered. Skipped files could not be read
@@ -133,6 +162,10 @@ var ErrNoFiles = errors.New("no supported source files found")
 // analysis reads its files again and reports the ones it leaves out in
 // Warnings.
 func Analyze(paths []string, options Options, exclude []string) (*Report, error) {
+	thresholds := options.ComplexityThresholds
+	if options.Complexity && (thresholds.Low < 1 || thresholds.Medium <= thresholds.Low) {
+		return nil, fmt.Errorf("invalid complexity thresholds: low %d, medium %d", thresholds.Low, thresholds.Medium)
+	}
 	files, err := collectFiles(paths, exclude, options.IncludeTests)
 	if err != nil {
 		return nil, err
@@ -148,7 +181,7 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 		}
 	}
 	if options.Complexity {
-		report.Complexity = &Complexity{Functions: []Function{}}
+		report.Complexity = &Complexity{Functions: []Function{}, Thresholds: thresholds}
 	}
 	detectors := map[*engine.Language]*clone.Detector{}
 	cloneLines, cloneFiles := 0, 0
@@ -183,7 +216,7 @@ func Analyze(paths []string, options Options, exclude []string) (*Report, error)
 
 		if options.Complexity {
 			for _, fn := range functions {
-				report.Complexity.Functions = append(report.Complexity.Functions, newFunction(fn, language, display))
+				report.Complexity.Functions = append(report.Complexity.Functions, newFunction(fn, language, display, thresholds))
 			}
 		}
 		if options.Clones && !language.IsTestFile(file.rel) {
@@ -307,7 +340,7 @@ func countLines(content []byte) int {
 	return lines
 }
 
-func newFunction(fn engine.Function, language *engine.Language, display string) Function {
+func newFunction(fn engine.Function, language *engine.Language, display string, thresholds ComplexityThresholds) Function {
 	return Function{
 		Name:         fn.Name,
 		FilePath:     display,
@@ -318,7 +351,7 @@ func newFunction(fn engine.Function, language *engine.Language, display string) 
 		Complexity:   fn.Complexity,
 		Decisions:    fn.Decisions,
 		NestingDepth: fn.NestingDepth,
-		RiskLevel:    RiskLevel(fn.EffectiveComplexity),
+		RiskLevel:    thresholds.RiskLevel(fn.EffectiveComplexity),
 	}
 }
 
@@ -415,19 +448,6 @@ func fragmentPrecedes(a, b clone.Fragment) bool {
 		return a.FilePath < b.FilePath
 	}
 	return a.StartLine < b.StartLine
-}
-
-// RiskLevel classifies a complexity with the thresholds shared by every
-// polyscan analyzer.
-func RiskLevel(complexity int) domain.RiskLevel {
-	switch {
-	case complexity <= domain.DefaultComplexityLowThreshold:
-		return domain.RiskLevelLow
-	case complexity <= domain.DefaultComplexityMediumThreshold:
-		return domain.RiskLevelMedium
-	default:
-		return domain.RiskLevelHigh
-	}
 }
 
 func sortFunctions(functions []Function) {

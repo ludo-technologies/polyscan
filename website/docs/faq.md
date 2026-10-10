@@ -12,11 +12,11 @@ It merged into polyscan: `polyscan analyze` runs the full jscan analysis on Java
 
 ### Why did polyscan analyze far fewer files than my project has?
 
-For JavaScript/TypeScript, check your exclude patterns first. A pattern in `analysis.exclude_patterns` matches a whole file or directory name, so `dist` skips a directory named `dist` and leaves `src/utils/distance.ts` alone. A pattern that names a directory you did not mean to exclude removes every file under it, and nothing in the output names the missing files. Compare the `Analyzing N files...` line against a `find` count to confirm. The [configuration reference](configuration/reference.md#analysisexclude_patterns) describes the matching rules.
+Check your exclude patterns first. A pattern in `analysis.exclude` or in `--exclude` that has no slash matches a whole file or directory name, so `dist` skips a directory named `dist` and leaves `src/utils/distance.ts` alone. A pattern that names a directory you did not mean to exclude removes every file under it, and nothing in the output names the missing files. Compare the `Analyzing N files...` line against a `find` count to confirm. The [configuration reference](configuration/reference.md#analysisexclude) describes the matching rules.
 
-A second possibility is your `.gitignore`. polyscan reads the one at the root of the analyzed directory and skips whatever JavaScript/TypeScript files it ignores.
+A second possibility is the built-in skips. Go, Rust and C++ skip every directory whose name starts with a dot, and directories named `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. JavaScript/TypeScript skips a longer built-in list. The [reference](configuration/reference.md#built-in-skips) lists both. A path named on the command line is analyzed whatever it is called.
 
-Go, Rust and C++ files are collected by extension alone: the config file, its exclude patterns and the `.gitignore` do not apply to them, so a vendored dependency tree written in those languages is analyzed unless you point polyscan below it.
+A third possibility is your `.gitignore`. polyscan reads the one at the root of the analyzed directory and skips whatever JavaScript/TypeScript files it ignores. The `.gitignore` does not apply to Go, Rust and C++ files.
 
 ### Why is every one of my exports reported as unused?
 
@@ -68,33 +68,25 @@ Check whether the `--select` value changed, or whether the analyzed language mix
 
 ## Configuration
 
-### I set a value in my config file and nothing changed. Why?
-
-polyscan validates the whole configuration schema but acts on only part of it, and the file applies to the JavaScript/TypeScript analysis only. These keys change behavior today:
-
-- `complexity.low_threshold` and `complexity.medium_threshold`
-- `complexity.report_unchanged`
-- `dead_code.min_severity` and `dead_code.sort_by`
-- `output.min_complexity` and `output.sort_by`
-- `analysis.include_patterns`, `analysis.exclude_patterns`, `analysis.recursive`
-
-Everything else is parsed and then ignored, with a warning on stderr. The [configuration guide](configuration/index.md#which-keys-take-effect-today) has the full list of both kinds.
-
-### Why does adding `exclude_patterns` make polyscan analyze *more* files?
-
-Your value replaces the default list rather than extending it. The default is 26 entries long and covers dependency directories, build outputs, framework caches, and minified files. A short custom list therefore removes most of that protection. Copy the [full default list](configuration/reference.md#analysisexclude_patterns) and add to it.
-
-### Can I use YAML or TOML instead of JSON?
-
-Yes. The format is chosen from the file extension. `jscan.yaml`, `jscan.yml`, and `.jscan.toml` all work, with the same keys.
-
 ### Which config file does polyscan use?
 
-It searches upward from the path you asked it to analyze, then falls back to the current directory, the XDG config directory, `~/.config/jscan/`, your home directory, and finally the `JSCAN_CONFIG` environment variable. The first file found wins. See [config discovery](configuration/index.md#how-polyscan-finds-your-config-file).
+`.polyscan.toml`, for every language. polyscan checks the directory of the first path you asked it to analyze, then each parent directory up to the filesystem root, and reads the first `.polyscan.toml` it finds. It searches nowhere else: not the current directory, not your home directory, and not an environment variable. `--config` names a file explicitly and skips the search. See [config discovery](configuration/index.md#how-polyscan-finds-your-config-file).
 
 ### Is there a config file for Go, Rust or C++?
 
-Not yet. Those languages run with the built-in defaults: the shared complexity thresholds (10 and 20), the shared clone fragment minimums, and a built-in definition of test code that is excluded from clone detection.
+Yes. The same `.polyscan.toml` configures Go, Rust, C++ and JavaScript/TypeScript. It sets the complexity thresholds, the files to leave out, whether test code is analyzed, and the limits of `polyscan check`. The [reference](configuration/reference.md) lists every key.
+
+### polyscan fails with "unknown key". What is wrong?
+
+The file contains a key or section that polyscan does not have, and the error names it. polyscan rejects unknown keys so that a misspelled key never silently does nothing. Compare the name in the message with the [reference](configuration/reference.md).
+
+### polyscan fails with "is no longer read". What do I do?
+
+Discovery reached a jscan configuration file, such as `jscan.config.json`, in a directory that has no `.polyscan.toml`. Move its settings to a `.polyscan.toml` in the same directory. The [migration steps](configuration/index.md#migrating-from-a-jscan-configuration-file) show which keys carry over.
+
+### Does adding to `exclude` stop polyscan from skipping `node_modules`?
+
+No. `analysis.exclude` and `--exclude` add to the built-in skips and never replace them.
 
 ## Results
 

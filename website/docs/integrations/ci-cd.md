@@ -21,7 +21,7 @@ Two things will otherwise waste your time.
 
 **Gate on critical dead code, not all of it.** The warning that an exported function is not imported by another analyzed file fires constantly in libraries, whose exports are consumed outside the analyzed directory. `check` fails only on critical dead code for this reason. A JSON gate should start with `critical_dead_code == 0`.
 
-**A gate is only as good as the file set it runs on.** Check the `Analyzing N files...` count against reality once, so that you know the gate covers your source tree. jscan versions up to 0.9.0 matched the exclude patterns `out` and `dist` against any part of a path and skipped `src/routes/`, `src/layout/`, and `src/checkout/`, which made a passing gate meaningless; polyscan matches whole names only, and see the [configuration reference](../configuration/reference.md#analysisexclude_patterns) for the current rules.
+**A gate is only as good as the file set it runs on.** Check the `Analyzing N files...` count against reality once, so that you know the gate covers your source tree. jscan versions up to 0.9.0 matched the exclude patterns `out` and `dist` against any part of a path and skipped `src/routes/`, `src/layout/`, and `src/checkout/`, which made a passing gate meaningless; polyscan matches whole names only. See the [configuration reference](../configuration/reference.md#analysisexclude) for the current rules.
 
 ## GitHub Actions
 
@@ -207,7 +207,7 @@ printf '%s\t%s\t%s\t%s\n' \
   >> quality-history.tsv
 ```
 
-Two rules keep the series meaningful. Pin the polyscan version, since scoring changes between releases would show up as a change in your code quality. Keep the same `--select` and the same configuration file, for the same reason.
+Two rules keep the series meaningful. Pin the polyscan version, since scoring changes between releases would show up as a change in your code quality. Keep the same `--select` and the same `.polyscan.toml`, for the same reason.
 
 ## Recommended progression
 

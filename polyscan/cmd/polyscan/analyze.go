@@ -13,6 +13,7 @@ import (
 
 	"github.com/ludo-technologies/polyscan/core/util"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/analysis"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/config"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js"
 	jsdomain "github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/service"
@@ -41,8 +42,7 @@ func analyzeCmd() *cobra.Command {
 		outputPath    string
 		noOpen        bool
 		minComplexity int
-		exclude       []string
-		includeTests  bool
+		files         fileFlags
 	)
 
 	cmd := &cobra.Command{
@@ -65,6 +65,10 @@ is given: Go *_test.go; Rust #[test] functions, #[cfg(test)] items, tests.rs,
 *_tests.rs and tests/; C++ *_test.*, *_tests.*, test_*.*, *Test.*, test/ and
 tests/; JavaScript/TypeScript *.test.*, *.spec.* and __tests__/.
 
+Settings are read from the nearest ` + config.FileName + ` in the first path or a
+directory above it, or from the file given with --config. A flag takes
+precedence over the file, and --exclude adds to its patterns.
+
 By default, generates an HTML report and opens it in your browser.
 
 Examples:
@@ -75,7 +79,8 @@ Examples:
   polyscan analyze --select clone .         # Clone detection only
   polyscan analyze --min-complexity 10 .    # List only functions at or above 10
   polyscan analyze --exclude 'src/generated/**' .  # Leave a directory out of every analysis
-  polyscan analyze --include-tests .        # Analyze test files and test code too`,
+  polyscan analyze --include-tests .        # Analyze test files and test code too
+  polyscan analyze -c ci.polyscan.toml .    # Read the settings from ci.polyscan.toml`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			outputFormat := jsdomain.OutputFormat(format)
@@ -91,10 +96,13 @@ Examples:
 			if err != nil {
 				return err
 			}
-			options.IncludeTests = includeTests
+			cfg, err := files.load(cmd, args[0])
+			if err != nil {
+				return err
+			}
 
 			start := time.Now()
-			results, failures, err := runAnalyses(args, options, selection, exclude, includeTests, cmd.ErrOrStderr())
+			results, failures, err := runAnalyses(args, options, selection, cfg)
 			if err != nil {
 				return err
 			}
@@ -164,29 +172,25 @@ Examples:
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "Report path (HTML default: "+defaultReportPath+"; JSON/text default: stdout)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Don't open the HTML report in the browser")
 	cmd.Flags().IntVar(&minComplexity, "min-complexity", 1, "List only functions with at least this complexity")
-	addFileFlags(cmd, &exclude, &includeTests)
+	files.add(cmd)
 	return cmd
 }
 
-// addFileFlags adds the flags that choose which files are analyzed.
-func addFileFlags(cmd *cobra.Command, exclude *[]string, includeTests *bool) {
-	cmd.Flags().StringSliceVar(exclude, "exclude", nil,
-		"Files and directories to leave out (comma-separated or repeated): a glob\n"+
-			"without a slash matches a file name or a directory anywhere on the path,\n"+
-			"one with a slash matches a path relative to the analyzed directory, with\n"+
-			"** for any number of segments (e.g. 'fixtures', 'src/generated/**')")
-	cmd.Flags().BoolVar(includeTests, "include-tests", false, "Analyze test files and test code, which are left out by default")
-}
-
 // runAnalyses runs the selected analyses over paths with the generic engine
-// and the JavaScript/TypeScript pipeline and combines them into one result
-// set. failures lists the JavaScript/TypeScript analyses that failed, which
-// the results leave out; the caller decides whether that is fatal.
-func runAnalyses(paths []string, options analysis.Options, selection js.Selection, exclude []string, includeTests bool, warn io.Writer) (jsdomain.AnalysisResults, []error, error) {
+// and the JavaScript/TypeScript pipeline, both configured by cfg, and
+// combines them into one result set. failures lists the JavaScript/TypeScript
+// analyses that failed, which the results leave out; the caller decides
+// whether that is fatal.
+func runAnalyses(paths []string, options analysis.Options, selection js.Selection, cfg *config.Config) (jsdomain.AnalysisResults, []error, error) {
+	options.IncludeTests = cfg.Analysis.IncludeTests
+	options.ComplexityThresholds = analysis.ComplexityThresholds{
+		Low:    cfg.Complexity.LowThreshold,
+		Medium: cfg.Complexity.MediumThreshold,
+	}
 	var generic *analysis.Report
 	var err error
-	if options != (analysis.Options{}) {
-		generic, err = analysis.Analyze(paths, options, exclude)
+	if options.Selected() {
+		generic, err = analysis.Analyze(paths, options, cfg.Analysis.Exclude)
 		if err != nil && !errors.Is(err, analysis.ErrNoFiles) {
 			return jsdomain.AnalysisResults{}, nil, err
 		}
@@ -194,7 +198,7 @@ func runAnalyses(paths []string, options analysis.Options, selection js.Selectio
 	var javascript *js.Result
 	var failures []error
 	if selection != (js.Selection{}) {
-		javascript, err = analyzeJavaScript(paths, selection, exclude, includeTests, warn)
+		javascript, err = analyzeJavaScript(paths, selection, cfg)
 		if err != nil {
 			return jsdomain.AnalysisResults{}, nil, err
 		}
@@ -214,15 +218,9 @@ func runAnalyses(paths []string, options analysis.Options, selection js.Selectio
 
 // analyzeJavaScript runs the selected jscan analyses over the JavaScript/
 // TypeScript files under paths, or returns nil when there are none. The
-// files are collected with jscan's own configuration discovery and
-// exclusion rules, so a JavaScript project keeps exactly the analysis
-// jscan gave it, with the command line's exclude patterns added to the
-// configuration's own.
-//
-// A tree without JavaScript skips the pipeline before configuration
-// discovery, so a jscan configuration that would not load cannot fail the
-// other languages' analysis.
-func analyzeJavaScript(paths []string, selection js.Selection, exclude []string, includeTests bool, warn io.Writer) (*js.Result, error) {
+// files are collected with jscan's own exclusion rules, with the configured
+// exclude patterns added.
+func analyzeJavaScript(paths []string, selection js.Selection, cfg *config.Config) (*js.Result, error) {
 	hasJS, err := js.ContainsFiles(paths)
 	if err != nil {
 		return nil, err
@@ -230,12 +228,8 @@ func analyzeJavaScript(paths []string, selection js.Selection, exclude []string,
 	if !hasJS {
 		return nil, nil
 	}
-	cfg, err := js.LoadConfig("", paths[0], warn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load the JavaScript configuration: %w", err)
-	}
-	cfg.Analysis.ExcludePatterns = append(cfg.Analysis.ExcludePatterns, exclude...)
-	files, err := js.CollectFiles(paths, cfg, includeTests)
+	jsConfig := js.Config(cfg.Complexity.LowThreshold, cfg.Complexity.MediumThreshold, cfg.Analysis.Exclude)
+	files, err := js.CollectFiles(paths, jsConfig, cfg.Analysis.IncludeTests)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +237,7 @@ func analyzeJavaScript(paths []string, selection js.Selection, exclude []string,
 		return nil, nil
 	}
 
-	return js.Run(context.Background(), files, cfg, selection), nil
+	return js.Run(context.Background(), files, jsConfig, selection), nil
 }
 
 // filterFunctions drops the listed functions below minComplexity. The summary

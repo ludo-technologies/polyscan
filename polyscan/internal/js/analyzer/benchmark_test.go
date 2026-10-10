@@ -246,7 +246,6 @@ func BenchmarkComplexityCalculationWithConfig(b *testing.B) {
 	complexityConfig := &config.ComplexityConfig{
 		LowThreshold:    5,
 		MediumThreshold: 10,
-		Enabled:         true,
 		ReportUnchanged: true,
 	}
 
