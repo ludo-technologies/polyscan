@@ -117,16 +117,17 @@ var Language = &engine.Language{
 	// associated function called through Self. The arguments of a macro
 	// such as format! or assert! are a flat token tree, where self.x is the
 	// tokens self, the dot and x, and a call is followed by its parenthesized
-	// token tree. These patterns are bare sibling sequences, because a
-	// sequence anchored under a token_tree parent matches only once per tree.
+	// token tree or by the :: of a turbofish. These patterns are bare sibling
+	// sequences, because a sequence anchored under a token_tree parent
+	// matches only once per tree.
 	Members: `
 (field_expression value: (self) field: [(field_identifier) (integer_literal)] @field)
 (call_expression function: (field_expression value: (self) field: (field_identifier) @call))
 ((call_expression function: (scoped_identifier path: (identifier) @path name: (identifier) @call))
   (#eq? @path "Self"))
 ((self) . "." . [(identifier) (integer_literal)] @field)
-((self) . "." . (identifier) @call . (token_tree . "("))
-(((identifier) @path . "::" . (identifier) @call . (token_tree . "("))
+((self) . "." . (identifier) @call . [(token_tree . "(") "::"] @arguments)
+(((identifier) @path . "::" . (identifier) @call . (token_tree . "(") @arguments)
   (#eq? @path "Self"))
 `,
 	// A match is exhaustive, so its last arm is the path the other arms

@@ -75,11 +75,15 @@ type Language struct {
 	// capture @object, the variable the access goes through, and then only
 	// counts when that variable is the method's receiver, as Go's named
 	// receivers require; a language whose receiver is a keyword, as Rust's
-	// self is, leaves @object out. The Definitions query marks the receiver
-	// with @self: a function with a receiver type but no @self, such as a
-	// Rust associated function, is a method that cannot touch instance
-	// state and is left out of cohesion. A language without a Members
-	// query has no cohesion analysis.
+	// self is, leaves @object out. A @call match may capture @arguments, the
+	// token the call needs right after the name, and then only counts when
+	// that token is the name's next sibling, punctuation included: a query
+	// anchor skips anonymous nodes, so it cannot tell self.a(1) from
+	// self.a, (1) in a macro's flat token tree. The Definitions query marks
+	// the receiver with @self: a function with a receiver type but no @self,
+	// such as a Rust associated function, is a method that cannot touch
+	// instance state and is left out of cohesion. A language without a
+	// Members query has no cohesion analysis.
 	Members string
 	// Bindings is an optional tree-sitter query for the local declarations
 	// that can shadow the receiver a Members match goes through: @binding
@@ -310,6 +314,7 @@ const (
 	fieldCapture        = "field"
 	callCapture         = "call"
 	objectCapture       = "object"
+	argumentsCapture    = "arguments"
 	bindingCapture      = "binding"
 	declarationCapture  = "declaration"
 	continuationCapture = "continuation"
@@ -906,7 +911,7 @@ func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []
 	bindings := l.collectBindings(root, source)
 	ForEachMatch(l.members, root, source, func(match *sitter.QueryMatch) {
 		var fn *Function
-		var node, object *sitter.Node
+		var node, object, arguments *sitter.Node
 		var kind string
 		for _, capture := range match.Captures {
 			switch l.members.CaptureNameForId(capture.Index) {
@@ -916,9 +921,14 @@ func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []
 				fn = innermost(functions, node.StartByte(), node.EndByte())
 			case objectCapture:
 				object = capture.Node
+			case argumentsCapture:
+				arguments = capture.Node
 			}
 		}
 		if fn == nil || fn.Fields == nil {
+			return
+		}
+		if arguments != nil && !arguments.Equal(node.NextSibling()) {
 			return
 		}
 		if object != nil {
