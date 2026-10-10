@@ -33,10 +33,11 @@ type ComplexityResult struct {
 // branch targets is a k-way branch and contributes k-1 decision points: an
 // if-else (true + false) or a loop header (body + exit) contributes one, while
 // a switch/match that emits one edge per case plus a no-match edge contributes
-// one per case. A block with any EdgeException successor contributes one more,
-// for the implicit raise-or-not branch. EdgeLoop is a back-edge and does not
-// count as a decision point; loop headers should use EdgeCondTrue/EdgeCondFalse
-// for the loop-body vs exit branch.
+// one per case. EdgeException does not count: the same edge type models an
+// unconditional throw or raise, which is a terminator like return, so callers
+// count their language's exception handlers themselves. EdgeLoop is a
+// back-edge and does not count as a decision point; loop headers should use
+// EdgeCondTrue/EdgeCondFalse for the loop-body vs exit branch.
 // McCabe = DecisionPoints + ExtraContributions + 1.
 func ComputeComplexity(c *CFG, config ComplexityConfig) (*ComplexityResult, error) {
 	result := &ComplexityResult{
@@ -50,23 +51,15 @@ func ComputeComplexity(c *CFG, config ComplexityConfig) (*ComplexityResult, erro
 
 	for _, block := range c.Blocks {
 		branchTargets := 0
-		hasException := false
 		for i, edge := range block.Successors {
 			result.EdgeBreakdown[edge.Type]++
-			switch edge.Type {
-			case EdgeCondTrue, EdgeCondFalse:
-				if !isBranchTarget(block.Successors[:i], edge.To) {
-					branchTargets++
-				}
-			case EdgeException:
-				hasException = true
+			if (edge.Type == EdgeCondTrue || edge.Type == EdgeCondFalse) &&
+				!isBranchTarget(block.Successors[:i], edge.To) {
+				branchTargets++
 			}
 		}
 		if branchTargets > 1 {
 			result.DecisionPoints += branchTargets - 1
-		}
-		if hasException {
-			result.DecisionPoints++
 		}
 
 		if config.Contributor != nil {

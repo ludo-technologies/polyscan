@@ -231,8 +231,8 @@ func TestComplexityException(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.DecisionPoints != 1 {
-		t.Fatalf("expected 1 decision point (exception), got %d", result.DecisionPoints)
+	if result.DecisionPoints != 0 {
+		t.Fatalf("expected no decision point from an exception edge, got %d", result.DecisionPoints)
 	}
 	if result.EdgeBreakdown[EdgeException] != 1 {
 		t.Fatalf("expected 1 exception edge, got %d", result.EdgeBreakdown[EdgeException])
