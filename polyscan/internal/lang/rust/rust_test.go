@@ -275,6 +275,7 @@ impl<T> S<T> {
     pub fn calls(&self) { self.fields(); (self.cb)(); Self::helper(self); Self::new(); other.fields() }
     fn helper(this: &Self) {}
     fn boxed(self: Box<Self>) { self.b; }
+    fn macros(&self) { assert!(self.calls()); format!("{} {}", self.a, self.b.len()); m!(self, cb, Self::new(), self.0, other.x, &self.c[1]); }
 }
 
 struct Pair(u32, u32);
@@ -303,6 +304,7 @@ mod inner {
 		{"S::calls", "S", true, []string{"cb"}, []string{"fields", "helper", "new"}},
 		{"S::helper", "S", false, nil, nil},
 		{"S::boxed", "S", true, []string{"b"}, []string{}},
+		{"S::macros", "S", true, []string{"0", "a", "b", "c"}, []string{"calls", "new"}},
 		{"Pair::sum", "Pair", true, []string{"0", "1"}, []string{}},
 		{"Tr::default_method", "", true, nil, nil},
 		{"inner::free", "", true, nil, nil},
