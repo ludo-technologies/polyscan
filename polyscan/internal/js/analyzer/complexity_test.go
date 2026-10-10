@@ -228,29 +228,64 @@ func TestCalculateComplexity_WithLoop(t *testing.T) {
 	}
 }
 
-func TestCalculateComplexity_WithTryCatch(t *testing.T) {
-	code := `
-		function test() {
-			try {
-				riskyOperation();
-			} catch (e) {
-				handleError(e);
-			}
-		}
-	`
-	ast := parseJS(t, code)
-	funcNode := findFunction(ast, "test")
-
-	builder := NewCFGBuilder()
-	cfg, err := builder.Build(funcNode)
-	if err != nil {
-		t.Fatalf("Build failed: %v", err)
+func TestCalculateComplexity_ExceptionHandling(t *testing.T) {
+	tests := []struct {
+		name              string
+		code              string
+		complexity        int
+		ifStatements      int
+		exceptionHandlers int
+	}{
+		{
+			name: "throw is a terminator, not a decision point",
+			code: `function test(x) {
+				if (x > 0) { throw new Error('a'); }
+				if (x < 0) { throw new Error('b'); }
+				throw new Error('c');
+			}`,
+			complexity:   3,
+			ifStatements: 2,
+		},
+		{
+			name:              "catch clause is one decision point",
+			code:              `function test(x) { try { return x; } catch (e) { throw e; } }`,
+			complexity:        2,
+			exceptionHandlers: 1,
+		},
+		{
+			name:       "finally without catch does not branch",
+			code:       `function test() { try { work(); } finally { cleanup(); } }`,
+			complexity: 1,
+		},
+		{
+			name: "catch in a nested function belongs to that function",
+			code: `function test() {
+				return () => { try { work(); } catch (e) { handle(e); } };
+			}`,
+			complexity: 1,
+		},
 	}
 
-	result := CalculateComplexity(cfg)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			funcNode := findFunction(parseJS(t, tt.code), "test")
+			cfg, err := NewCFGBuilder().Build(funcNode)
+			if err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
 
-	if result.ExceptionHandlers < 1 {
-		t.Errorf("Should count at least 1 exception handler, got %d", result.ExceptionHandlers)
+			result := CalculateComplexity(cfg)
+
+			if result.Complexity != tt.complexity {
+				t.Errorf("Complexity = %d, want %d", result.Complexity, tt.complexity)
+			}
+			if result.IfStatements != tt.ifStatements {
+				t.Errorf("IfStatements = %d, want %d", result.IfStatements, tt.ifStatements)
+			}
+			if result.ExceptionHandlers != tt.exceptionHandlers {
+				t.Errorf("ExceptionHandlers = %d, want %d", result.ExceptionHandlers, tt.exceptionHandlers)
+			}
+		})
 	}
 }
 
