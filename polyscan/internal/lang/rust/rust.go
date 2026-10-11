@@ -28,15 +28,17 @@ var Language = &engine.Language{
 	// direct form the flag is a child of the argument list, so
 	// #[cfg(not(test))], whose test sits one level deeper, does not match;
 	// the nested form is restricted to all(...), because code under
-	// any(test, ...) is also built without tests.
+	// any(test, ...) is also built without tests. A comment counts as a
+	// separator rather than an attribute, like the comments between match
+	// arms in Decisions, so it does not hide the item or the marker.
 	TestCode: `
-((attribute_item (attribute (identifier) @attr)) . (attribute_item)* .
+((attribute_item (attribute (identifier) @attr)) . [(attribute_item) (line_comment) (block_comment)]* .
   (function_item) @test
   (#eq? @attr "test"))
-((attribute_item (attribute (identifier) @attr arguments: (token_tree (identifier) @flag))) . (attribute_item)* .
+((attribute_item (attribute (identifier) @attr arguments: (token_tree (identifier) @flag))) . [(attribute_item) (line_comment) (block_comment)]* .
   [(function_item) (impl_item) (trait_item) (mod_item)] @test
   (#eq? @attr "cfg") (#eq? @flag "test"))
-((attribute_item (attribute (identifier) @attr arguments: (token_tree (identifier) @combinator (token_tree (identifier) @flag)))) . (attribute_item)* .
+((attribute_item (attribute (identifier) @attr arguments: (token_tree (identifier) @combinator (token_tree (identifier) @flag)))) . [(attribute_item) (line_comment) (block_comment)]* .
   [(function_item) (impl_item) (trait_item) (mod_item)] @test
   (#eq? @attr "cfg") (#eq? @combinator "all") (#eq? @flag "test"))
 `,
