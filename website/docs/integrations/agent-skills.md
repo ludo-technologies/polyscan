@@ -35,7 +35,7 @@ The contents are identical. Choose whichever fits how you already manage tooling
 | `health-check` | Questions about overall quality, a grade, or a before and after comparison | `polyscan analyze` and reads the health score |
 | `refactoring` | Questions about duplication, complexity hotspots, or dead code | `polyscan analyze` with the relevant `--select` |
 | `architecture-review` | Questions about module structure, coupling, or circular imports | `polyscan analyze --select deps,cbo` and the coupling analysis |
-| `cli-analysis` | Requests for a report file, CI wiring, or project configuration | `polyscan analyze` in its report and JSON modes |
+| `cli-analysis` | Requests for a report file, CI wiring, or project configuration | `polyscan check` as the CI gate, and `polyscan analyze` in its report and JSON modes |
 
 Each skill runs polyscan through `npx polyscan@latest`, so no separate install is needed. The agent will download it on first use.
 

@@ -1,6 +1,6 @@
 ---
 name: cli-analysis
-description: Run the polyscan command-line tool for code quality analysis of JavaScript/TypeScript, Go, Rust, and C++ - HTML/JSON/text reports, CI-friendly runs, and project configuration. Use when user wants a shareable report file, machine-readable results, or to configure polyscan for a project.
+description: Run the polyscan command-line tool for code quality analysis of JavaScript/TypeScript, Go, Rust, and C++ - CI quality gates, HTML/JSON/text reports, and project configuration. Use when user wants a CI check, a shareable report file, machine-readable results, or to configure polyscan for a project.
 ---
 
 # Code Quality Analysis with the polyscan CLI
@@ -37,19 +37,46 @@ With `--format json`, the machine-readable results go to stdout and the health-s
 
 Complexity and clone detection cover every supported language. Dependency analysis covers Go and JavaScript/TypeScript. Class coupling (CBO) covers Go, Rust and JavaScript/TypeScript, and class cohesion (LCOM4) Go and Rust. Dead code exists for JavaScript/TypeScript only. The health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.
 
-## CI usage
+## check — CI quality gate
 
-There is no separate gate command; gate on the JSON output:
+```bash
+polyscan check                                # check the current directory
+polyscan check --select complexity src/       # complexity only
+polyscan check --max-complexity 15 src/       # raise the complexity limit
+polyscan check --max-cycles 3 .               # allow up to 3 dependency cycles
+polyscan check --allow-dead-code .            # report dead code without failing
+polyscan check -q .                           # quiet: output only on issues
+```
+
+Exit codes: `0` no issues, `1` quality issues found, `2` analysis failed (invalid flag, missing path, unparsable file). Default gates: a function with complexity above 10 fails, critical dead code fails (JavaScript/TypeScript only), and any circular dependency fails. Clone detection runs only with `--select clone` and never fails the check.
+
+`--select` accepts: `complexity`, `deadcode`, `clone`, `deps` (default: `complexity,deadcode,deps`).
+
+`analyze` always exits 0 when the analysis ran. To gate on the health score or another report field, use its JSON output:
 
 ```bash
 polyscan analyze --format json src/ > report.json
-jq -e '.summary.health_score >= 80' report.json
+jq -e '.summary.health_score >= 75' report.json
 ```
 
 ## Configuration
 
-JavaScript/TypeScript analysis reads `jscan.config.json` (or `.jscanrc.json`) from the analyzed project when present — complexity thresholds and exclude patterns carried over from jscan, which merged into polyscan. There is no config file for the other languages yet.
+One `.polyscan.toml` configures every language. polyscan reads the nearest one in the first analyzed path or a directory above it; `--config <file>` (`-c`) names a different file. Flags take precedence over the file, and `--exclude` adds to its patterns.
+
+```toml
+[analysis]
+exclude = ["fixtures", "src/generated/**"]
+
+[complexity]
+low_threshold = 10
+medium_threshold = 20
+
+[check]
+max_complexity = 15
+```
+
+The file is strict: an unknown key or an out-of-range value fails the run. polyscan does not read `jscan.config.json`; a directory that has one and no `.polyscan.toml` fails with an error naming the file. The full key list is at https://docs.codescan.dev/polyscan/configuration/reference/.
 
 ## Reporting Results
 
-Summarize the health score and grade, list the specific functions/files behind each failing category, and suggest fixes. For CI setup, recommend a JSON gate as above plus periodic `polyscan analyze` HTML reports for deep reviews.
+Summarize the health score and grade, list the specific functions/files behind each failing category, and suggest fixes. For CI setup, recommend `polyscan check` in the pipeline and periodic `polyscan analyze` HTML reports for deep reviews.

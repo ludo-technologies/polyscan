@@ -33,3 +33,6 @@ Thumbs.db
 
 # polyscan audit workspace (fp-audit skill)
 .polyscan/
+
+# Maintainer-only agent skills, kept out of what skill installers pick up
+.claude/skills/
