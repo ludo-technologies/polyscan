@@ -22,7 +22,7 @@ Complexity and clone detection cover every supported language; dead code detecti
 
 ## Interpreting Results
 
-- Complexity risk levels (defaults, configurable for JS/TS in `jscan.config.json`): Low (≤9), Medium (10-19), High (20+). For JavaScript/TypeScript, complexity counts branches plus logical operators (`&&`, `||`, `??`) and ternaries.
+- Complexity risk levels (defaults, configurable in `.polyscan.toml`): Low (≤9), Medium (10-19), High (20+). For JavaScript/TypeScript, complexity counts branches plus logical operators (`&&`, `||`, `??`) and ternaries.
 - Dead code severity (JS/TS): critical means code after return/break/continue/throw that can never execute; warning covers unreachable branches, unused imports, and orphan files; info covers unused exports.
 - Clone types: Type-1 (identical), Type-2 (renamed identifiers/literals), Type-3 (modified, disabled by default), Type-4 (functionally similar), each with a similarity score.
 
