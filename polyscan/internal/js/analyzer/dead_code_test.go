@@ -910,6 +910,71 @@ func TestIsOnlyEmptyStatements(t *testing.T) {
 	}
 }
 
+// Every block of a dead region is dead for the reason of the terminator that
+// starts it, so the region is one finding. A finding ends at its last
+// statement, since a closing brace is not a CFG statement.
+func TestDeadCodeDetector_Detect_RegionKeepsTerminatorReason(t *testing.T) {
+	tests := []struct {
+		name       string
+		code       string
+		start, end int
+		reason     DeadCodeReason
+	}{
+		{name: "loop after try", code: `function test(r) {
+	return;
+	r.a = 1;
+	try {
+		r.x;
+	} catch (e) {
+		r.z = 1;
+	}
+	for (const i of r) {
+		r.y = i;
+	}
+}`, start: 3, end: 10, reason: ReasonUnreachableAfterReturn},
+		{name: "if after try finally", code: `function test(r) {
+	return;
+	try {
+		r.x;
+	} catch (e) {
+		r.z = 1;
+	} finally {
+		r.y = 2;
+	}
+	if (r) {
+		r.k = 1;
+	}
+}`, start: 3, end: 11, reason: ReasonUnreachableAfterReturn},
+		{name: "loop after throw", code: `function test(r) {
+	throw new Error('x');
+	r.z = 1;
+	while (r) {
+		r.w = 2;
+	}
+}`, start: 3, end: 5, reason: ReasonUnreachableAfterThrow},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			graph, err := NewCFGBuilder().Build(findFunction(parseJS(t, tt.code), "test"))
+			if err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
+
+			findings := NewDeadCodeDetector(graph).Detect().Findings
+			if len(findings) != 1 {
+				for _, f := range findings {
+					t.Logf("finding: %s %s %d-%d", f.Reason, f.Severity, f.StartLine, f.EndLine)
+				}
+				t.Fatalf("got %d findings, want 1", len(findings))
+			}
+			if f := findings[0]; f.StartLine != tt.start || f.EndLine != tt.end || f.Reason != tt.reason || f.Severity != SeverityLevelCritical {
+				t.Errorf("finding = %s %s %d-%d, want %s critical %d-%d", f.Reason, f.Severity, f.StartLine, f.EndLine, tt.reason, tt.start, tt.end)
+			}
+		})
+	}
+}
+
 // A dead try statement is reported from its header, not from the first
 // statement of its body.
 func TestDeadCodeDetector_Detect_DeadTryIncludesHeader(t *testing.T) {
