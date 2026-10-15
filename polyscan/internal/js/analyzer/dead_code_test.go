@@ -339,6 +339,19 @@ func TestDeadCodeDetector_Detect_CodeAfterAbruptTryFinally(t *testing.T) {
 	}
 	after(t);
 }`, line: 9},
+		{name: "return in every case of a switch", code: `function test(t) {
+	try {
+		switch (t) {
+		case 1:
+			return 1;
+		default:
+			return 2;
+		}
+	} finally {
+		cleanup(t);
+	}
+	after(t);
+}`, line: 12},
 	}
 
 	for _, tt := range tests {

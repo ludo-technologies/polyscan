@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 
+	corecfg "github.com/ludo-technologies/polyscan/core/cfg"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/parser"
 )
@@ -770,9 +771,10 @@ func (b *CFGBuilder) buildTryStatement(node *parser.Node) {
 	}
 
 	// Connect try and catch to the next block when they complete normally
+	reachable := corecfg.AnalyzeReachability(b.cfg, corecfg.ReachabilityConfig{Classifier: javaScriptCFGClassifier{}}).Reachable
 	completes := false
 	for _, end := range []*BasicBlock{tryEndBlock, catchEndBlock} {
-		if b.completesNormally(end) {
+		if end != nil && reachable[end.ID] && !b.endsWithJump(end) {
 			b.cfg.ConnectBlocks(end, after, EdgeNormal)
 			completes = true
 		}
@@ -881,13 +883,6 @@ func (b *CFGBuilder) hasSuccessor(block *BasicBlock, target *BasicBlock) bool {
 		}
 	}
 	return false
-}
-
-// completesNormally reports whether control can fall off the end of block:
-// it is reached by some edge and does not end with a jump. A block that only
-// follows a return, break, continue or throw has no predecessors.
-func (b *CFGBuilder) completesNormally(block *BasicBlock) bool {
-	return block != nil && len(block.Predecessors) > 0 && !b.endsWithJump(block)
 }
 
 // endsWithJump checks if a block ends with a jump statement (return, break, continue, throw)
