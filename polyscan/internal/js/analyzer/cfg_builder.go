@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 
+	corecfg "github.com/ludo-technologies/polyscan/core/cfg"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/parser"
 )
@@ -727,8 +728,13 @@ func (b *CFGBuilder) buildTryStatement(node *parser.Node) {
 	tryEndBlock := b.currentBlock
 
 	// Process catch block if exists
+	var catchEndBlock *BasicBlock
 	if node.Handler != nil {
 		catchBlock = b.newBlock(LabelCatchBlock)
+
+		// Connect try block to catch with exception edge
+		b.cfg.ConnectBlocks(tryBlock, catchBlock, EdgeException)
+
 		b.currentBlock = catchBlock
 
 		// Add exception parameter to catch block
@@ -740,36 +746,46 @@ func (b *CFGBuilder) buildTryStatement(node *parser.Node) {
 				b.processStatement(stmt)
 			}
 		}
-
-		// Connect try block to catch with exception edge
-		b.cfg.ConnectBlocks(tryBlock, catchBlock, EdgeException)
+		catchEndBlock = b.currentBlock
 	}
 
-	// Process finally block if exists
+	// Without a finally block, try and catch complete into the merge block
+	after := mergeBlock
 	if node.Finalizer != nil {
 		finallyBlock = b.newBlock(LabelFinallyBlock)
+		after = finallyBlock
 
 		// Add finally statements
 		addJSStatements(finallyBlock, node.Finalizer.Body)
 
-		// Connect try and catch to finally
-		if tryEndBlock != nil && !b.endsWithJump(tryEndBlock) {
-			b.cfg.ConnectBlocks(tryEndBlock, finallyBlock, EdgeNormal)
+		// The finally block runs however the try or catch body ends. An
+		// exception edge stands in for every abrupt exit (throw, return,
+		// break or continue), so the finally block is reachable whenever the
+		// try is, while the code after the try stays reachable only through
+		// normal completion.
+		if catchBlock != nil {
+			b.cfg.ConnectBlocks(catchBlock, finallyBlock, EdgeException)
+		} else {
+			b.cfg.ConnectBlocks(tryBlock, finallyBlock, EdgeException)
 		}
-		if catchBlock != nil && b.currentBlock != nil && !b.endsWithJump(b.currentBlock) {
-			b.cfg.ConnectBlocks(b.currentBlock, finallyBlock, EdgeNormal)
-		}
+	}
 
-		// Finally connects to merge
+	// Connect try and catch to the next block when they complete normally.
+	// Reachability is measured from the try block, whose body is fully built,
+	// because enclosing statements may not have connected it to the entry yet.
+	fromTry := &CFG{Entry: tryBlock, Blocks: b.cfg.Blocks}
+	reachable := corecfg.AnalyzeReachability(fromTry, corecfg.ReachabilityConfig{Classifier: javaScriptCFGClassifier{}}).Reachable
+	completes := false
+	for _, end := range []*BasicBlock{tryEndBlock, catchEndBlock} {
+		if end != nil && reachable[end.ID] && !b.endsWithJump(end) {
+			b.cfg.ConnectBlocks(end, after, EdgeNormal)
+			completes = true
+		}
+	}
+
+	// Code after the try runs only when the try or catch completes normally
+	if finallyBlock != nil && completes {
 		b.cfg.ConnectBlocks(finallyBlock, mergeBlock, EdgeNormal)
-	} else {
-		// No finally - connect try and catch directly to merge
-		if tryEndBlock != nil && !b.endsWithJump(tryEndBlock) {
-			b.cfg.ConnectBlocks(tryEndBlock, mergeBlock, EdgeNormal)
-		}
-		if catchBlock != nil && b.currentBlock != nil && !b.endsWithJump(b.currentBlock) {
-			b.cfg.ConnectBlocks(b.currentBlock, mergeBlock, EdgeNormal)
-		}
 	}
 
 	b.currentBlock = mergeBlock
