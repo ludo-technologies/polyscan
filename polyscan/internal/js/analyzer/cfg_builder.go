@@ -727,8 +727,13 @@ func (b *CFGBuilder) buildTryStatement(node *parser.Node) {
 	tryEndBlock := b.currentBlock
 
 	// Process catch block if exists
+	var catchEndBlock *BasicBlock
 	if node.Handler != nil {
 		catchBlock = b.newBlock(LabelCatchBlock)
+
+		// Connect try block to catch with exception edge
+		b.cfg.ConnectBlocks(tryBlock, catchBlock, EdgeException)
+
 		b.currentBlock = catchBlock
 
 		// Add exception parameter to catch block
@@ -740,36 +745,42 @@ func (b *CFGBuilder) buildTryStatement(node *parser.Node) {
 				b.processStatement(stmt)
 			}
 		}
-
-		// Connect try block to catch with exception edge
-		b.cfg.ConnectBlocks(tryBlock, catchBlock, EdgeException)
+		catchEndBlock = b.currentBlock
 	}
 
-	// Process finally block if exists
+	// Without a finally block, try and catch complete into the merge block
+	after := mergeBlock
 	if node.Finalizer != nil {
 		finallyBlock = b.newBlock(LabelFinallyBlock)
+		after = finallyBlock
 
 		// Add finally statements
 		addJSStatements(finallyBlock, node.Finalizer.Body)
 
-		// Connect try and catch to finally
-		if tryEndBlock != nil && !b.endsWithJump(tryEndBlock) {
-			b.cfg.ConnectBlocks(tryEndBlock, finallyBlock, EdgeNormal)
+		// The finally block runs however the try or catch body ends. An
+		// exception edge stands in for every abrupt exit (throw, return,
+		// break or continue), so the finally block is reachable whenever the
+		// try is, while the code after the try stays reachable only through
+		// normal completion.
+		if catchBlock != nil {
+			b.cfg.ConnectBlocks(catchBlock, finallyBlock, EdgeException)
+		} else {
+			b.cfg.ConnectBlocks(tryBlock, finallyBlock, EdgeException)
 		}
-		if catchBlock != nil && b.currentBlock != nil && !b.endsWithJump(b.currentBlock) {
-			b.cfg.ConnectBlocks(b.currentBlock, finallyBlock, EdgeNormal)
-		}
+	}
 
-		// Finally connects to merge
+	// Connect try and catch to the next block when they complete normally
+	completes := false
+	for _, end := range []*BasicBlock{tryEndBlock, catchEndBlock} {
+		if b.completesNormally(end) {
+			b.cfg.ConnectBlocks(end, after, EdgeNormal)
+			completes = true
+		}
+	}
+
+	// Code after the try runs only when the try or catch completes normally
+	if finallyBlock != nil && completes {
 		b.cfg.ConnectBlocks(finallyBlock, mergeBlock, EdgeNormal)
-	} else {
-		// No finally - connect try and catch directly to merge
-		if tryEndBlock != nil && !b.endsWithJump(tryEndBlock) {
-			b.cfg.ConnectBlocks(tryEndBlock, mergeBlock, EdgeNormal)
-		}
-		if catchBlock != nil && b.currentBlock != nil && !b.endsWithJump(b.currentBlock) {
-			b.cfg.ConnectBlocks(b.currentBlock, mergeBlock, EdgeNormal)
-		}
 	}
 
 	b.currentBlock = mergeBlock
@@ -870,6 +881,13 @@ func (b *CFGBuilder) hasSuccessor(block *BasicBlock, target *BasicBlock) bool {
 		}
 	}
 	return false
+}
+
+// completesNormally reports whether control can fall off the end of block:
+// it is reached by some edge and does not end with a jump. A block that only
+// follows a return, break, continue or throw has no predecessors.
+func (b *CFGBuilder) completesNormally(block *BasicBlock) bool {
+	return block != nil && len(block.Predecessors) > 0 && !b.endsWithJump(block)
 }
 
 // endsWithJump checks if a block ends with a jump statement (return, break, continue, throw)

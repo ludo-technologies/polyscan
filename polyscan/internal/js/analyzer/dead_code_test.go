@@ -247,6 +247,118 @@ func TestDeadCodeDetector_Detect_TryTerminatorKeepsCatchReachable(t *testing.T) 
 	}
 }
 
+// A finally block runs however its try or catch ends, so it is never dead
+// while the try is live.
+func TestDeadCodeDetector_Detect_FinallyAfterTerminatorIsReachable(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{name: "return in try", code: `function test(t) {
+	try {
+		return g(t);
+	} finally {
+		cleanup(t);
+	}
+}`},
+		{name: "throw in try", code: `function test(t) {
+	try {
+		throw new Error('x');
+	} finally {
+		cleanup(t);
+	}
+}`},
+		{name: "return in try and throw in catch", code: `function test(t) {
+	try {
+		return g(t);
+	} catch (e) {
+		throw e;
+	} finally {
+		cleanup(t);
+	}
+}`},
+		{name: "break in try", code: `function test(t) {
+	for (const x of t) {
+		try {
+			break;
+		} finally {
+			cleanup(x);
+		}
+	}
+}`},
+		{name: "nested finally", code: `function test(t) {
+	try {
+		try {
+			return g(t);
+		} finally {
+			cleanup(t);
+		}
+	} finally {
+		cleanup(t);
+	}
+}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			graph, err := NewCFGBuilder().Build(findFunction(parseJS(t, tt.code), "test"))
+			if err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
+
+			if findings := NewDeadCodeDetector(graph).Detect().Findings; len(findings) != 0 {
+				t.Fatalf("finally body must be reachable, got findings: %+v", findings)
+			}
+		})
+	}
+}
+
+// Code after a try runs only when the try or catch completes normally, even
+// though the finally block runs.
+func TestDeadCodeDetector_Detect_CodeAfterAbruptTryFinally(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+		line int
+	}{
+		{name: "return in try", code: `function test(t) {
+	try {
+		return g(t);
+	} finally {
+		cleanup(t);
+	}
+	after(t);
+}`, line: 7},
+		{name: "return in try and throw in catch", code: `function test(t) {
+	try {
+		return g(t);
+	} catch (e) {
+		throw e;
+	} finally {
+		cleanup(t);
+	}
+	after(t);
+}`, line: 9},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			graph, err := NewCFGBuilder().Build(findFunction(parseJS(t, tt.code), "test"))
+			if err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
+
+			findings := NewDeadCodeDetector(graph).Detect().Findings
+			if len(findings) != 1 || findings[0].StartLine != tt.line {
+				for _, f := range findings {
+					t.Logf("finding: %s %s %d-%d", f.Reason, f.Severity, f.StartLine, f.EndLine)
+				}
+				t.Fatalf("got %d findings, want one for after(t) on line %d", len(findings), tt.line)
+			}
+		})
+	}
+}
+
 func TestDeadCodeDetector_Detect_CodeAfterBreak(t *testing.T) {
 	code := `
 		function test() {
