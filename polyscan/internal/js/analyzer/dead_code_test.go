@@ -313,6 +313,32 @@ func TestDeadCodeDetector_Detect_FinallyAfterTerminatorIsReachable(t *testing.T)
 	}
 }
 
+// A try that completes normally falls through to the code after it, even
+// before the enclosing statement connects the try to the function entry.
+func TestDeadCodeDetector_Detect_CodeAfterTryInSwitchDefault(t *testing.T) {
+	code := `function test(x) {
+	switch (x) {
+	default:
+		try {
+			work();
+		} catch (e) {
+			recover(e);
+		} finally {
+			cleanup();
+		}
+		live();
+	}
+}`
+	graph, err := NewCFGBuilder().Build(findFunction(parseJS(t, code), "test"))
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	if findings := NewDeadCodeDetector(graph).Detect().Findings; len(findings) != 0 {
+		t.Fatalf("live() must be reachable, got findings: %+v", findings)
+	}
+}
+
 // Code after a try runs only when the try or catch completes normally, even
 // though the finally block runs.
 func TestDeadCodeDetector_Detect_CodeAfterAbruptTryFinally(t *testing.T) {

@@ -770,8 +770,11 @@ func (b *CFGBuilder) buildTryStatement(node *parser.Node) {
 		}
 	}
 
-	// Connect try and catch to the next block when they complete normally
-	reachable := corecfg.AnalyzeReachability(b.cfg, corecfg.ReachabilityConfig{Classifier: javaScriptCFGClassifier{}}).Reachable
+	// Connect try and catch to the next block when they complete normally.
+	// Reachability is measured from the try block, whose body is fully built,
+	// because enclosing statements may not have connected it to the entry yet.
+	fromTry := &CFG{Entry: tryBlock, Blocks: b.cfg.Blocks}
+	reachable := corecfg.AnalyzeReachability(fromTry, corecfg.ReachabilityConfig{Classifier: javaScriptCFGClassifier{}}).Reachable
 	completes := false
 	for _, end := range []*BasicBlock{tryEndBlock, catchEndBlock} {
 		if end != nil && reachable[end.ID] && !b.endsWithJump(end) {
