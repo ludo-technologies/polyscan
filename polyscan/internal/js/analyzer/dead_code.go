@@ -1,6 +1,10 @@
 package analyzer
 
 import (
+	"cmp"
+	"maps"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -142,6 +146,7 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 		result.ReachableRatio = float64(reachResult.ReachableCount) / float64(result.TotalBlocks)
 	}
 	coreResult := corecfg.DetectDeadCode(dcd.cfg, corecfg.DeadCodeConfig{Classifier: classifier})
+	regionReasons := deadRegionReasons(dcd.cfg, reachResult.Reachable)
 	var tries []tryEntry
 
 	for _, coreFinding := range coreResult.Findings {
@@ -152,7 +157,7 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 		if tries == nil {
 			tries = collectTryEntries(dcd.cfg.FunctionNode)
 		}
-		findings := dcd.analyzeDeadBlock(block, tries)
+		findings := dcd.analyzeDeadBlock(block, tries, regionReasons)
 		result.Findings = append(result.Findings, findings...)
 	}
 	result.DeadBlocks = len(result.Findings)
@@ -169,7 +174,7 @@ func (dcd *DeadCodeDetector) Detect() *DeadCodeResult {
 }
 
 // analyzeDeadBlock analyzes a dead block to determine the reason and create findings
-func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock, tries []tryEntry) []*DeadCodeFinding {
+func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock, tries []tryEntry, regionReasons map[string]DeadCodeReason) []*DeadCodeFinding {
 	var findings []*DeadCodeFinding
 
 	// Skip blocks whose only "statements" are empty separators (a bare `;`).
@@ -182,7 +187,7 @@ func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock, tries []tryEntr
 	}
 
 	// Determine the reason for unreachability
-	reason, severity := dcd.determineDeadCodeReason(block)
+	reason, severity := dcd.determineDeadCodeReason(block, regionReasons)
 
 	// Create a finding for the block
 	finding := &DeadCodeFinding{
@@ -218,7 +223,7 @@ func (dcd *DeadCodeDetector) analyzeDeadBlock(block *BasicBlock, tries []tryEntr
 }
 
 // determineDeadCodeReason determines why a block is unreachable
-func (dcd *DeadCodeDetector) determineDeadCodeReason(block *BasicBlock) (DeadCodeReason, SeverityLevel) {
+func (dcd *DeadCodeDetector) determineDeadCodeReason(block *BasicBlock, regionReasons map[string]DeadCodeReason) (DeadCodeReason, SeverityLevel) {
 	// Check predecessors for terminating statements
 	for _, pred := range block.Predecessors {
 		if pred.From == nil {
@@ -245,21 +250,73 @@ func (dcd *DeadCodeDetector) determineDeadCodeReason(block *BasicBlock) (DeadCod
 		}
 	}
 
-	switch {
-	case strings.Contains(block.ID, LabelUnreachableAfterReturn):
-		return ReasonUnreachableAfterReturn, SeverityLevelCritical
-	case strings.Contains(block.ID, LabelUnreachableAfterBreak):
-		return ReasonUnreachableAfterBreak, SeverityLevelCritical
-	case strings.Contains(block.ID, LabelUnreachableAfterContinue):
-		return ReasonUnreachableAfterContinue, SeverityLevelCritical
-	case strings.Contains(block.ID, LabelUnreachableAfterThrow):
-		return ReasonUnreachableAfterThrow, SeverityLevelCritical
-	case strings.Contains(block.ID, LabelUnreachable):
+	if reason, ok := regionReasons[block.ID]; ok {
+		return reason, SeverityLevelCritical
+	}
+	if blockLabel(block) == LabelUnreachable {
 		return ReasonUnreachableAfterInfiniteLoop, SeverityLevelWarning
 	}
 
 	// Default to unreachable branch
 	return ReasonUnreachableBranch, SeverityLevelWarning
+}
+
+// unreachableLabelReasons maps the label of the block that receives the code
+// after a terminator to the reason that code is dead.
+var unreachableLabelReasons = map[string]DeadCodeReason{
+	LabelUnreachableAfterReturn:   ReasonUnreachableAfterReturn,
+	LabelUnreachableAfterBreak:    ReasonUnreachableAfterBreak,
+	LabelUnreachableAfterContinue: ReasonUnreachableAfterContinue,
+	LabelUnreachableAfterThrow:    ReasonUnreachableAfterThrow,
+}
+
+// deadRegionReasons gives every unreachable block reachable from the block
+// after a terminator the reason of that terminator. Code further down a dead
+// region, such as the body of an if or a loop after a return, is dead for
+// the same reason as the code right after the return. When two regions
+// meet, the earlier terminator wins.
+func deadRegionReasons(cfg *CFG, reachable map[string]bool) map[string]DeadCodeReason {
+	blocks := slices.Collect(maps.Values(cfg.Blocks))
+	slices.SortFunc(blocks, func(a, b *BasicBlock) int {
+		return cmp.Or(cmp.Compare(blockNumber(a), blockNumber(b)), cmp.Compare(a.ID, b.ID))
+	})
+
+	reasons := make(map[string]DeadCodeReason)
+	var mark func(block *BasicBlock, reason DeadCodeReason)
+	mark = func(block *BasicBlock, reason DeadCodeReason) {
+		if reachable[block.ID] {
+			return
+		}
+		if _, marked := reasons[block.ID]; marked {
+			return
+		}
+		reasons[block.ID] = reason
+		for _, edge := range block.Successors {
+			mark(edge.To, reason)
+		}
+	}
+	for _, block := range blocks {
+		if reason, ok := unreachableLabelReasons[blockLabel(block)]; ok {
+			mark(block, reason)
+		}
+	}
+	return reasons
+}
+
+// blockLabel returns the label newBlock gave a block, without the "_<N>"
+// counter suffix.
+func blockLabel(block *BasicBlock) string {
+	return block.ID[:max(strings.LastIndexByte(block.ID, '_'), 0)]
+}
+
+// blockNumber returns the counter newBlock appended to a block ID, which
+// orders blocks by creation, or -1 for a block without one.
+func blockNumber(block *BasicBlock) int {
+	n, err := strconv.Atoi(block.ID[strings.LastIndexByte(block.ID, '_')+1:])
+	if err != nil {
+		return -1
+	}
+	return n
 }
 
 // tryEntry records the clause a try statement runs first when it is entered:
