@@ -200,6 +200,49 @@ func TestCalculateComplexity_WithMultipleConditionals(t *testing.T) {
 	}
 }
 
+func TestCalculateComplexity_ElseBranches(t *testing.T) {
+	tests := []struct {
+		name         string
+		code         string
+		complexity   int
+		ifStatements int
+	}{
+		{
+			name: "else if adds a decision point",
+			code: `function test(x) {
+				if (x > 1) { return 1; }
+				else if (x > 2) { return 2; }
+				else if (x > 3) { return 3; }
+				else { return 4; }
+			}`,
+			complexity:   4,
+			ifStatements: 3,
+		},
+		{
+			name:         "if nested in an else block",
+			code:         `function test(x) { if (x) { a(); } else { if (x > 1) { b(); } } }`,
+			complexity:   3,
+			ifStatements: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := NewCFGBuilder().Build(findFunction(parseJS(t, tt.code), "test"))
+			if err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
+			result := CalculateComplexity(cfg)
+			if result.Complexity != tt.complexity {
+				t.Errorf("complexity = %d, want %d", result.Complexity, tt.complexity)
+			}
+			if result.IfStatements != tt.ifStatements {
+				t.Errorf("if statements = %d, want %d", result.IfStatements, tt.ifStatements)
+			}
+		})
+	}
+}
+
 func TestCalculateComplexity_WithLoop(t *testing.T) {
 	code := `
 		function test(n) {
