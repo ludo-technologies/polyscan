@@ -28,7 +28,7 @@ No row currently uses **sync**: every area that was language-independent enough 
 | `internal/analyzer/apted_tree.go` | `internal/analyzer/apted_tree.go` | reference-only | jscan retains only the JS/TS parser-to-`core/apted.TreeNode` converter |
 | `internal/analyzer/apted_cost.go` | `internal/analyzer/apted_cost.go` | reference-only | Cost models are language-specific (Python AST vs JS/TS AST) |
 | `internal/analyzer/lsh_index.go` | `internal/analyzer/lsh_index.go` | case-by-case | Thin candidate-index adapter (int fragment IDs, deterministic order, `WithMaxCandidates` cap) kept local in both tools around `core/lsh`; not itself in core, so still worth diffing when either side changes it |
-| `internal/analyzer/clone_detector.go` | `internal/analyzer/clone_detector.go` | case-by-case | Pipeline orchestration + fragment extraction stay language-side; grouping/dedup/gates/classifier come from `core/clone`. Splitting groups along the retained pairs is `core/clone.SplitGroupsByPairs` since `core/v0.2.9` ([polyscan#173](https://github.com/ludo-technologies/polyscan/issues/173)), which jscan's detector and clone service both call. pyscn still has local copies: `splitDisconnectedGroups` here and `filterCloneGroupsByPairs` in `service/clone_group_filter.go` |
+| `internal/analyzer/clone_detector.go` | `internal/analyzer/clone_detector.go` | case-by-case | Pipeline orchestration + fragment extraction stay language-side; grouping/dedup/gates/classifier come from `core/clone`. Splitting groups along the retained pairs is `core/clone.SplitGroupsByPairs` since `core/v0.2.9` ([polyscan#173](https://github.com/ludo-technologies/polyscan/issues/173)). Both tools call it from their detector and their clone service (pyscn since [pyscn#843](https://github.com/ludo-technologies/pyscn/pull/843)) |
 | `internal/analyzer/cfg.go` | `internal/analyzer/cfg.go` | case-by-case | Both tools alias `core/cfg` types for internal source compatibility; rarely needs edits unless `core/cfg`'s public shape changes |
 | `internal/analyzer/cfg_builder.go` | `internal/analyzer/cfg_builder.go` | reference-only | Control-flow semantics are language-specific (try/except/match vs try/catch/switch/hoisting) |
 | `internal/analyzer/reachability.go` | `internal/analyzer/reachability.go` | case-by-case | Both tools retain a thin compatibility result projection over `core/cfg` reachability |
@@ -204,9 +204,9 @@ Skipped during the 2026-09-27 sync (`7358893`..`7d2d90f`, v1.32.0..v1.32.1+19):
 - **Community score rework** (`6ba7cd6`, `96a879c`): community detection is unported
 - **LCOM method references** (`5ad3beb`/#678): jscan computes no LCOM. The Go cohesion analysis in `polyscan/internal/analysis/cohesion.go` had the same bug with method values and was fixed in this run's PR. Rust does not have it, because `self.value` without a call is always a field
 
-Core issues raised by the 2026-09-27 run:
+Core issues raised by the 2026-09-27 run (resolved):
 
-- **Group splitting along the retained pairs** is `core/clone.SplitGroupsByPairs` since `core/v0.2.9` ([polyscan#173](https://github.com/ludo-technologies/polyscan/issues/173)). jscan calls it; pyscn still has two local copies to replace
+- ~~**Group splitting along the retained pairs**~~ Resolved: moved to `core/clone.SplitGroupsByPairs` ([polyscan#209](https://github.com/ludo-technologies/polyscan/pull/209), tag `core/v0.2.9`). jscan calls it since [polyscan#210](https://github.com/ludo-technologies/polyscan/pull/210) and pyscn since [pyscn#843](https://github.com/ludo-technologies/pyscn/pull/843)
 
 Core issues raised by the 2026-08-17 run (both resolved):
 
