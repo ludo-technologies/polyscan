@@ -365,6 +365,18 @@ func TestDeadCodeDetector_Detect_CodeAfterAbruptTryFinally(t *testing.T) {
 	}
 	after(t);
 }`, line: 9},
+		{name: "return in both branches of an if", code: `function test(t) {
+	try {
+		if (t) {
+			return 1;
+		} else {
+			return 2;
+		}
+	} finally {
+		cleanup(t);
+	}
+	after(t);
+}`, line: 11},
 		{name: "return in every case of a switch", code: `function test(t) {
 	try {
 		switch (t) {
