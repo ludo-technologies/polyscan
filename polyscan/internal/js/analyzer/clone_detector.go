@@ -1037,7 +1037,7 @@ func (cd *CloneDetector) groupClonesWithStrategy(strategy coreclone.GroupingStra
 	// rather than reported as one family.
 	corePairs = coreclone.FilterPairsWithSuppressedMembers(corePairs, groupResult.Suppressed)
 	corePairs = coreclone.FilterSuppressedPairs(corePairs, groupResult.SuppressedPairs)
-	groups := SplitGroupsByPairs(groupResult.Groups, corePairs)
+	groups := coreclone.SplitGroupsByPairs(groupResult.Groups, corePairs)
 	cd.clonePairs = cd.clonePairs[:0]
 	for _, pair := range corePairs {
 		cd.clonePairs = append(cd.clonePairs, originals[pair])
