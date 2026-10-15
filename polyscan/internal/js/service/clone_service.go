@@ -387,7 +387,7 @@ func filterClonePairs(pairs []*domain.ClonePair, req *domain.CloneRequest) []*do
 }
 
 // splitCloneGroupsByPairs restricts the detector's groups to the connected
-// components of the retained pairs; see analyzer.SplitGroupsByPairs.
+// components of the retained pairs; see coreclone.SplitGroupsByPairs.
 func splitCloneGroupsByPairs(groups []*domain.CloneGroup, pairs []*domain.ClonePair) []*domain.CloneGroup {
 	corePairs := make([]*coreclone.ItemPair[*domain.Clone], 0, len(pairs))
 	for _, pair := range pairs {
@@ -397,7 +397,7 @@ func splitCloneGroupsByPairs(groups []*domain.CloneGroup, pairs []*domain.CloneP
 	for _, group := range groups {
 		coreGroups = append(coreGroups, &coreclone.ItemGroup[*domain.Clone]{ID: group.ID, Items: group.Clones})
 	}
-	split := analyzer.SplitGroupsByPairs(coreGroups, corePairs)
+	split := coreclone.SplitGroupsByPairs(coreGroups, corePairs)
 	result := make([]*domain.CloneGroup, 0, len(split))
 	for _, group := range split {
 		result = append(result, &domain.CloneGroup{ID: group.ID, Clones: group.Items, Type: domain.CloneType(group.GroupType), Similarity: group.Similarity, Size: len(group.Items)})
