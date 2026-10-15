@@ -326,8 +326,11 @@ func TestDeadCodeDetector_Detect_AllPathsReturn(t *testing.T) {
 		t.Fatal("Result should not be nil")
 	}
 	// Code after if-else that both return should be dead
-	if result.ReachableRatio > 1.0 || result.ReachableRatio < 0.0 {
-		t.Errorf("ReachableRatio should be between 0 and 1, got %f", result.ReachableRatio)
+	if len(result.Findings) != 1 || result.Findings[0].StartLine != 8 {
+		for _, f := range result.Findings {
+			t.Logf("finding: %s %s %d-%d", f.Reason, f.Severity, f.StartLine, f.EndLine)
+		}
+		t.Fatalf("got %d findings, want one for the console.log on line 8", len(result.Findings))
 	}
 }
 

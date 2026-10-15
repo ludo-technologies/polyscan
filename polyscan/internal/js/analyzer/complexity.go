@@ -209,7 +209,7 @@ func nestingDepthOf(node *parser.Node, level int) int {
 		// starting a deeper one, so the whole chain reads as one level. A
 		// plain `else { ... }` block is left alone: code nested in it really
 		// is one level deeper.
-		if node.Type == parser.NodeIfStatement && child == node.Alternate && isElseIf(child) {
+		if node.Type == parser.NodeIfStatement && child == node.Alternate && child.Type == parser.NodeIfStatement {
 			childLevel = level - 1
 		}
 		if depth := nestingDepthOf(child, childLevel); depth > deepest {
@@ -217,27 +217,6 @@ func nestingDepthOf(node *parser.Node, level int) int {
 		}
 	}
 	return deepest
-}
-
-// isElseIf reports whether an if statement's alternate continues an else-if
-// chain. The parser keeps the else clause as a wrapper node, so the chain is
-// recognized by the clause holding an if statement instead of a block.
-func isElseIf(alternate *parser.Node) bool {
-	if alternate == nil {
-		return false
-	}
-	if alternate.Type == parser.NodeIfStatement {
-		return true
-	}
-	for _, child := range parser.OrderedChildren(alternate) {
-		switch child.Type {
-		case parser.NodeIfStatement:
-			return true
-		case parser.NodeBlockStatement:
-			return false
-		}
-	}
-	return false
 }
 
 // isControlStructure checks if a node opens a nesting level. A catch clause

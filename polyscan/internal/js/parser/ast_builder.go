@@ -366,9 +366,16 @@ func (b *ASTBuilder) buildIfStatement(tsNode *sitter.Node) *Node {
 		node.Consequent = b.buildNode(consNode)
 	}
 
-	// Extract alternative (else branch)
+	// Extract alternative (else branch). The grammar wraps it in an
+	// else_clause; the branch is the statement inside, a block or the next if
+	// of an else-if chain.
 	if altNode := b.getChildByFieldName(tsNode, "alternative"); altNode != nil {
-		node.Alternate = b.buildNode(altNode)
+		for i := 0; i < int(altNode.NamedChildCount()); i++ {
+			if child := altNode.NamedChild(i); !b.isTrivia(child) {
+				node.Alternate = b.buildNode(child)
+				break
+			}
+		}
 	}
 
 	return node
