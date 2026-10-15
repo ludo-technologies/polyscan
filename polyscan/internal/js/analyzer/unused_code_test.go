@@ -387,6 +387,26 @@ func TestDetectUnusedImports_TypeScriptDeclarationReferencesCountAsUsage(t *test
 			source: `import { Base } from './base'; export class A extends Base {}`,
 		},
 		{
+			name:   "abstract class extends imported base",
+			source: `import { Base } from './base'; export abstract class A extends Base {}`,
+		},
+		{
+			name:   "abstract class uses imported decorator",
+			source: `import { Deco } from './base'; @Deco() export abstract class D {}`,
+		},
+		{
+			name:   "class expression extends imported base",
+			source: `import { Base } from './base'; export const A = class extends Base {};`,
+		},
+		{
+			name:   "class type parameter constrained by imported type",
+			source: `import { Res } from './base'; export class A<T extends Res> {}`,
+		},
+		{
+			name:   "abstract class type parameter defaults to imported type",
+			source: `import { Res } from './base'; export abstract class A<T = Res> {}`,
+		},
+		{
 			name:   "class implements imported interface",
 			source: `import { Iface } from './base'; export class B implements Iface { m() {} }`,
 		},

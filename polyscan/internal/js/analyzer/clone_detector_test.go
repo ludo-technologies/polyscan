@@ -206,6 +206,59 @@ func TestIsFragmentCandidate(t *testing.T) {
 	}
 }
 
+// Every class form is offered as a class fragment, named after the class.
+func TestExtractFragments_ClassForms(t *testing.T) {
+	body := `{
+	private items: number[] = [];
+	add(x: number): void {
+		if (x > 0) {
+			this.items.push(x);
+		} else {
+			this.items.push(0);
+		}
+	}
+	total(): number {
+		let sum = 0;
+		for (const i of this.items) {
+			sum += i;
+		}
+		return sum;
+	}
+}`
+	tests := []struct {
+		name     string
+		source   string
+		nodeType parser.NodeType
+		class    string
+	}{
+		{name: "class declaration", source: "export class Thing " + body, nodeType: parser.NodeClass, class: "Thing"},
+		{name: "abstract class declaration", source: "export abstract class Thing " + body, nodeType: parser.NodeClass, class: "Thing"},
+		{name: "class expression", source: "export const Thing = class " + body + ";", nodeType: parser.NodeClassExpression},
+		{name: "named class expression", source: "export const Thing = class Inner " + body + ";", nodeType: parser.NodeClassExpression, class: "Inner"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.NewTypeScriptParser()
+			defer p.Close()
+			ast, err := p.ParseFile("test.ts", []byte(tt.source))
+			if err != nil {
+				t.Fatalf("Failed to parse: %v", err)
+			}
+
+			var classes []*parser.Node
+			for _, f := range NewCloneDetector(DefaultCloneDetectorConfig()).ExtractFragments([]*parser.Node{ast}, "test.ts") {
+				if f.ASTNode.Type == parser.NodeClass || f.ASTNode.Type == parser.NodeClassExpression {
+					classes = append(classes, f.ASTNode)
+				}
+			}
+			if len(classes) != 1 || classes[0].Type != tt.nodeType || classes[0].Name != tt.class {
+				t.Fatalf("class fragments = %+v, want one %s named %q", classes, tt.nodeType, tt.class)
+			}
+		})
+	}
+}
+
 func TestShouldIncludeFragment(t *testing.T) {
 	config := DefaultCloneDetectorConfig()
 	config.MinLines = 5
