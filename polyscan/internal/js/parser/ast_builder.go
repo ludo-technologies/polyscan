@@ -60,8 +60,14 @@ func (b *ASTBuilder) buildNode(tsNode *sitter.Node) *Node {
 		return b.buildGeneratorFunction(tsNode)
 	case "method_definition":
 		return b.buildMethodDefinition(tsNode)
-	case "class_declaration":
-		return b.buildClassDeclaration(tsNode)
+	case "class_declaration", "abstract_class_declaration":
+		return b.buildClass(tsNode, NodeClass)
+	case "class":
+		// The class keyword token shares its type with the class expression
+		if tsNode.IsNamed() {
+			return b.buildClass(tsNode, NodeClassExpression)
+		}
+		return b.buildGenericNode(tsNode)
 	case "if_statement":
 		return b.buildIfStatement(tsNode)
 	case "switch_statement":
@@ -315,9 +321,10 @@ func (b *ASTBuilder) buildMethodDefinition(tsNode *sitter.Node) *Node {
 	return node
 }
 
-// buildClassDeclaration builds a class declaration node
-func (b *ASTBuilder) buildClassDeclaration(tsNode *sitter.Node) *Node {
-	node := NewNode(NodeClass)
+// buildClass builds a class declaration, abstract class declaration or class
+// expression node
+func (b *ASTBuilder) buildClass(tsNode *sitter.Node, nodeType NodeType) *Node {
+	node := NewNode(nodeType)
 	node.Location = b.getLocation(tsNode)
 	b.addDecoratorChildren(node, tsNode)
 
@@ -326,11 +333,12 @@ func (b *ASTBuilder) buildClassDeclaration(tsNode *sitter.Node) *Node {
 		node.Name = nameNode.Content(b.source)
 	}
 
-	// Keep runtime `extends` and TypeScript `implements` references visible to
+	// Keep runtime `extends` and TypeScript `implements` references, and the
+	// types that type parameters are constrained by or default to, visible to
 	// downstream AST walks instead of treating their imports as unused.
 	for i := 0; i < int(tsNode.ChildCount()); i++ {
 		child := tsNode.Child(i)
-		if child != nil && child.Type() == "class_heritage" {
+		if child != nil && (child.Type() == "class_heritage" || child.Type() == "type_parameters") {
 			node.AddChild(b.buildNode(child))
 		}
 	}

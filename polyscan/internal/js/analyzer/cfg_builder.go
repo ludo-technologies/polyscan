@@ -88,7 +88,7 @@ func (b *CFGBuilder) Build(node *parser.Node) (*CFG, error) {
 	cfgName := domain.ModuleFunctionName
 	if node.IsFunction() && node.Name != "" {
 		cfgName = node.Name
-	} else if node.Type == parser.NodeClass && node.Name != "" {
+	} else if (node.Type == parser.NodeClass || node.Type == parser.NodeClassExpression) && node.Name != "" {
 		cfgName = node.Name
 	}
 
@@ -103,7 +103,7 @@ func (b *CFGBuilder) Build(node *parser.Node) (*CFG, error) {
 	case parser.NodeFunction, parser.NodeArrowFunction, parser.NodeAsyncFunction,
 		parser.NodeGeneratorFunction, parser.NodeFunctionExpression, parser.NodeMethodDefinition:
 		b.buildFunction(node)
-	case parser.NodeClass:
+	case parser.NodeClass, parser.NodeClassExpression:
 		b.buildClass(node)
 	default:
 		// For single statements, process directly
