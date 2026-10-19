@@ -3,6 +3,7 @@ package analysis
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -11,6 +12,8 @@ import (
 	"github.com/ludo-technologies/polyscan/polyscan/internal/engine"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/godeps"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/lang/golang"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/lang/rust"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/rustdeps"
 )
 
 // CoupledClass is the coupling result for one type.
@@ -56,7 +59,9 @@ type couplingFile struct {
 	importPath string
 	pkg        string
 	imports    []godeps.Import
-	types      []engine.Type
+	// uses maps each name a Rust file imports to the paths it comes from.
+	uses  map[string][]string
+	types []engine.Type
 }
 
 // coupledType accumulates one type of the tree before it is measured.
@@ -94,17 +99,30 @@ type couplingBuilder struct {
 	files    []*couplingFile
 	resolver *godeps.Resolver
 	noModule map[string]bool
-	warnings []string
+	crates   *rustdeps.Resolver
+	// rustRoots holds the names a Rust path into the tree can start with
+	// besides crate, self and super: the crates of the tree, and their
+	// modules, which are the directories and file stems on the path of a
+	// Rust file and the inline modules that enclose a type.
+	rustRoots map[string]bool
+	warnings  []string
 }
 
 func newCouplingBuilder() *couplingBuilder {
-	return &couplingBuilder{resolver: godeps.NewResolver(), noModule: map[string]bool{}}
+	return &couplingBuilder{
+		resolver:  godeps.NewResolver(),
+		noModule:  map[string]bool{},
+		crates:    rustdeps.NewResolver(),
+		rustRoots: map[string]bool{},
+	}
 }
 
 // add records the types of one file. A Go file also contributes its package
 // clause and imports, through which qualified references resolve; a Go file
 // with no go.mod above it keeps its unqualified references only, with one
-// warning per directory.
+// warning per directory. A Rust file contributes its use declarations, its
+// crate and its modules, which tell its references to types of other crates
+// apart.
 func (b *couplingBuilder) add(language *engine.Language, display, path string, content []byte, result *engine.Result) error {
 	file := &couplingFile{language: language, display: display, location: display}
 	if language.TypeSpansDirectory {
@@ -115,17 +133,18 @@ func (b *couplingBuilder) add(language *engine.Language, display, path string, c
 			file.types = append(file.types, t)
 		}
 	}
-	if language == golang.Language {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(absolute)
+	switch language {
+	case golang.Language:
 		info, err := godeps.ParseFile(content)
 		if err != nil {
 			b.warnings = append(b.warnings, fmt.Sprintf("%s: %v; its types are absent from the coupling analysis", display, err))
 			return nil
 		}
-		absolute, err := filepath.Abs(path)
-		if err != nil {
-			return err
-		}
-		dir := filepath.Dir(absolute)
 		importPath, noModule, err := b.resolver.ImportPath(dir)
 		if err != nil {
 			return err
@@ -135,6 +154,29 @@ func (b *couplingBuilder) add(language *engine.Language, display, path string, c
 			b.warnings = append(b.warnings, fmt.Sprintf("%s: no go.mod above it; references to types of other packages are not resolved", file.location))
 		}
 		file.importPath, file.pkg, file.imports = importPath, info.Package, info.Imports
+	case rust.Language:
+		uses, err := rustdeps.ParseUses(content)
+		if err != nil {
+			return err
+		}
+		file.uses = uses
+		crate, err := b.crates.CrateName(dir)
+		if err != nil {
+			return err
+		}
+		roots := strings.Split(filepath.ToSlash(strings.TrimSuffix(display, ".rs")), "/")
+		roots = append(roots, crate)
+		for _, t := range file.types {
+			scopes := strings.Split(t.Name, language.Separator())
+			roots = append(roots, scopes[:len(scopes)-1]...)
+		}
+		// An absolute or relative display path also yields the empty
+		// segment and dots, which no Rust path into the tree starts with.
+		for _, root := range roots {
+			if root != "" && root != "." && root != ".." {
+				b.rustRoots[root] = true
+			}
+		}
 	}
 	b.files = append(b.files, file)
 	return nil
@@ -143,10 +185,12 @@ func (b *couplingBuilder) add(language *engine.Language, display, path string, c
 // build resolves every reference and measures the types. A reference counts
 // when it names a type the tree declares: for Go an unqualified name is a
 // type of the same package and a qualified one is looked up through the
-// file's imports; for Rust a bare name is a type of the same file, or else
-// of any file. A type whose methods a file holds without declaring it, as a
-// Go type is across its package and a Rust type across impl blocks, joins
-// its declaration; a Rust impl for a type no file declares is left out.
+// file's imports; for Rust a name is a type of the same file, or else of
+// any file, unless the path it is written with or imported from by a use
+// leads out of the tree, to a type of another crate. A type whose methods a
+// file holds without declaring it, as a Go type is across its package and a
+// Rust type across impl blocks, joins its declaration; a Rust impl for a
+// type no file declares is left out.
 func (b *couplingBuilder) build() *Coupling {
 	types := map[string]*coupledType{}
 	var order []string
@@ -248,7 +292,7 @@ func (b *couplingBuilder) build() *Coupling {
 	resolve := func(site siteReference) (*coupledType, string) {
 		file, ref := site.file, site.ref
 		switch {
-		case ref.Package != "":
+		case file.language.TypeSpansDirectory && ref.Package != "":
 			target, name, ok := b.resolveQualified(file, ref, byImportPath, packageNames, aliasByImport)
 			if !ok {
 				return nil, ""
@@ -264,15 +308,24 @@ func (b *couplingBuilder) build() *Coupling {
 			}
 			return target, ref.Name
 		default:
-			if target, ok := byFileBare[file][ref.Name]; ok {
-				return target, ref.Name
+			// A name the file declares is that declaration, whatever a use
+			// in a nested scope imports under the same name.
+			name := ref.Name
+			if _, local := byFileBare[file][name]; !local || ref.Package != "" {
+				var ok bool
+				if name, ok = b.rustName(file, ref); !ok {
+					return nil, ""
+				}
 			}
-			candidates := byBare[bareKey(file.language, ref.Name)]
+			if target, ok := byFileBare[file][name]; ok {
+				return target, name
+			}
+			candidates := byBare[bareKey(file.language, name)]
 			switch {
 			case len(candidates) == 1:
-				return candidates[0], ref.Name
+				return candidates[0], name
 			case len(candidates) > 1:
-				b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous reference %q: resolves to %d declarations across the tree, left unresolved", file.display, ref.Name, len(candidates)))
+				b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous reference %q: resolves to %d declarations across the tree, left unresolved", file.display, name, len(candidates)))
 				return nil, ""
 			}
 			return nil, ""
@@ -345,6 +398,65 @@ func (b *couplingBuilder) build() *Coupling {
 		return a.StartLine < b.StartLine
 	})
 	return coupling
+}
+
+// rustName returns the name a Rust reference has in the tree, which is the
+// last segment of the path a use imports it from, or false when the
+// reference names a type of another crate. A name without a path or a use
+// is a type of the same module or of a glob import and keeps its name. The
+// uses of every scope of a file count, so a name that scopes import from
+// paths to different types, in the tree or not, is ambiguous and left
+// unresolved with a warning.
+func (b *couplingBuilder) rustName(file *couplingFile, ref engine.Reference) (string, bool) {
+	if ref.Package != "" {
+		return ref.Name, b.intoTree(file, ref.Package)
+	}
+	paths, ok := file.uses[ref.Name]
+	if !ok {
+		return ref.Name, true
+	}
+	// An empty name stands for a type of another crate.
+	var names []string
+	for _, path := range paths {
+		name := ""
+		if b.intoTree(file, path) {
+			name = bareName(file.language, path)
+		}
+		if !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	if len(names) > 1 {
+		b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous reference %q: imported from %d different paths, left unresolved", file.display, ref.Name, len(names)))
+		return "", false
+	}
+	return names[0], names[0] != ""
+}
+
+// intoTree reports whether a Rust path leads into the tree: its first
+// segment is crate, self, super or one of rustRoots, either as written or
+// through a use of the file that imports it from such a path. Any other
+// path, such as rustls::ServerConfig, std::sync::Arc, ::serde::Value or the
+// T::Output of a generic parameter, leads elsewhere.
+func (b *couplingBuilder) intoTree(file *couplingFile, path string) bool {
+	first, _, _ := strings.Cut(path, file.language.Separator())
+	if b.rustRoot(first) {
+		return true
+	}
+	for _, imported := range file.uses[first] {
+		if first, _, _ := strings.Cut(imported, file.language.Separator()); b.rustRoot(first) {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *couplingBuilder) rustRoot(segment string) bool {
+	switch segment {
+	case "crate", "self", "super":
+		return true
+	}
+	return b.rustRoots[segment]
 }
 
 // resolveQualified finds the type a Go reference pkg.T names: the file's
