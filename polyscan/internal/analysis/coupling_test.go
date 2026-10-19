@@ -358,6 +358,21 @@ pub struct Aliased { config: cfg::ServerConfig }
 		"src/main.rs": `use my_proxy::config::ServerConfig;
 
 struct App { config: ServerConfig }
+struct Absolute { config: ::my_proxy::config::ServerConfig }
+struct AbsoluteExternal { config: ::rustls::ServerConfig }
+`,
+		// Another crate of the tree reaches the library under the name its
+		// Cargo.toml gives the dependency, and a dependency renamed from a
+		// crate outside the tree stays outside.
+		"app/Cargo.toml": `[package]
+name = "app"
+
+[dependencies]
+settings = { package = "my-proxy", path = ".." }
+tls = { package = "rustls", version = "0.23" }
+`,
+		"app/src/main.rs": `struct Server { config: settings::config::ServerConfig }
+struct Secure { config: tls::ServerConfig }
 `,
 		// A name the file declares is that declaration even when a nested
 		// scope imports another crate's type under the same name.
@@ -398,6 +413,8 @@ impl Long {
 		"Imported":  {"ServerConfig"},
 		"Aliased":   {"ServerConfig"},
 		"App":       {"ServerConfig"},
+		"Absolute":  {"ServerConfig"},
+		"Server":    {"ServerConfig"},
 		"Failure":   {"Error"},
 	}
 	if !reflect.DeepEqual(got, want) {

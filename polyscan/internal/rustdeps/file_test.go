@@ -43,12 +43,25 @@ fn f() {
 	}
 }
 
-func TestCrateName(t *testing.T) {
+func TestCrate(t *testing.T) {
 	root := t.TempDir()
 	files := map[string]string{
 		// A virtual workspace manifest names no crate.
-		"Cargo.toml":                     "[workspace]\nmembers = [\"crates/*\"]\n",
-		"crates/net-core/Cargo.toml":     "[package]\nname = \"net-core\"\n",
+		"Cargo.toml": "[workspace]\nmembers = [\"crates/*\"]\n",
+		"crates/net-core/Cargo.toml": `[package]
+name = "net-core"
+
+[dependencies]
+serde = "1"
+tokio = { version = "1", features = ["full"] }
+settings = { package = "app-config", path = "../config" }
+
+[dev-dependencies]
+test-util = { path = "../test-util" }
+
+[target.'cfg(unix)'.dependencies]
+sys = { package = "net-sys", path = "../sys" }
+`,
 		"crates/renamed/Cargo.toml":      "[package]\nname = \"renamed\"\n\n[lib]\nname = \"other\"\n",
 		"crates/net-core/src/lib.rs":     "",
 		"crates/renamed/src/bin/main.rs": "",
@@ -63,24 +76,28 @@ func TestCrateName(t *testing.T) {
 		}
 	}
 	r := NewResolver()
-	for dir, want := range map[string]string{
-		"crates/net-core/src":    "net_core",
-		"crates/renamed/src/bin": "other",
-		"crates":                 "",
+	for dir, want := range map[string]*Crate{
+		"crates/net-core/src": {Package: "net-core", Name: "net_core", Dependencies: map[string]string{
+			"serde": "serde", "tokio": "tokio", "settings": "app-config", "test_util": "test-util", "sys": "net-sys",
+		}},
+		"crates/renamed/src/bin": {Package: "renamed", Name: "other", Dependencies: map[string]string{}},
+		"crates":                 nil,
 	} {
-		got, err := r.CrateName(filepath.Join(root, dir))
+		got, err := r.Crate(filepath.Join(root, dir))
 		if err != nil {
-			t.Fatalf("CrateName(%s): %v", dir, err)
+			t.Fatalf("Crate(%s): %v", dir, err)
 		}
-		if got != want {
-			t.Errorf("CrateName(%s) = %q, want %q", dir, got, want)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Crate(%s) = %+v, want %+v", dir, got, want)
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(root, "crates/net-core/Cargo.toml"), []byte("[package\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := NewResolver().CrateName(filepath.Join(root, "crates/net-core/src")); err == nil {
-		t.Error("CrateName with a malformed Cargo.toml: want an error")
+	for _, manifest := range []string{"[package\n", "[package]\nversion = \"0.1.0\"\n"} {
+		if err := os.WriteFile(filepath.Join(root, "crates/net-core/Cargo.toml"), []byte(manifest), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := NewResolver().Crate(filepath.Join(root, "crates/net-core/src")); err == nil {
+			t.Errorf("Crate with Cargo.toml %q: want an error", manifest)
+		}
 	}
 }

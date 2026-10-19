@@ -59,8 +59,10 @@ type couplingFile struct {
 	importPath string
 	pkg        string
 	imports    []godeps.Import
-	// uses maps each name a Rust file imports to the paths it comes from.
+	// uses maps each name a Rust file imports to the paths it comes from,
+	// and crate is the crate the file belongs to, nil outside of one.
 	uses  map[string][]string
+	crate *rustdeps.Crate
 	types []engine.Type
 }
 
@@ -100,20 +102,24 @@ type couplingBuilder struct {
 	resolver *godeps.Resolver
 	noModule map[string]bool
 	crates   *rustdeps.Resolver
-	// rustRoots holds the names a Rust path into the tree can start with
-	// besides crate, self and super: the crates of the tree, and their
-	// modules, which are the directories and file stems on the path of a
-	// Rust file and the inline modules that enclose a type.
-	rustRoots map[string]bool
-	warnings  []string
+	// rustCrates and rustPackages hold the library and package names of
+	// the Rust crates of the tree, and rustModules their modules: the
+	// directories and file stems on the path of a Rust file and the inline
+	// modules that enclose a type.
+	rustCrates   map[string]bool
+	rustPackages map[string]bool
+	rustModules  map[string]bool
+	warnings     []string
 }
 
 func newCouplingBuilder() *couplingBuilder {
 	return &couplingBuilder{
-		resolver:  godeps.NewResolver(),
-		noModule:  map[string]bool{},
-		crates:    rustdeps.NewResolver(),
-		rustRoots: map[string]bool{},
+		resolver:     godeps.NewResolver(),
+		noModule:     map[string]bool{},
+		crates:       rustdeps.NewResolver(),
+		rustCrates:   map[string]bool{},
+		rustPackages: map[string]bool{},
+		rustModules:  map[string]bool{},
 	}
 }
 
@@ -160,21 +166,23 @@ func (b *couplingBuilder) add(language *engine.Language, display, path string, c
 			return err
 		}
 		file.uses = uses
-		crate, err := b.crates.CrateName(dir)
-		if err != nil {
+		if file.crate, err = b.crates.Crate(dir); err != nil {
 			return err
 		}
-		roots := strings.Split(filepath.ToSlash(strings.TrimSuffix(display, ".rs")), "/")
-		roots = append(roots, crate)
+		if file.crate != nil {
+			b.rustCrates[file.crate.Name] = true
+			b.rustPackages[file.crate.Package] = true
+		}
+		modules := strings.Split(filepath.ToSlash(strings.TrimSuffix(display, ".rs")), "/")
 		for _, t := range file.types {
 			scopes := strings.Split(t.Name, language.Separator())
-			roots = append(roots, scopes[:len(scopes)-1]...)
+			modules = append(modules, scopes[:len(scopes)-1]...)
 		}
 		// An absolute or relative display path also yields the empty
 		// segment and dots, which no Rust path into the tree starts with.
-		for _, root := range roots {
-			if root != "" && root != "." && root != ".." {
-				b.rustRoots[root] = true
+		for _, module := range modules {
+			if module != "" && module != "." && module != ".." {
+				b.rustModules[module] = true
 			}
 		}
 	}
@@ -433,30 +441,52 @@ func (b *couplingBuilder) rustName(file *couplingFile, ref engine.Reference) (st
 	return names[0], names[0] != ""
 }
 
-// intoTree reports whether a Rust path leads into the tree: its first
-// segment is crate, self, super or one of rustRoots, either as written or
-// through a use of the file that imports it from such a path. Any other
-// path, such as rustls::ServerConfig, std::sync::Arc, ::serde::Value or the
-// T::Output of a generic parameter, leads elsewhere.
+// intoTree reports whether a Rust path leads into the tree, either as
+// written or through a use of the file that imports its first segment. Any
+// other path, such as rustls::ServerConfig, std::sync::Arc, ::serde::Value
+// or the T::Output of a generic parameter, leads elsewhere.
 func (b *couplingBuilder) intoTree(file *couplingFile, path string) bool {
-	first, _, _ := strings.Cut(path, file.language.Separator())
-	if b.rustRoot(first) {
+	if b.startsInTree(file, path) {
 		return true
 	}
+	first, _, _ := strings.Cut(path, file.language.Separator())
 	for _, imported := range file.uses[first] {
-		if first, _, _ := strings.Cut(imported, file.language.Separator()); b.rustRoot(first) {
+		if b.startsInTree(file, imported) {
 			return true
 		}
 	}
 	return false
 }
 
-func (b *couplingBuilder) rustRoot(segment string) bool {
-	switch segment {
+// startsInTree reports whether the first segment of a Rust path is crate,
+// self, super, a module of the tree or a crate of the tree. A path that
+// starts with :: names a crate, as in ::my_crate::Config.
+func (b *couplingBuilder) startsInTree(file *couplingFile, path string) bool {
+	separator := file.language.Separator()
+	if rest, ok := strings.CutPrefix(path, separator); ok {
+		first, _, _ := strings.Cut(rest, separator)
+		return b.treeCrate(file, first)
+	}
+	first, _, _ := strings.Cut(path, separator)
+	switch first {
 	case "crate", "self", "super":
 		return true
 	}
-	return b.rustRoots[segment]
+	return b.rustModules[first] || b.treeCrate(file, first)
+}
+
+// treeCrate reports whether a Rust file uses name for a crate of the tree:
+// the library name of one, or a dependency of the file's crate whose
+// package is one, under its own name or renamed with package = "...".
+func (b *couplingBuilder) treeCrate(file *couplingFile, name string) bool {
+	if b.rustCrates[name] {
+		return true
+	}
+	if file.crate == nil {
+		return false
+	}
+	pkg, ok := file.crate.Dependencies[name]
+	return ok && b.rustPackages[pkg]
 }
 
 // resolveQualified finds the type a Go reference pkg.T names: the file's
