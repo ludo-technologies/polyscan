@@ -314,6 +314,121 @@ impl Point {
 	}
 }
 
+func TestAnalyzeCouplingRustExternalPaths(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		"Cargo.toml": "[package]\nname = \"my-proxy\"\n",
+		"src/config.rs": `pub struct ServerConfig { pub port: u16 }
+`,
+		// Another crate's ServerConfig, written with its path or imported
+		// by a use, is not the tree's.
+		"src/acceptor.rs": `use std::sync::Arc;
+
+pub struct Acceptor { config: Arc<rustls::ServerConfig> }
+
+impl Acceptor {
+    pub fn port(&self) -> usize { Arc::strong_count(&self.config) }
+}
+`,
+		"src/endpoint.rs": `use wtransport::ServerConfig;
+
+pub struct Endpoint;
+
+impl Endpoint {
+    pub fn build() { let _ = ServerConfig::builder(); }
+}
+`,
+		"src/listener.rs": `use quinn as q;
+
+pub struct Listener;
+
+impl Listener {
+    pub fn new() { let _ = quinn::ServerConfig::with_crypto(); let _ = q::ServerConfig::default(); }
+}
+`,
+		// The tree's ServerConfig is reached through crate, a module of
+		// the tree, a use of either, a module alias or the crate's name.
+		"src/server.rs": `use crate::config::ServerConfig as Settings;
+use crate::config as cfg;
+
+pub struct Qualified { config: crate::config::ServerConfig }
+pub struct ByModule { config: config::ServerConfig }
+pub struct Imported { config: Settings }
+pub struct Aliased { config: cfg::ServerConfig }
+`,
+		"src/main.rs": `use my_proxy::config::ServerConfig;
+
+struct App { config: ServerConfig }
+struct Absolute { config: ::my_proxy::config::ServerConfig }
+struct AbsoluteExternal { config: ::rustls::ServerConfig }
+`,
+		// Another crate of the tree reaches the library under the name its
+		// Cargo.toml gives the dependency, and a dependency renamed from a
+		// crate outside the tree stays outside.
+		"app/Cargo.toml": `[package]
+name = "app"
+
+[dependencies]
+settings = { package = "my-proxy", path = ".." }
+tls = { package = "rustls", version = "0.23" }
+`,
+		"app/src/main.rs": `struct Server { config: settings::config::ServerConfig }
+struct Secure { config: tls::ServerConfig }
+`,
+		// A name the file declares is that declaration even when a nested
+		// scope imports another crate's type under the same name.
+		"src/error.rs": `pub struct Error;
+
+pub struct Failure { cause: Error }
+
+mod io {
+    use std::io::Error;
+}
+`,
+		// Uses in two scopes import Value from paths to different types,
+		// which the file's references cannot tell apart.
+		"src/flags.rs": `pub struct Short;
+
+impl Short {
+    fn value() { use crate::config::ServerConfig as Value; let _ = Value::default(); }
+}
+
+pub struct Long;
+
+impl Long {
+    fn value() { use crate::error::Error as Value; let _ = Value::default(); }
+}
+`,
+	})
+	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	got := map[string][]string{}
+	for _, class := range report.Coupling.Classes {
+		got[class.Name] = class.DependentClasses
+	}
+	want := map[string][]string{
+		"Qualified": {"ServerConfig"},
+		"ByModule":  {"ServerConfig"},
+		"Imported":  {"ServerConfig"},
+		"Aliased":   {"ServerConfig"},
+		"App":       {"ServerConfig"},
+		"Absolute":  {"ServerConfig"},
+		"Server":    {"ServerConfig"},
+		"Failure":   {"Error"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("dependencies = %v\nwant %v", got, want)
+	}
+	found := false
+	for _, w := range report.Coupling.Warnings {
+		found = found || strings.Contains(w, `ambiguous reference "Value": imported from 2 different paths`)
+	}
+	if !found {
+		t.Errorf("warnings = %v, want one about the ambiguous import of Value", report.Coupling.Warnings)
+	}
+}
+
 func TestAnalyzeCouplingAbsentWithoutSupportedLanguage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"a.cpp": "struct S { int a; };\n"})
 	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)

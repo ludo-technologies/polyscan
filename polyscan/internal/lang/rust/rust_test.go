@@ -374,6 +374,8 @@ mod m { pub struct Inner(super::Bar); impl Inner { fn f(&self) { let Inner(b) = 
 fn free() -> Bar { Foo::new() }
 #[cfg(test)]
 mod tests { struct Fixture; impl Fixture { fn f(&self) -> Bar {} } impl Foo { fn t(&self) -> Baz {} } }
+pub struct Q { c: Arc<rustls::Config> }
+impl fmt::Display for Q { fn fmt(&self) { quinn::Endpoint::new(); crate::net::Conn::open(); } }
 `))
 	if err != nil {
 		t.Fatalf("Analyze: %v", err)
@@ -391,10 +393,18 @@ mod tests { struct Fixture; impl Fixture { fn f(&self) -> Bar {} } impl Foo { fn
 		// An impl of an undeclared type is not declared here.
 		{Name: "G", StartLine: 7, EndLine: 7, References: []engine.Reference{{Name: "T"}, {Name: "Clone"}}},
 		{Name: "m::Inner", StartLine: 10, EndLine: 10, Declared: true, References: []engine.Reference{
-			{Name: "Bar"}, {Name: "Inner"}, {Name: "Color"},
+			{Name: "Bar", Package: "super"}, {Name: "Inner"}, {Name: "Color"},
 		}},
 		{Name: "tests::Fixture", StartLine: 13, EndLine: 13, Declared: true, IsTest: true},
 		{Name: "tests::Foo", StartLine: 13, EndLine: 13, IsTest: true},
+		// A path before a type is kept with it; the module segments of a
+		// path expression are still caught as names of their own.
+		{Name: "Q", StartLine: 14, EndLine: 14, Declared: true, References: []engine.Reference{
+			{Name: "Arc"}, {Name: "Config", Package: "rustls"},
+			{Name: "Display", Package: "fmt", Embedded: true},
+			{Name: "quinn"}, {Name: "Endpoint", Package: "quinn"},
+			{Name: "net", Package: "crate"}, {Name: "Conn", Package: "crate::net"},
+		}},
 	}
 	if !reflect.DeepEqual(result.Types, want) {
 		t.Errorf("types = %+v\nwant   %+v", result.Types, want)

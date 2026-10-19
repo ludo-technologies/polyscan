@@ -102,16 +102,21 @@ var Language = &engine.Language{
 	// or Color::Red names its type in the path's identifiers, and a tuple
 	// struct pattern names it in the pattern; module segments and generic
 	// parameters caught this way are dropped by the analysis because
-	// nothing declares them. The trait an impl implements is inheritance.
+	// nothing declares them. A path before the type, as in rustls::Config
+	// or crate::net::Config::new(), is its @package, which tells the
+	// analysis whether the type belongs to the tree. The trait an impl
+	// implements is inheritance.
 	References: `
 ((type_identifier) @reference (#not-eq? @reference "Self"))
-((scoped_identifier path: [(identifier) @reference (scoped_identifier name: (identifier) @reference)])
-  (#not-eq? @reference "Self"))
+(scoped_type_identifier path: (_) @package name: (type_identifier) @reference)
+((scoped_identifier path: (identifier) @reference) (#not-eq? @reference "Self"))
+(scoped_identifier path: (scoped_identifier path: (_) @package name: (identifier) @reference))
 (tuple_struct_pattern type: (identifier) @reference)
 (impl_item trait: [
   (type_identifier) @embedded
   (generic_type type: (type_identifier) @embedded)
-  (scoped_type_identifier name: (type_identifier) @embedded)
+  (scoped_type_identifier path: (_) @package name: (type_identifier) @embedded)
+  (generic_type type: (scoped_type_identifier path: (_) @package name: (type_identifier) @embedded))
 ])
 `,
 	// A field is anything reached from self, including a tuple struct's

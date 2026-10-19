@@ -104,10 +104,10 @@ type Language struct {
 	// References is an optional tree-sitter query, paired with Types, for
 	// the places a type is referred to: @reference is the name node, and an
 	// optional @package the qualifier it is reached through, as in Go's
-	// pkg.T. A match may capture @embedded instead of @reference for an
-	// embedded field or interface or an implemented trait, which is
-	// inheritance rather than use. A reference belongs to the type whose
-	// method or declaration contains it.
+	// pkg.T or Rust's a::b::T. A match may capture @embedded instead of
+	// @reference for an embedded field or interface or an implemented
+	// trait, which is inheritance rather than use. A reference belongs to
+	// the type whose method or declaration contains it.
 	References string
 	// Nesting is a tree-sitter query whose captures are the constructs that
 	// open a nesting level: branches, loops, switches and try blocks. A
