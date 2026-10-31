@@ -134,14 +134,17 @@ func ComputeLCOM4(methods []MethodAccess, config Config) *Result {
 		}
 	}
 
-	// Union methods connected by intra-class method calls
-	methodIndex := make(map[string]int, len(sortedMethods))
+	// Union methods connected by intra-class method calls. Method names are not
+	// unique: Rust keeps an inherent method and a trait method with the same
+	// name side by side, and C++ overloads share a name too. Record every
+	// index for a name so a call links the caller to all of the namesakes.
+	methodIndices := make(map[string][]int, len(sortedMethods))
 	for i, m := range sortedMethods {
-		methodIndex[m.MethodName] = i
+		methodIndices[m.MethodName] = append(methodIndices[m.MethodName], i)
 	}
 	for i, m := range sortedMethods {
 		for callee := range m.Calls {
-			if j, exists := methodIndex[callee]; exists {
+			for _, j := range methodIndices[callee] {
 				union(i, j)
 			}
 		}

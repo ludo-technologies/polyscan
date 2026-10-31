@@ -256,6 +256,33 @@ func TestComputeLCOM4CallToNonMethodIgnored(t *testing.T) {
 	}
 }
 
+func TestComputeLCOM4CallLinksEverySameNamedMethod(t *testing.T) {
+	// A trait impl forwards to an inherent method of the same name. Both
+	// methods carry the name "is_client", and describe calls that name; the
+	// call must link describe to both of them instead of to one arbitrary copy.
+	// Same shape as a C++ overload calling its namesake.
+	methods := []MethodAccess{
+		{MethodName: "is_client", InstanceVars: map[string]bool{"client": true}},
+		{MethodName: "is_client", InstanceVars: map[string]bool{}, Calls: map[string]bool{"is_client": true}},
+		{MethodName: "len", InstanceVars: map[string]bool{"buf": true}},
+		{MethodName: "size", InstanceVars: map[string]bool{}, Calls: map[string]bool{"len": true}},
+		{MethodName: "describe", InstanceVars: map[string]bool{}, Calls: map[string]bool{"is_client": true, "len": true}},
+	}
+
+	result := ComputeLCOM4(methods, DefaultConfig())
+
+	if result.TotalMethods != 5 {
+		t.Errorf("TotalMethods = %d, want 5", result.TotalMethods)
+	}
+	if result.LCOM4 != 1 {
+		t.Errorf("LCOM4 = %d, want 1 (all methods reachable through calls)", result.LCOM4)
+	}
+	wantGroups := [][]string{{"describe", "is_client", "is_client", "len", "size"}}
+	if !reflect.DeepEqual(result.MethodGroups, wantGroups) {
+		t.Errorf("MethodGroups = %v, want %v", result.MethodGroups, wantGroups)
+	}
+}
+
 func TestComputeLCOM4GroupsSortedByFirstMethod(t *testing.T) {
 	methods := []MethodAccess{
 		{MethodName: "zeta", InstanceVars: map[string]bool{"z": true}},
