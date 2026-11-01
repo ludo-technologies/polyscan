@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-01
+
+### Fixed
+
+- The statements of a JavaScript/TypeScript `else` branch are built into the control flow graph. Every `else if` adds one decision point to cyclomatic complexity, a `return` in an `else` ends its branch, and the code after an `if`/`else` whose branches all return is reported as unreachable. The `else` subtree also loses one wrapper node, so clone similarity can change slightly. Before, the `else` clause was never entered, so the complexity of an `else if` chain was too low and dead code after an exhausted `if`/`else` was not found (#206)
+- A JavaScript/TypeScript `finally` block is reachable when its `try` or `catch` ends with a `return`, `throw`, `break` or `continue`. The code after the `try` statement is still reported as unreachable when every path out of the `try` and `catch` jumps. Complexity is unchanged, because exception edges do not count toward it. Before, such a `finally` block was reported as `unreachable_branch` (#172)
+- A dead JavaScript/TypeScript region that starts after a `return`, `throw`, `break` or `continue` is reported as one critical finding with the reason of that terminator. Before, a block further down the region, such as the body of an `if`, a loop or a `catch`, took no reason from the terminator and was reported as a separate `unreachable_branch` warning. A region whose nested `if` or loop ends before more dead code is still split at the closing brace (#211)
+- A TypeScript `abstract class` and a JavaScript/TypeScript class expression are built as class nodes, so clone detection compares them as it does a class declaration, and an exported abstract class is a named export that the unused export check sees. The class builder also keeps type parameters, so an import used only in a type parameter constraint or default is no longer reported as unused. Before, both forms fell through to the generic builder and were never offered as class fragments (#158)
+- Rust coupling (CBO) leaves out the types of other crates. A reference keeps the path it is written with, a bare name is followed through the `use` declarations of its file, and a path whose first segment is not `crate`, `self`, `super`, a crate of the tree or one of its modules names a type of another crate. The crate names come from the nearest `Cargo.toml`, so a binary or another workspace crate still reaches the library by its crate name, by a leading `::` or through a dependency renamed with `package = "..."`. A name that `use` declarations in different scopes of one file import from different paths is left unresolved with a warning. Before, `std::fs::File`, `walkdir::DirEntry` and similar types counted toward `coupling_count` (#213)
+- A Rust item with a comment between its `#[test]` or `#[cfg(test)]` marker and the item is recognized as test code and left out of the analysis by default. Before, the comment broke the match and the item was analyzed as production code (#180)
+
 ## [0.6.0] - 2026-10-10
 
 ### Added
