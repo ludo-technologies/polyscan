@@ -348,69 +348,35 @@ func TestAverageGroupSimilaritySkipsMissingPairs(t *testing.T) {
 	}
 }
 
-func TestMajorityType_TieBreaksDeterministically(t *testing.T) {
-	item1 := ti(1, "a.js", 0, 0)
-	item2 := ti(2, "b.js", 0, 0)
-	item3 := ti(3, "c.js", 0, 0)
-
-	typeMap := map[string]domain.CloneType{
-		metadataPairKey(item1, item2): domain.Type2Clone,
-		metadataPairKey(item2, item3): domain.Type2Clone,
-		metadataPairKey(item1, item3): domain.Type1Clone,
-	}
-	simMap := map[string]float64{
-		metadataPairKey(item1, item2): 0.9,
-		metadataPairKey(item2, item3): 0.9,
-		metadataPairKey(item1, item3): 0.9,
+func TestLoosestPairType(t *testing.T) {
+	a, b, c := ti(1, "a.js", 0, 0), ti(2, "b.js", 0, 0), ti(3, "c.js", 0, 0)
+	members := []*testItem{a, b, c}
+	types := func(ab, ac, bc domain.CloneType) map[string]domain.CloneType {
+		return map[string]domain.CloneType{
+			metadataPairKey(a, b): ab,
+			metadataPairKey(a, c): ac,
+			metadataPairKey(b, c): bc,
+		}
 	}
 
-	majority := majorityType(typeMap, simMap, []*testItem{item1, item2, item3})
-
-	// All pairs tie on similarity, so the strictest (lowest) type wins deterministically.
-	if majority != domain.Type1Clone {
-		t.Errorf("Expected Type1Clone deterministic tie break, got %v", majority)
+	tests := []struct {
+		name  string
+		types map[string]domain.CloneType
+		want  domain.CloneType
+	}{
+		{"every pair identical", types(domain.Type1Clone, domain.Type1Clone, domain.Type1Clone), domain.Type1Clone},
+		{"one identical pair, renamed member", types(domain.Type1Clone, domain.Type2Clone, domain.Type2Clone), domain.Type2Clone},
+		{"one renamed pair, modified members", types(domain.Type2Clone, domain.Type3Clone, domain.Type3Clone), domain.Type3Clone},
+		{"one semantic pair", types(domain.Type1Clone, domain.Type1Clone, domain.Type4Clone), domain.Type4Clone},
+		{"missing pair", map[string]domain.CloneType{metadataPairKey(a, b): domain.Type1Clone, metadataPairKey(b, c): domain.Type2Clone}, domain.Type2Clone},
+		{"no pairs", nil, domain.Type4Clone},
 	}
-}
-
-// TestMajorityType_PrefersHighSimilarityPair ensures a connected component
-// whose strongest edge is a high-similarity Type-2 pair is reported as Type-2
-// even when weaker Type-3 transitive edges outnumber it.
-func TestMajorityType_PrefersHighSimilarityPair(t *testing.T) {
-	item1 := ti(1, "a.js", 0, 0)
-	item2 := ti(2, "b.js", 0, 0)
-	item3 := ti(3, "c.js", 0, 0)
-	item4 := ti(4, "d.js", 0, 0)
-
-	members := []*testItem{item1, item2, item3, item4}
-	typeMap := map[string]domain.CloneType{
-		metadataPairKey(item1, item2): domain.Type2Clone,
-		metadataPairKey(item1, item3): domain.Type3Clone,
-		metadataPairKey(item1, item4): domain.Type3Clone,
-		metadataPairKey(item2, item3): domain.Type3Clone,
-		metadataPairKey(item2, item4): domain.Type3Clone,
-		metadataPairKey(item3, item4): domain.Type3Clone,
-	}
-	simMap := map[string]float64{
-		metadataPairKey(item1, item2): 0.96, // high-sim Type-2 pair
-		metadataPairKey(item1, item3): 0.85,
-		metadataPairKey(item1, item4): 0.85,
-		metadataPairKey(item2, item3): 0.85,
-		metadataPairKey(item2, item4): 0.85,
-		metadataPairKey(item3, item4): 0.85,
-	}
-
-	majority := majorityType(typeMap, simMap, members)
-	if majority != domain.Type2Clone {
-		t.Errorf("Expected Type2Clone from the highest-similarity edge, got %v", majority)
-	}
-}
-
-func TestMajorityTypeEmpty(t *testing.T) {
-	majority := majorityType(nil, nil, []*testItem{})
-
-	// Conservative default fallback: never report unknown as Type-1
-	if majority != domain.Type4Clone {
-		t.Errorf("Expected Type4Clone as fallback, got %v", majority)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := loosestPairType(tt.types, members); got != tt.want {
+				t.Errorf("loosestPairType = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

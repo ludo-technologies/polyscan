@@ -181,34 +181,23 @@ func averageGroupSimilarity[T GroupableItem](sims map[string]float64, members []
 	return sum / float64(cnt)
 }
 
-// majorityType chooses the CloneType of the highest-similarity pair edge in
-// members. When several pairs share the maximum similarity, the most strict
-// (lowest enum) type wins. This prevents a high-similarity Type-2/Type-4 pair
-// from being hidden when lower-similarity Type-3 transitive edges outnumber it
-// in the same connected component.
-func majorityType[T GroupableItem](typeMap map[string]domain.CloneType, simMap map[string]float64, members []T) domain.CloneType {
-	maxSim := -1.0
-	var best domain.CloneType
-	found := false
+// loosestPairType chooses the loosest (highest enum) CloneType among the pairs
+// backing members. A group is only as strict as its weakest link: one identical
+// pair must not label a group Type-1 when another member only matches after
+// renames.
+func loosestPairType[T GroupableItem](typeMap map[string]domain.CloneType, members []T) domain.CloneType {
+	var loosest domain.CloneType
 	for i := 0; i < len(members); i++ {
 		for j := i + 1; j < len(members); j++ {
-			key := metadataPairKey(members[i], members[j])
-			t, tok := typeMap[key]
-			s, sok := simMap[key]
-			if !tok || !sok || t == 0 {
-				continue
-			}
-			found = true
-			if s > maxSim || (almostEqual(s, maxSim) && t < best) {
-				maxSim = s
-				best = t
+			if t := typeMap[metadataPairKey(members[i], members[j])]; t > loosest {
+				loosest = t
 			}
 		}
 	}
-	if !found {
+	if loosest == 0 {
 		return domain.Type4Clone // conservative fallback: never report unknown as Type-1
 	}
-	return best
+	return loosest
 }
 
 // pairMetadata reduces raw pairs to per-pair-key similarity and type maps,
@@ -394,7 +383,7 @@ func (c *ConnectedGrouping[T]) GroupItems(pairs []*ItemPair[T]) []*ItemGroup[T] 
 		groups = append(groups, &ItemGroup[T]{
 			ID:         groupID,
 			Items:      members,
-			GroupType:  majorityType(typeMap, simMap, members),
+			GroupType:  loosestPairType(typeMap, members),
 			Similarity: averageGroupSimilarity(simMap, members),
 		})
 		groupID++
@@ -532,7 +521,7 @@ func (kg *KCoreGrouping[T]) GroupItems(pairs []*ItemPair[T]) []*ItemGroup[T] {
 		groups = append(groups, &ItemGroup[T]{
 			ID:         groupID,
 			Items:      component,
-			GroupType:  majorityType(typeMap, simMap, component),
+			GroupType:  loosestPairType(typeMap, component),
 			Similarity: averageGroupSimilarity(simMap, component),
 		})
 		groupID++
@@ -713,7 +702,7 @@ func (s *StarMedoidGrouping[T]) GroupItems(pairs []*ItemPair[T]) []*ItemGroup[T]
 		result = append(result, &ItemGroup[T]{
 			ID:         groupID,
 			Items:      g.members,
-			GroupType:  majorityType(typeMap, simMap, g.members),
+			GroupType:  loosestPairType(typeMap, g.members),
 			Similarity: averageGroupSimilarity(simMap, g.members),
 		})
 		groupID++
@@ -895,7 +884,7 @@ func (c *CompleteLinkageGrouping[T]) buildGroups(activeClusters []*completeLinka
 		groups = append(groups, &ItemGroup[T]{
 			ID:         groupID,
 			Items:      sortedMembers,
-			GroupType:  majorityType(types, similarities, sortedMembers),
+			GroupType:  loosestPairType(types, sortedMembers),
 			Similarity: averageGroupSimilarity(similarities, sortedMembers),
 		})
 		groupID++
@@ -1286,7 +1275,7 @@ func (cg *CentroidGrouping[T]) GroupItems(pairs []*ItemPair[T]) []*ItemGroup[T] 
 			groups = append(groups, &ItemGroup[T]{
 				ID:         groupID,
 				Items:      members,
-				GroupType:  majorityType(typeMap, simMap, members),
+				GroupType:  loosestPairType(typeMap, members),
 				Similarity: averageGroupSimilarity(simMap, members),
 			})
 			groupID++
@@ -1369,7 +1358,7 @@ func DedupeStrictSubsetGroupMembers[T GroupableItem](groups []*ItemGroup[T], pai
 				metadataReady = true
 			}
 			g.Similarity = averageGroupSimilarity(similarities, g.Items)
-			g.GroupType = majorityType(types, similarities, g.Items)
+			g.GroupType = loosestPairType(types, g.Items)
 		}
 		out = append(out, g)
 	}
@@ -1553,7 +1542,7 @@ func FilterGroupsWithoutBackingPairs[T GroupableItem](groups []*ItemGroup[T], pa
 			continue
 		}
 		group.Similarity = averageGroupSimilarity(similarities, group.Items)
-		group.GroupType = majorityType(types, similarities, group.Items)
+		group.GroupType = loosestPairType(types, group.Items)
 		if group.Similarity <= 0 {
 			continue
 		}
