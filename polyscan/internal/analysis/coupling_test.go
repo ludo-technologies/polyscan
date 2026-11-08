@@ -429,6 +429,73 @@ impl Long {
 	}
 }
 
+func TestAnalyzeCouplingRustMacroArguments(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		"Cargo.toml": "[package]\nname = \"my-proxy\"\n",
+		"src/lib.rs": `pub enum State { Up, Down }
+
+pub struct Update { pub port: u16 }
+
+pub struct Direct;
+
+impl Direct {
+    pub fn is_up(&self, s: &str) -> bool {
+        let state = if s == "up" { State::Up } else { State::Down };
+        let _batch = Update { port: 1 };
+        matches!(state, State::Up)
+    }
+}
+
+pub struct InMacro;
+
+impl InMacro {
+    pub fn is_up(&self, s: &str) -> bool {
+        let _batch = vec![Update { port: 1 }];
+        matches!(s.len(), 2) && matches!(Some(State::Up), Some(State::Up))
+    }
+}
+
+pub struct Qualified;
+
+impl Qualified {
+    pub fn new() { let _ = vec![crate::config::ServerConfig { port: 1 }]; }
+}
+
+// A type of another crate named inside a macro is not the tree's type of
+// the same name, and a name that is only an argument is not a type.
+pub struct Elsewhere;
+
+impl Elsewhere {
+    pub fn check(k: Kind) -> bool {
+        let _ = vec![rustls::ServerConfig { port: 1 }];
+        let _ = format!("{}", ErrorKind);
+        matches!(k, std::io::ErrorKind::NotFound)
+    }
+}
+`,
+		"src/config.rs": `pub struct ServerConfig { pub port: u16 }
+
+pub struct ErrorKind;
+`,
+	})
+	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	got := map[string][]string{}
+	for _, class := range report.Coupling.Classes {
+		got[class.Name] = class.DependentClasses
+	}
+	want := map[string][]string{
+		"Direct":    {"State", "Update"},
+		"InMacro":   {"State", "Update"},
+		"Qualified": {"ServerConfig"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("dependencies = %v\nwant %v", got, want)
+	}
+}
+
 func TestAnalyzeCouplingAbsentWithoutSupportedLanguage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"a.cpp": "struct S { int a; };\n"})
 	report, err := Analyze([]string{dir}, Options{CBO: true}, nil)

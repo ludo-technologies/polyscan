@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Rust coupling (CBO) counts a type named inside a macro argument, either as a path segment, such as the `State` of `matches!(s, State::Up)`, or as a struct literal, such as `vec![Update { port: 1 }]`. The path before the name decides whether it belongs to the tree, as it does outside a macro, so `std::io::ErrorKind` inside a macro stays out. A bare name in a macro argument, such as `Some` or an argument of `format!`, is not read as a type. Before, a type referred to only inside a macro was missing from `dependent_classes` (#225)
+
 ## [0.6.1] - 2026-11-01
 
 ### Fixed
