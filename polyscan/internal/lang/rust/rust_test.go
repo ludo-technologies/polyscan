@@ -423,6 +423,35 @@ impl fmt::Display for Q { fn fmt(&self) { quinn::Endpoint::new(); crate::net::Co
 	}
 }
 
+func TestReferencesInMacroArguments(t *testing.T) {
+	result, err := Language.Analyze([]byte(`
+pub struct M;
+impl M {
+    fn f(&self) {
+        assert!(matches!(s, State::Up | Some(a::Kind::X)));
+        let _ = vec![Update { p: 1 }, crate::net::Conn { c: 2 }, ::serde::Value { v: 3 }];
+        send!(v1::Change::Mutate(v1::Mutator { m: 4 }));
+        format!("{} {}", name, Plain);
+        check!(Self::g());
+    }
+}
+`))
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	want := []engine.Reference{
+		{Name: "State"},
+		{Name: "a"}, {Name: "Kind", Package: "a"},
+		{Name: "Update"},
+		{Name: "net", Package: "crate"}, {Name: "Conn", Package: "crate::net"},
+		{Name: "serde"}, {Name: "Value", Package: "::serde"},
+		{Name: "v1"}, {Name: "Change", Package: "v1"}, {Name: "Mutator", Package: "v1"},
+	}
+	if got := result.Types[0].References; !reflect.DeepEqual(got, want) {
+		t.Errorf("references = %+v\nwant %+v", got, want)
+	}
+}
+
 func TestEffectiveComplexityCollapsesFlatDispatch(t *testing.T) {
 	cases := []struct {
 		name string

@@ -106,7 +106,10 @@ type Language struct {
 	// optional @package the qualifier it is reached through, as in Go's
 	// pkg.T or Rust's a::b::T. A match may capture @embedded instead of
 	// @reference for an embedded field or interface or an implemented
-	// trait, which is inheritance rather than use. A reference belongs to
+	// trait, which is inheritance rather than use. A match may capture
+	// @token_reference for a name among the flat tokens of a macro argument,
+	// where no node spans the path before it: its qualifier is read from
+	// the segments and separators that precede it. A reference belongs to
 	// the type whose method or declaration contains it.
 	References string
 	// Nesting is a tree-sitter query whose captures are the constructs that
@@ -326,6 +329,7 @@ const (
 	implCapture         = "impl"
 	aliasCapture        = "alias"
 	referenceCapture    = "reference"
+	tokenRefCapture     = "token_reference"
 	embeddedCapture     = "embedded"
 	packageCapture      = "package"
 	operatorField       = "operator"
@@ -1163,7 +1167,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 
 	type reference struct {
 		node     *sitter.Node
-		pkg      *sitter.Node
+		pkg      string
 		embedded bool
 	}
 	refs := map[uintptr]reference{}
@@ -1174,11 +1178,14 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 			switch l.references.CaptureNameForId(capture.Index) {
 			case referenceCapture:
 				ref.node = capture.Node
+			case tokenRefCapture:
+				ref.node = capture.Node
+				ref.pkg = l.tokenQualifier(capture.Node, source)
 			case embeddedCapture:
 				ref.node = capture.Node
 				ref.embedded = true
 			case packageCapture:
-				ref.pkg = capture.Node
+				ref.pkg = capture.Node.Content(source)
 			}
 		}
 		if ref.node == nil {
@@ -1190,7 +1197,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 		// The plain pattern also matches the name inside a qualified or
 		// embedded form; the more specific match wins.
 		if existing, ok := refs[ref.node.ID()]; ok {
-			if existing.embedded || (existing.pkg != nil && ref.pkg == nil) {
+			if existing.embedded || (existing.pkg != "" && ref.pkg == "") {
 				return
 			}
 		} else {
@@ -1206,11 +1213,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 		if s := innermostSpan(spans, ref.node.StartByte(), ref.node.EndByte()); s != nil && s.alias {
 			t := typeOf(s.name)
 			if t.AliasOf.Name == "" {
-				r := Reference{Name: ref.node.Content(source)}
-				if ref.pkg != nil {
-					r.Package = ref.pkg.Content(source)
-				}
-				t.AliasOf = r
+				t.AliasOf = Reference{Name: ref.node.Content(source), Package: ref.pkg}
 			}
 			continue
 		}
@@ -1218,10 +1221,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 		if t == nil {
 			continue
 		}
-		r := Reference{Name: ref.node.Content(source), Embedded: ref.embedded}
-		if ref.pkg != nil {
-			r.Package = ref.pkg.Content(source)
-		}
+		r := Reference{Name: ref.node.Content(source), Package: ref.pkg, Embedded: ref.embedded}
 		if seen[t.Name] == nil {
 			seen[t.Name] = map[Reference]bool{}
 		}
@@ -1231,6 +1231,29 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 		}
 	}
 	return types
+}
+
+// tokenQualifier returns the path written before a name among flat tokens,
+// which is a::b for the T of a::b::T and ::a for that of ::a::T. A name with
+// no named segment directly before its separator has no qualifier.
+func (l *Language) tokenQualifier(name *sitter.Node, source []byte) string {
+	separator := l.Separator()
+	before := name.PrevSibling()
+	if before == nil || before.Type() != separator {
+		return ""
+	}
+	end := before.StartByte()
+	start := end
+	for before != nil && before.Type() == separator {
+		start = before.StartByte()
+		segment := before.PrevSibling()
+		if segment == nil || !segment.IsNamed() {
+			break
+		}
+		start = segment.StartByte()
+		before = segment.PrevSibling()
+	}
+	return string(source[start:end])
 }
 
 // innermost returns the function whose span most tightly contains the byte

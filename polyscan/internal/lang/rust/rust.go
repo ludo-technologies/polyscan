@@ -104,7 +104,11 @@ var Language = &engine.Language{
 	// parameters caught this way are dropped by the analysis because
 	// nothing declares them. A path before the type, as in rustls::Config
 	// or crate::net::Config::new(), is its @package, which tells the
-	// analysis whether the type belongs to the tree. The trait an impl
+	// analysis whether the type belongs to the tree. The arguments of a macro
+	// are a flat token tree, where a path segment is an identifier followed
+	// by :: and a struct literal is an identifier followed by a braced token
+	// tree. Any other identifier there, such as the Some of a matches! or an
+	// argument of format!, is not read as a type. The trait an impl
 	// implements is inheritance.
 	References: `
 ((type_identifier) @reference (#not-eq? @reference "Self"))
@@ -112,6 +116,8 @@ var Language = &engine.Language{
 ((scoped_identifier path: (identifier) @reference) (#not-eq? @reference "Self"))
 (scoped_identifier path: (scoped_identifier path: (_) @package name: (identifier) @reference))
 (tuple_struct_pattern type: (identifier) @reference)
+((token_tree (identifier) @token_reference . "::") (#not-eq? @token_reference "Self"))
+(token_tree (identifier) @token_reference . (token_tree . "{"))
 (impl_item trait: [
   (type_identifier) @embedded
   (generic_type type: (type_identifier) @embedded)
