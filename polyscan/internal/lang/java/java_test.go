@@ -1,6 +1,8 @@
 package java
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -164,6 +166,165 @@ class C {
 	}
 	if got := functions["C.Runnable.run"].Complexity; got != 3 {
 		t.Errorf("run complexity = %d, want 3", got)
+	}
+}
+
+func TestMembers(t *testing.T) {
+	functions := analyze(t, `
+class C {
+  private int a, b = 1;
+  int size;
+  static int count;
+  private static final String NAME = "c";
+  C(int a) { this.a = a; size = 0; }
+  static void helper() { count++; }
+  @SuppressWarnings("static") void annotated() { a++; }
+  void explicit() { this.a = this.b; this.helper(); this.count++; this.inherited = 1; }
+  void bare() { b = a + count; foo(); NAME.length(); }
+  void notFields(Other other, List<Integer> list) {
+    other.a = 1;
+    list.size();
+    int n = size();
+  }
+  void references() { use(this::bare); use(C::helper); use(items::add); }
+  int arrays() { return items[a]; }
+  int[] items;
+}
+`)
+	cases := []struct {
+		name    string
+		hasSelf bool
+		fields  []string
+		calls   []string
+	}{
+		{"C.C", false, nil, nil},
+		{"C.helper", false, nil, nil},
+		{"C.annotated", true, []string{"a"}, []string{}},
+		{"C.explicit", true, []string{"a", "b"}, []string{"helper"}},
+		{"C.bare", true, []string{"a", "b"}, []string{"foo"}},
+		{"C.notFields", true, []string{}, []string{"size"}},
+		{"C.references", true, []string{"items"}, []string{"bare", "use"}},
+		{"C.arrays", true, []string{"a", "items"}, []string{}},
+	}
+	for _, tc := range cases {
+		fn, ok := functions[tc.name]
+		if !ok {
+			t.Errorf("missing function %q", tc.name)
+			continue
+		}
+		if fn.Receiver != "C" || fn.HasSelf != tc.hasSelf {
+			t.Errorf("%s: receiver %q hasSelf %v, want C %v", tc.name, fn.Receiver, fn.HasSelf, tc.hasSelf)
+		}
+		if got := slices.Sorted(maps.Keys(fn.Fields)); !slices.Equal(got, tc.fields) {
+			t.Errorf("%s: fields = %v, want %v", tc.name, got, tc.fields)
+		}
+		if got := slices.Sorted(maps.Keys(fn.Calls)); !slices.Equal(got, tc.calls) {
+			t.Errorf("%s: calls = %v, want %v", tc.name, got, tc.calls)
+		}
+	}
+}
+
+func TestMembersOfNestedRecordAndEnum(t *testing.T) {
+	functions := analyze(t, `
+class Outer {
+  int shared;
+  class Inner {
+    int own;
+    void touch() { own++; shared++; Outer.this.shared++; }
+  }
+  void run() { new Runnable() { public void run() { shared++; } }; }
+  void lambda() { Runnable r = () -> shared++; }
+}
+record Point(int x, int y) {
+  Point { if (x < 0) throw new IllegalArgumentException(); }
+  int sum() { return x + y; }
+  static Point origin() { return new Point(0, 0); }
+}
+record Bag(String... items) { int size() { return items.length; } }
+enum Level {
+  LOW(1), HIGH(2);
+  private final int weight;
+  private static int created;
+  Level(int weight) { this.weight = weight; }
+  int weight() { return weight + created; }
+  boolean low() { return this == LOW; }
+}
+interface I { int LIMIT = 3; default int limit() { return LIMIT; } }
+`)
+	cases := []struct {
+		name     string
+		receiver string
+		hasSelf  bool
+		fields   []string
+	}{
+		{"Outer.Inner.touch", "Outer.Inner", true, []string{"own"}},
+		{"Outer.run", "Outer", true, []string{}},
+		{"Outer.Runnable.run", "", false, nil},
+		{"Outer.lambda", "Outer", true, []string{"shared"}},
+		{"Point.Point", "Point", false, nil},
+		{"Point.sum", "Point", true, []string{"x", "y"}},
+		{"Point.origin", "Point", false, nil},
+		{"Bag.size", "Bag", true, []string{"items"}},
+		{"Level.Level", "Level", false, nil},
+		{"Level.weight", "Level", true, []string{"weight"}},
+		{"Level.low", "Level", true, []string{}},
+		{"I.limit", "", false, nil},
+	}
+	for _, tc := range cases {
+		fn, ok := functions[tc.name]
+		if !ok {
+			t.Errorf("missing function %q", tc.name)
+			continue
+		}
+		if fn.Receiver != tc.receiver || fn.HasSelf != tc.hasSelf {
+			t.Errorf("%s: receiver %q hasSelf %v, want %q %v", tc.name, fn.Receiver, fn.HasSelf, tc.receiver, tc.hasSelf)
+		}
+		if got := slices.Sorted(maps.Keys(fn.Fields)); !slices.Equal(got, tc.fields) {
+			t.Errorf("%s: fields = %v, want %v", tc.name, got, tc.fields)
+		}
+	}
+}
+
+func TestMembersIgnoreShadowedFields(t *testing.T) {
+	functions := analyze(t, `
+class C {
+  int a, b, c, d, e, f, g, h;
+  void param(int a) { a++; b++; }
+  void varargs(int... a) { use(a); }
+  void local() { c++; int c = 1; c++; }
+  void block() { { int d = 1; d++; } d++; }
+  void loop() { for (int e = 0; e < 3; e++) {} e++; }
+  void each() { for (int f : f(this)) { f++; } }
+  void group(int k) { switch (k) { case 1: int g = 1; break; case 2: g = 2; break; } }
+  void caught() { try { } catch (RuntimeException h) { h.printStackTrace(); } }
+  void lambdas() { java.util.function.IntUnaryOperator l = a -> a + 1; Fn m = (b, c) -> b; Fn n = (int d) -> d; }
+  void resource() { try (var e = open()) { e.read(); } }
+  void pattern(Object o) { if (o instanceof String f) { f.length(); } }
+  void typePattern(Object o) { switch (o) { case String g -> g.length(); default -> {} } }
+  void recordPattern(Object o) { if (o instanceof Pair(int h, int ignored)) { h++; } }
+  void explicit(int a) { this.a = a; }
+}
+`)
+	want := map[string][]string{
+		"C.param":         {"b"},
+		"C.varargs":       {},
+		"C.local":         {"c"},
+		"C.block":         {"d"},
+		"C.loop":          {"e"},
+		"C.each":          {},
+		"C.group":         {},
+		"C.caught":        {},
+		"C.lambdas":       {},
+		"C.resource":      {},
+		"C.pattern":       {},
+		"C.typePattern":   {},
+		"C.recordPattern": {},
+		"C.explicit":      {"a"},
+	}
+	for name, fields := range want {
+		if got := slices.Sorted(maps.Keys(functions[name].Fields)); !slices.Equal(got, fields) {
+			t.Errorf("%s: fields = %v, want %v", name, got, fields)
+		}
 	}
 }
 

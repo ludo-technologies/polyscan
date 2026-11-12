@@ -28,11 +28,13 @@ var Language = &engine.Language{
 	// The method and constructor patterns of tree-sitter-java's
 	// queries/tags.scm, restricted to members that have a body, so abstract,
 	// interface and native methods are not counted as functions. A record's
-	// compact constructor has a body and no parameter list.
+	// compact constructor has a body and no parameter list. A static method
+	// has no instance, and a constructor sets the fields that the other
+	// methods share, so both stay out of cohesion.
 	Definitions: `
-(method_declaration name: (identifier) @name body: (block)) @definition.method
-(constructor_declaration name: (identifier) @name) @definition.constructor
-(compact_constructor_declaration name: (identifier) @name) @definition.constructor
+(method_declaration (modifiers "static")? @static name: (identifier) @name body: (block)) @definition.method
+(constructor_declaration name: (identifier) @name) @definition.constructor @static
+(compact_constructor_declaration name: (identifier) @name) @definition.constructor @static
 `,
 	// Classes, enums and records are types, whose methods are methods of the
 	// type. An interface has no instance fields for its default methods to
@@ -53,6 +55,65 @@ var Language = &engine.Language{
   (scoped_type_identifier (type_identifier) @module .)
   (generic_type . (scoped_type_identifier (type_identifier) @module .))
 ] (class_body) @scope)
+`,
+	// A method reaches a field through this or by its bare name. A bare
+	// name is an identifier in the position of an expression, or the target
+	// of an assignment, so the name of a called method and the field after
+	// another object's dot are not read as one. The engine keeps either
+	// form only when the method's own class declares an instance field of
+	// that name, so a static or inherited field and a field of an
+	// enclosing class do not count, and a bare name only when no local
+	// declaration hides it. A call without an object or through this, and a
+	// method reference through this, name a sibling method.
+	Members: `
+(field_access object: (this) field: (identifier) @field)
+(primary_expression/identifier) @bare
+(assignment_expression left: (identifier) @bare)
+(method_invocation !object name: (identifier) @call)
+(method_invocation object: (this) name: (identifier) @call)
+(method_reference . (this) . (identifier) @call)
+`,
+	// A parameter is in scope throughout its method or lambda, and a local
+	// variable from its name to the end of its block, as the JLS scopes it,
+	// or to the end of the switch block for one declared in a case group. An
+	// enhanced for variable is in scope in the loop body and not in the
+	// expression it iterates, a catch parameter in its catch clause, and a
+	// resource in the rest of its try statement. A pattern variable's scope
+	// follows the flow of control, so it is taken to be the whole method.
+	Bindings: `
+(method_declaration parameters: (formal_parameters [
+  (formal_parameter name: (identifier) @binding)
+  (spread_parameter (variable_declarator name: (identifier) @binding))
+] @declaration)) @scope
+(lambda_expression parameters: [
+  (identifier) @binding
+  (inferred_parameters (identifier) @binding)
+  (formal_parameters [
+    (formal_parameter name: (identifier) @binding)
+    (spread_parameter (variable_declarator name: (identifier) @binding))
+  ])
+] @declaration) @scope
+(_ (local_variable_declaration declarator: (variable_declarator name: (identifier) @binding @declaration))) @scope
+(switch_block (switch_block_statement_group (local_variable_declaration declarator: (variable_declarator name: (identifier) @binding @declaration)))) @scope
+(enhanced_for_statement name: (identifier) @binding value: (_) @declaration) @scope
+(catch_clause (catch_formal_parameter name: (identifier) @binding) @declaration) @scope
+(try_with_resources_statement resources: (resource_specification (resource name: (identifier) @binding) @declaration)) @scope
+(instanceof_expression name: (identifier) @binding @declaration)
+(type_pattern (identifier) @binding @declaration)
+(record_pattern_component (identifier) @binding @declaration)
+`,
+	// The instance fields of a class or enum are its field declarations
+	// without static, and those of a record are its components; an
+	// interface's fields are constants.
+	Fields: `
+(class_declaration name: (identifier) @receiver body: (class_body
+  (field_declaration (modifiers "static")? @static declarator: (variable_declarator name: (identifier) @field))))
+(enum_declaration name: (identifier) @receiver body: (enum_body (enum_body_declarations
+  (field_declaration (modifiers "static")? @static declarator: (variable_declarator name: (identifier) @field)))))
+(record_declaration name: (identifier) @receiver parameters: (formal_parameters [
+  (formal_parameter name: (identifier) @field)
+  (spread_parameter (variable_declarator name: (identifier) @field))
+]))
 `,
 	// A switch arm counts when its label is a case: the default label has
 	// no value, and it is the path the other arms branch away from. The

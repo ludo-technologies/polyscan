@@ -5,14 +5,14 @@ description: Analyze module architecture using polyscan - class coupling (CBO), 
 
 # Architecture Review with polyscan
 
-Run the polyscan CLI to understand module structure and coupling. Dependency analysis exists for Go (package graph) and JavaScript/TypeScript (module graph); coupling (CBO) for Go, Rust and JavaScript/TypeScript; class cohesion (LCOM4) for Go and Rust; C++ and Java get complexity and clone detection only. No install needed: `npx polyscan@latest analyze <path>`.
+Run the polyscan CLI to understand module structure and coupling. Dependency analysis exists for Go (package graph) and JavaScript/TypeScript (module graph); coupling (CBO) for Go, Rust and JavaScript/TypeScript; class cohesion (LCOM4) for Go, Rust and Java; C++ gets complexity and clone detection only. No install needed: `npx polyscan@latest analyze <path>`.
 
 ## Commands
 
 | User Request | Command |
 |-------------|---------|
 | "Check class coupling" | `npx polyscan@latest analyze --format text --select cbo <path>` |
-| "Which Go or Rust types do too many things?" | `npx polyscan@latest analyze --format text --select lcom <path>` |
+| "Which Go, Rust or Java types do too many things?" | `npx polyscan@latest analyze --format text --select lcom <path>` |
 | "Find circular dependencies" | `npx polyscan@latest analyze --format text --select deps <path>` |
 | "Which modules are risky to change?" | `npx polyscan@latest analyze --format json --select deps,cbo <path>` |
 

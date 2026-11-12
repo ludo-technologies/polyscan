@@ -155,9 +155,10 @@ func TestAnalyzeCohesionExcludesStubMethods(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
 		// itemDelegate implements an interface whose Height, Spacing and
 		// Update are constant returns; only Render reads focus. Placeholder
-		// panics and calls of free functions touch no state either. A
-		// stub that a sibling calls stays in the graph, since the call
-		// connects them.
+		// panics and calls of free functions touch no state either, and
+		// neither does a call of a sibling without a receiver, such as
+		// Label's. A stub that a sibling calls stays in the graph, since
+		// the call connects them.
 		"delegate.go": `package p
 
 type itemDelegate struct{ focus bool }
@@ -174,6 +175,8 @@ type walker struct{ depth int }
 func (w *walker) Enter() { w.depth++; w.hook() }
 func (w *walker) Leave() { w.depth--; w.hook() }
 func (w *walker) hook()  {}
+func (walker) label() string { return "walker" }
+func (w *walker) Label() string { return w.label() }
 
 type empty struct{}
 
@@ -205,8 +208,8 @@ func (e empty) B() {}
 	if !reflect.DeepEqual(delegate.MethodGroups, [][]string{{"Render"}}) {
 		t.Errorf("itemDelegate groups = %v, want only Render", delegate.MethodGroups)
 	}
-	if walker.LCOM4 != 1 || walker.TotalMethods != 3 || walker.ExcludedMethods != 0 {
-		t.Errorf("walker: LCOM4 %d, methods %d, excluded %d; want 1, 3, 0", walker.LCOM4, walker.TotalMethods, walker.ExcludedMethods)
+	if walker.LCOM4 != 1 || walker.TotalMethods != 5 || walker.ExcludedMethods != 2 {
+		t.Errorf("walker: LCOM4 %d, methods %d, excluded %d; want 1, 5, 2", walker.LCOM4, walker.TotalMethods, walker.ExcludedMethods)
 	}
 	if !reflect.DeepEqual(walker.MethodGroups, [][]string{{"Enter", "Leave", "hook"}}) {
 		t.Errorf("walker groups = %v, want Enter, Leave and hook connected", walker.MethodGroups)
@@ -397,6 +400,107 @@ impl Foo {
 	want := map[string]int{"a.rs": 1, "b.rs": 1}
 	if !reflect.DeepEqual(byFile, want) {
 		t.Errorf("Foo classes by file = %v, want %v", byFile, want)
+	}
+}
+
+func TestAnalyzeCohesionRustLinksSameNamedForwarder(t *testing.T) {
+	// The trait method is_client forwards to the inherent is_client, which
+	// describe also calls, so every method is one component (#216).
+	dir := writeFiles(t, map[string]string{
+		"lib.rs": `
+pub struct Conn { client: bool, buf: Vec<u8> }
+
+impl Conn {
+    pub fn is_client(&self) -> bool { self.client }
+    pub fn len(&self) -> usize { self.buf.len() }
+    pub fn describe(&self) -> String { format!("{} {}", self.is_client(), self.len()) }
+}
+
+pub trait Transport { fn is_client(&self) -> bool; fn size(&self) -> usize; }
+
+impl Transport for Conn {
+    fn is_client(&self) -> bool { self.is_client() }
+    fn size(&self) -> usize { self.len() }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want Conn: %+v", len(classes), classes)
+	}
+	want := [][]string{{"describe", "is_client", "is_client", "len", "size"}}
+	if conn := classes[0]; conn.LCOM4 != 1 || !reflect.DeepEqual(conn.MethodGroups, want) {
+		t.Errorf("Conn: LCOM4 %d, groups %v; want 1, %v", conn.LCOM4, conn.MethodGroups, want)
+	}
+}
+
+func TestAnalyzeCohesionJava(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		// The overloads of deposit are linked by the call between them, and
+		// describe reads owner by its bare name. The constructor, the
+		// static format and the stubs toString and label stay out: label
+		// calls only a static method, and hashCode is inherited, not a
+		// field.
+		"src/main/java/p/Account.java": `package p;
+
+class Account {
+  private long balance;
+  private final List<String> log = new ArrayList<>();
+  private String owner;
+  private static int opened;
+
+  Account(String owner) { this.owner = owner; opened++; }
+
+  void deposit(long amount) { deposit(amount, "deposit"); }
+  void deposit(long amount, String note) { balance += amount; record(note); }
+  private void record(String note) { log.add(note); }
+  long balance() { return balance; }
+
+  String owner() { return owner; }
+  String describe() { return format(owner) + hashCode(); }
+
+  static String format(String s) { return s.trim(); }
+  String label() { return format("account"); }
+  public String toString() { return "Account"; }
+}
+`,
+		// A test class is a fixture and stays out.
+		"src/test/java/p/AccountTest.java": `package p;
+
+class AccountTest {
+  int a, b;
+  void x() { a++; }
+  void y() { b++; }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if report.Cohesion == nil {
+		t.Fatal("cohesion is nil for a Java tree")
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want Account: %+v", len(classes), classes)
+	}
+	account := classes[0]
+	if account.Name != "Account" || account.Language != "Java" || account.LCOM4 != 2 || account.TotalMethods != 10 || account.ExcludedMethods != 4 {
+		t.Errorf("Account = %+v, want LCOM4 2 over 10 methods with 4 excluded", account)
+	}
+	wantGroups := [][]string{{"balance", "deposit", "deposit", "record"}, {"describe", "owner"}}
+	if !reflect.DeepEqual(account.MethodGroups, wantGroups) {
+		t.Errorf("Account groups = %v, want %v", account.MethodGroups, wantGroups)
+	}
+	if !reflect.DeepEqual(account.InstanceVariables, []string{"balance", "log", "owner"}) {
+		t.Errorf("Account instance variables = %v, want balance, log and owner", account.InstanceVariables)
 	}
 }
 

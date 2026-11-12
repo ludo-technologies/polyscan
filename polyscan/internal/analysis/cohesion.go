@@ -26,11 +26,11 @@ type Class struct {
 	// other.
 	LCOM4 int `json:"lcom4"`
 	// TotalMethods counts every method of the type; ExcludedMethods the
-	// ones that stay out of the graph: methods without a receiver
-	// parameter, which cannot reach instance state, and stubs that touch
-	// no field, call no sibling and are called by none, such as
-	// interface-mandated constant returns or panicking placeholders,
-	// which would each stand as a component of their own.
+	// ones that stay out of the graph: methods without a receiver, such as
+	// Rust associated functions and Java static methods and constructors,
+	// and stubs that touch no field, call no sibling and are called by
+	// none, such as interface-mandated constant returns or panicking
+	// placeholders, which would each stand as a component of their own.
 	TotalMethods      int              `json:"total_methods"`
 	ExcludedMethods   int              `json:"excluded_methods"`
 	InstanceVariables []string         `json:"instance_variables"`
@@ -173,10 +173,15 @@ func (b *cohesionBuilder) build() *Cohesion {
 	return cohesion
 }
 
-// measure computes the class's LCOM4. A call whose name is not a sibling
-// method, such as a call of a function-typed field, is an access to that
-// field. A method that reaches no field and takes part in no sibling call
-// is a stub and is excluded rather than counted as its own component.
+// measure computes the class's LCOM4. Only methods with a receiver take
+// part, so a call of a sibling without one, such as a static helper, links
+// nothing. In a language whose fields are not declared, a call through the
+// receiver that names no sibling method is an access to the field of that
+// name, as a call of a function-typed field is; in one that declares them,
+// the Members query already names every field, and such a call reaches an
+// inherited or static method or one of an enclosing type. A method that
+// reaches no field and takes part in no sibling call is a stub and is
+// excluded rather than counted as its own component.
 func (c *classMethods) measure() Class {
 	sort.SliceStable(c.methods, func(i, j int) bool {
 		if c.methods[i].file != c.methods[j].file {
@@ -185,28 +190,12 @@ func (c *classMethods) measure() Class {
 		return c.methods[i].StartLine < c.methods[j].StartLine
 	})
 	prefix := c.name + c.language.Separator()
-	names := map[string]bool{}
+	siblings := map[string]bool{}
+	members := map[string]bool{}
 	for _, method := range c.methods {
-		names[strings.TrimPrefix(method.Name, prefix)] = true
-	}
-	// A field capture naming a sibling method is a method value, such as
-	// s.handle passed as a callback, only where the language has them.
-	// Rust's self.value is always a field, even beside a value() method.
-	isMethod := func(ref string, field bool) bool {
-		return names[ref] && (!field || c.language.MethodValues)
-	}
-	called := map[string]bool{}
-	for _, method := range c.methods {
-		for call := range method.Calls {
-			if isMethod(call, false) {
-				called[call] = true
-			}
-		}
-		for field := range method.Fields {
-			if isMethod(field, true) {
-				called[field] = true
-			}
-		}
+		name := strings.TrimPrefix(method.Name, prefix)
+		siblings[name] = true
+		members[name] = members[name] || method.HasSelf
 	}
 
 	class := Class{
@@ -216,39 +205,56 @@ func (c *classMethods) measure() Class {
 		StartLine: c.methods[0].StartLine,
 	}
 	var accesses []lcom.MethodAccess
+	called := map[string]bool{}
 	for _, method := range c.methods {
 		class.TotalMethods++
 		if method.file == class.FilePath {
 			class.EndLine = max(class.EndLine, method.EndLine)
 		}
-		name := strings.TrimPrefix(method.Name, prefix)
-		if !method.HasSelf || (len(method.Fields) == 0 && len(method.Calls) == 0 && !called[name]) {
+		if !method.HasSelf {
 			class.ExcludedMethods++
 			continue
 		}
 		access := lcom.MethodAccess{
-			MethodName:   name,
+			MethodName:   strings.TrimPrefix(method.Name, prefix),
 			InstanceVars: map[string]bool{},
 			Calls:        map[string]bool{},
 		}
+		// A field capture naming a sibling method is a method value, such
+		// as s.handle passed as a callback, only where the language has
+		// them. Rust's self.value is always a field, even beside a value()
+		// method.
 		for field := range method.Fields {
-			if isMethod(field, true) {
-				access.Calls[field] = true
-			} else {
+			switch {
+			case !c.language.MethodValues || !siblings[field]:
 				access.InstanceVars[field] = true
+			case members[field]:
+				access.Calls[field] = true
 			}
 		}
 		for call := range method.Calls {
-			if isMethod(call, false) {
+			switch {
+			case members[call]:
 				access.Calls[call] = true
-			} else {
+			case !siblings[call] && !c.language.DeclaresFields():
 				access.InstanceVars[call] = true
 			}
 		}
+		for call := range access.Calls {
+			called[call] = true
+		}
 		accesses = append(accesses, access)
 	}
+	participating := accesses[:0]
+	for _, access := range accesses {
+		if len(access.InstanceVars) == 0 && len(access.Calls) == 0 && !called[access.MethodName] {
+			class.ExcludedMethods++
+			continue
+		}
+		participating = append(participating, access)
+	}
 
-	result := lcom.ComputeLCOM4(accesses, lcom.DefaultConfig())
+	result := lcom.ComputeLCOM4(participating, lcom.DefaultConfig())
 	class.LCOM4 = result.LCOM4
 	class.InstanceVariables = result.InstanceVariables
 	class.MethodGroups = result.MethodGroups

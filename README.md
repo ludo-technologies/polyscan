@@ -54,9 +54,9 @@ Every analyzer scores your codebase (0-100 with an A-F grade) and generates an H
 | Go | `.go` | ✅ | ✅ | — | ✅ | ✅ CBO, LCOM | `polyscan` |
 | Rust | `.rs` | ✅ | ✅ | — | — | ✅ CBO, LCOM | `polyscan` |
 | C++ | `.cpp` `.cc` `.cxx` `.hpp` `.hh` `.hxx` `.h` `.ipp` `.inl` | ✅ | ✅ | — | — | — | `polyscan` |
-| Java | `.java` | ✅ | ✅ | — | — | — | `polyscan` |
+| Java | `.java` | ✅ | ✅ | — | — | ✅ LCOM | `polyscan` |
 
-Complexity and duplicate code cover every language. Dependencies cover Go, JavaScript/TypeScript and Python: for Go the nodes are packages, resolved through `go.mod`. Class design covers coupling (CBO) for Go, Rust, JavaScript/TypeScript and Python and cohesion (LCOM4) for Python, Go and Rust. For Go and Rust, coupling counts the types of the analyzed tree that a type refers to from its declaration and methods, so the standard library and other modules do not count; a Go type is measured over the methods of its package, a Rust type over the methods of its `impl` blocks in a file. Dead code needs the file-level import graph that only the JavaScript/TypeScript and Python backends build today. A dimension a language does not have is left out of its score rather than counted as clean, so scores stay comparable across languages.
+Complexity and duplicate code cover every language. Dependencies cover Go, JavaScript/TypeScript and Python: for Go the nodes are packages, resolved through `go.mod`. Class design covers coupling (CBO) for Go, Rust, JavaScript/TypeScript and Python and cohesion (LCOM4) for Python, Go, Rust and Java. For Go and Rust, coupling counts the types of the analyzed tree that a type refers to from its declaration and methods, so the standard library and other modules do not count; a Go type is measured over the methods of its package, a Rust type over the methods of its `impl` blocks in a file. Dead code needs the file-level import graph that only the JavaScript/TypeScript and Python backends build today. A dimension a language does not have is left out of its score rather than counted as clean, so scores stay comparable across languages.
 
 ## Polyscan for GitHub
 

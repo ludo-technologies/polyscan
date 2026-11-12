@@ -28,7 +28,7 @@ polyscan analyze src/ test/ scripts/build.ts             # Several paths at once
 
 | Flag | Short | Default | Description |
 | --- | --- | --- | --- |
-| `--select` | `-s` | `complexity,deadcode,clone,cbo,lcom,deps` | Comma-separated list of analyses to run. `deps` applies to Go and JavaScript/TypeScript; `cbo` to Go, Rust and JavaScript/TypeScript; `lcom` to Go and Rust; `deadcode` to JavaScript/TypeScript only |
+| `--select` | `-s` | `complexity,deadcode,clone,cbo,lcom,deps` | Comma-separated list of analyses to run. `deps` applies to Go and JavaScript/TypeScript; `cbo` to Go, Rust and JavaScript/TypeScript; `lcom` to Go, Rust and Java; `deadcode` to JavaScript/TypeScript only |
 | `--format` | `-f` | `html` | Output format. Accepts `html`, `json`, or `text` |
 | `--no-open` | | `false` | Write the HTML report without opening a browser |
 | `--output` | `-o` | `polyscan-report.html` | Path for the HTML report file |
@@ -41,7 +41,7 @@ Without `--config`, polyscan reads the nearest `.polyscan.toml` in the first pat
 
 ## Language coverage
 
-The language of each file is detected from its extension. Complexity and clone detection cover every supported language. Dependency analysis covers Go and JavaScript/TypeScript. Coupling (CBO) covers Go, Rust and JavaScript/TypeScript, and cohesion (LCOM4) Go and Rust. Dead code exists for JavaScript/TypeScript only, and the health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.
+The language of each file is detected from its extension. Complexity and clone detection cover every supported language. Dependency analysis covers Go and JavaScript/TypeScript. Coupling (CBO) covers Go, Rust and JavaScript/TypeScript, and cohesion (LCOM4) covers Go, Rust and Java. Dead code exists for JavaScript/TypeScript only, and the health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.
 
 For Go, Rust, C++ and Java, version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. JavaScript/TypeScript additionally skips a longer built-in list and the files its root `.gitignore` ignores. Further exclusions for every language come from `analysis.exclude` in the configuration file and from `--exclude`; see the [built-in skips](../configuration/reference.md#built-in-skips). A file that cannot be read is skipped and listed under errors. A file with a syntax error is analyzed without the functions that contain it, counted as partial, and listed under warnings. C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
 
