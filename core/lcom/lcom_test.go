@@ -241,6 +241,44 @@ func TestComputeLCOM4MethodCallsConnect(t *testing.T) {
 	}
 }
 
+func TestComputeLCOM4CallReachesEverySameNamedMethod(t *testing.T) {
+	// The forwarder is_client calls the inherent is_client, which reads
+	// client; describe calls is_client and len. Every method is linked
+	// through a namesake, whichever copy sorts first.
+	methods := []MethodAccess{
+		{MethodName: "is_client", InstanceVars: map[string]bool{"client": true}},
+		{MethodName: "len", InstanceVars: map[string]bool{"buf": true}},
+		{MethodName: "describe", Calls: map[string]bool{"is_client": true, "len": true}},
+		{MethodName: "is_client", Calls: map[string]bool{"is_client": true}},
+		{MethodName: "size", Calls: map[string]bool{"len": true}},
+	}
+
+	result := ComputeLCOM4(methods, DefaultConfig())
+
+	if result.LCOM4 != 1 {
+		t.Errorf("LCOM4 = %d, want 1: %v", result.LCOM4, result.MethodGroups)
+	}
+	want := [][]string{{"describe", "is_client", "is_client", "len", "size"}}
+	if !reflect.DeepEqual(result.MethodGroups, want) {
+		t.Errorf("MethodGroups = %v, want %v", result.MethodGroups, want)
+	}
+}
+
+func TestComputeLCOM4SameNamedMethodsWithoutCallsStayApart(t *testing.T) {
+	// Two overloads that neither call each other nor share a field are two
+	// components: a shared name alone is no link.
+	methods := []MethodAccess{
+		{MethodName: "add", InstanceVars: map[string]bool{"ints": true}},
+		{MethodName: "add", InstanceVars: map[string]bool{"strings": true}},
+	}
+
+	result := ComputeLCOM4(methods, DefaultConfig())
+
+	if result.LCOM4 != 2 {
+		t.Errorf("LCOM4 = %d, want 2: %v", result.LCOM4, result.MethodGroups)
+	}
+}
+
 func TestComputeLCOM4CallToNonMethodIgnored(t *testing.T) {
 	// Calls to names that are not sibling methods (e.g. free functions)
 	// must not affect grouping.

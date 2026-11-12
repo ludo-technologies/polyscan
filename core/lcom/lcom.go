@@ -134,14 +134,18 @@ func ComputeLCOM4(methods []MethodAccess, config Config) *Result {
 		}
 	}
 
-	// Union methods connected by intra-class method calls
-	methodIndex := make(map[string]int, len(sortedMethods))
+	// Union methods connected by intra-class method calls. A class may hold
+	// several methods of one name, such as Java overloads or a Rust
+	// inherent method and the trait method that forwards to it, and a call
+	// of that name may reach any of them, so it connects the caller to
+	// each one.
+	methodIndex := make(map[string][]int, len(sortedMethods))
 	for i, m := range sortedMethods {
-		methodIndex[m.MethodName] = i
+		methodIndex[m.MethodName] = append(methodIndex[m.MethodName], i)
 	}
 	for i, m := range sortedMethods {
 		for callee := range m.Calls {
-			if j, exists := methodIndex[callee]; exists {
+			for _, j := range methodIndex[callee] {
 				union(i, j)
 			}
 		}
