@@ -155,9 +155,10 @@ func TestAnalyzeCohesionExcludesStubMethods(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
 		// itemDelegate implements an interface whose Height, Spacing and
 		// Update are constant returns; only Render reads focus. Placeholder
-		// panics and calls of free functions touch no state either. A
-		// stub that a sibling calls stays in the graph, since the call
-		// connects them.
+		// panics and calls of free functions touch no state either, and
+		// neither does a call of a sibling without a receiver, such as
+		// Label's. A stub that a sibling calls stays in the graph, since
+		// the call connects them.
 		"delegate.go": `package p
 
 type itemDelegate struct{ focus bool }
@@ -174,6 +175,8 @@ type walker struct{ depth int }
 func (w *walker) Enter() { w.depth++; w.hook() }
 func (w *walker) Leave() { w.depth--; w.hook() }
 func (w *walker) hook()  {}
+func (walker) label() string { return "walker" }
+func (w *walker) Label() string { return w.label() }
 
 type empty struct{}
 
@@ -205,8 +208,8 @@ func (e empty) B() {}
 	if !reflect.DeepEqual(delegate.MethodGroups, [][]string{{"Render"}}) {
 		t.Errorf("itemDelegate groups = %v, want only Render", delegate.MethodGroups)
 	}
-	if walker.LCOM4 != 1 || walker.TotalMethods != 3 || walker.ExcludedMethods != 0 {
-		t.Errorf("walker: LCOM4 %d, methods %d, excluded %d; want 1, 3, 0", walker.LCOM4, walker.TotalMethods, walker.ExcludedMethods)
+	if walker.LCOM4 != 1 || walker.TotalMethods != 5 || walker.ExcludedMethods != 2 {
+		t.Errorf("walker: LCOM4 %d, methods %d, excluded %d; want 1, 5, 2", walker.LCOM4, walker.TotalMethods, walker.ExcludedMethods)
 	}
 	if !reflect.DeepEqual(walker.MethodGroups, [][]string{{"Enter", "Leave", "hook"}}) {
 		t.Errorf("walker groups = %v, want Enter, Leave and hook connected", walker.MethodGroups)
