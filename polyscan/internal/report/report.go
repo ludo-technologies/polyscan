@@ -1,7 +1,7 @@
-// Package report merges the generic-engine analysis (Go, Rust, C++) with the
-// JavaScript/TypeScript analysis into the response set the unified formatter
-// renders, so every language shares one report, one JSON shape and one health
-// score.
+// Package report merges the generic-engine analysis (Go, Rust, C++, Java)
+// with the JavaScript/TypeScript analysis into the response set the unified
+// formatter renders, so every language shares one report, one JSON shape and
+// one health score.
 package report
 
 import (

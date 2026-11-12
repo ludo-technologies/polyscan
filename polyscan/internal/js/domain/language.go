@@ -6,8 +6,8 @@ import (
 )
 
 // Language labels reported on every function and clone fragment. The other
-// polyscan languages report theirs the same way ("Go", "Rust", "C++"), so the
-// unified report can tell every result's language apart.
+// polyscan languages report theirs the same way ("Go", "Rust", "C++",
+// "Java"), so the unified report can tell every result's language apart.
 const (
 	LanguageJavaScript = "JavaScript"
 	LanguageTypeScript = "TypeScript"

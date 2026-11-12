@@ -68,8 +68,8 @@ The check fails on:
   - a function with cyclomatic complexity above --max-complexity (default 10)
   - critical dead code, such as code after a return (JavaScript/TypeScript only)
   - more circular dependency cycles than --max-cycles (default 0)
-  - a file that cannot be read or parsed (Go, Rust and C++ files parse with
-    recovery: a syntax error leaves out only the functions containing it)
+  - a file that cannot be read or parsed (Go, Rust, C++ and Java files parse
+    with recovery: a syntax error leaves out only the functions containing it)
 
 Complexity, dead code and dependency analysis run by default. Clone detection
 runs only when selected with --select, and clones never fail the check. With no

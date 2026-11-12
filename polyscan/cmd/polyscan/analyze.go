@@ -51,7 +51,7 @@ func analyzeCmd() *cobra.Command {
 		Long: `Analyze source files and report one health score across languages.
 
 The language of each file is detected from its extension. Supported: Go, Rust,
-C++ and JavaScript/TypeScript.
+C++, Java and JavaScript/TypeScript.
 
 Complexity and clone analysis cover every language; dependency analysis covers
 Go and JavaScript/TypeScript; coupling (CBO) covers Go, Rust and
@@ -63,7 +63,9 @@ scored as clean.
 Test files and test code are left out of every analysis unless --include-tests
 is given: Go *_test.go; Rust #[test] functions, #[cfg(test)] items, tests.rs,
 *_tests.rs and tests/; C++ *_test.*, *_tests.*, test_*.*, *Test.*, test/ and
-tests/; JavaScript/TypeScript *.test.*, *.spec.* and __tests__/.
+tests/; Java *Test.java, *Tests.java, *TestCase.java, *IT.java, test/, tests/,
+javatests/ and androidTest/; JavaScript/TypeScript *.test.*, *.spec.* and
+__tests__/.
 
 Settings are read from the nearest ` + config.FileName + ` in the first path or a
 directory above it, or from the file given with --config. A flag takes
