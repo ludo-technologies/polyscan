@@ -59,11 +59,12 @@ var Language = &engine.Language{
 	// A method reaches a field through this or by its bare name. A bare
 	// name is an identifier in the position of an expression, or the target
 	// of an assignment, so the name of a called method and the field after
-	// another object's dot are not read as one. The engine keeps a bare name
-	// only when the method's own class declares a field of that name and no
-	// local declaration hides it; a field of an enclosing class is not a
-	// field of the nested one. A call without an object or through this,
-	// and a method reference through this, name a sibling method.
+	// another object's dot are not read as one. The engine keeps either
+	// form only when the method's own class declares an instance field of
+	// that name, so a static or inherited field and a field of an
+	// enclosing class do not count, and a bare name only when no local
+	// declaration hides it. A call without an object or through this, and a
+	// method reference through this, name a sibling method.
 	Members: `
 (field_access object: (this) field: (identifier) @field)
 (primary_expression/identifier) @bare
@@ -109,8 +110,10 @@ var Language = &engine.Language{
   (field_declaration (modifiers "static")? @static declarator: (variable_declarator name: (identifier) @field))))
 (enum_declaration name: (identifier) @receiver body: (enum_body (enum_body_declarations
   (field_declaration (modifiers "static")? @static declarator: (variable_declarator name: (identifier) @field)))))
-(record_declaration name: (identifier) @receiver parameters: (formal_parameters
-  (formal_parameter name: (identifier) @field)))
+(record_declaration name: (identifier) @receiver parameters: (formal_parameters [
+  (formal_parameter name: (identifier) @field)
+  (spread_parameter (variable_declarator name: (identifier) @field))
+]))
 `,
 	// A switch arm counts when its label is a case: the default label has
 	// no value, and it is the path the other arms branch away from. The

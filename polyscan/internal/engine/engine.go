@@ -88,9 +88,10 @@ type Language struct {
 	// such as a Rust associated function, is a method that cannot touch
 	// instance state and is left out of cohesion. A @bare capture is a name
 	// used without a receiver, which a language with a Fields query reads
-	// as a field: it is an access to the field of that name when the
-	// method's type declares one and no binding of the name is in scope
-	// there. A language without a Members query has no cohesion analysis.
+	// as a field when no binding of the name is in scope there. In such a
+	// language a @field or @bare capture counts only when it names a field
+	// the method's type declares. A language without a Members query has
+	// no cohesion analysis.
 	Members string
 	// Bindings is an optional tree-sitter query for the local declarations
 	// that can shadow the receiver a Members match goes through, or the
@@ -367,7 +368,7 @@ func (l *Language) HasCohesion() bool {
 }
 
 // DeclaresFields reports whether the language has a Fields query, so that
-// every field a method reaches is one the Members query names.
+// every field a method reaches is a declared one the Members query names.
 func (l *Language) DeclaresFields() bool {
 	return l.Fields != ""
 }
@@ -988,7 +989,10 @@ func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []
 			}
 		}
 		name := node.Content(source)
-		if kind == bareCapture && (!declared[fn.Receiver][name] || bindings.shadows(name, node.StartByte())) {
+		if l.fields != nil && kind != callCapture && !declared[fn.Receiver][name] {
+			return
+		}
+		if kind == bareCapture && bindings.shadows(name, node.StartByte()) {
 			return
 		}
 		if kind == callCapture {

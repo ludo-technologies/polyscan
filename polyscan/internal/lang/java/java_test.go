@@ -179,7 +179,7 @@ class C {
   C(int a) { this.a = a; size = 0; }
   static void helper() { count++; }
   @SuppressWarnings("static") void annotated() { a++; }
-  void explicit() { this.a = this.b; this.helper(); }
+  void explicit() { this.a = this.b; this.helper(); this.count++; this.inherited = 1; }
   void bare() { b = a + count; foo(); NAME.length(); }
   void notFields(Other other, List<Integer> list) {
     other.a = 1;
@@ -240,6 +240,7 @@ record Point(int x, int y) {
   int sum() { return x + y; }
   static Point origin() { return new Point(0, 0); }
 }
+record Bag(String... items) { int size() { return items.length; } }
 enum Level {
   LOW(1), HIGH(2);
   private final int weight;
@@ -263,6 +264,7 @@ interface I { int LIMIT = 3; default int limit() { return LIMIT; } }
 		{"Point.Point", "Point", false, nil},
 		{"Point.sum", "Point", true, []string{"x", "y"}},
 		{"Point.origin", "Point", false, nil},
+		{"Bag.size", "Bag", true, []string{"items"}},
 		{"Level.Level", "Level", false, nil},
 		{"Level.weight", "Level", true, []string{"weight"}},
 		{"Level.low", "Level", true, []string{}},
