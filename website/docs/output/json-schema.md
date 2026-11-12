@@ -37,7 +37,7 @@ polyscan analyze --format json src/ > report.json
 | `dead_code` | object | Present only when dead code detection ran (JavaScript/TypeScript) |
 | `clone` | object | Present only when clone detection ran |
 | `cbo` | object | Present only when coupling analysis ran (Go, Rust, JavaScript/TypeScript) |
-| `lcom` | object | Present only when cohesion analysis ran (Go, Rust) |
+| `lcom` | object | Present only when cohesion analysis ran (Go, Rust, Java) |
 | `deps` | object | Present only when dependency analysis ran (Go, JavaScript/TypeScript) |
 | `module_quality` | array | Per-file rollups joined across the analyses that ran |
 | `diagnostics` | array | One record per file the run could not read or parse. Omitted when every file was analyzed |
@@ -350,7 +350,7 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
 
 ## `lcom`
 
-*Go and Rust.*
+*Go, Rust and Java.*
 
 ```json
 {
@@ -382,7 +382,7 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
 }
 ```
 
-`lcom4` is the number of groups the type's methods fall into when two methods are connected by a shared field or a call between them; `method_groups` lists them. `excluded_methods` counts the methods that stay out of the graph: methods without a receiver parameter, which cannot reach instance state, and stub methods that touch no field, call no sibling method and are called by none, such as the constant returns an interface requires or a placeholder that only panics. `summary` carries `total_classes`, `average_lcom`, `max_lcom`, `min_lcom` and the `low_risk_classes`, `medium_risk_classes` and `high_risk_classes` counts.
+`lcom4` is the number of groups the type's methods fall into when two methods are connected by a shared field or a call between them; `method_groups` lists them. `excluded_methods` counts the methods that stay out of the graph: Go and Rust methods without a receiver parameter and Java static methods, which cannot reach instance state, Java constructors, which set the fields the other methods share, and stub methods that touch no field, call no sibling method and are called by none, such as the constant returns an interface requires or a placeholder that only panics. `summary` carries `total_classes`, `average_lcom`, `max_lcom`, `min_lcom` and the `low_risk_classes`, `medium_risk_classes` and `high_risk_classes` counts.
 
 ## `deps`
 

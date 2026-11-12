@@ -403,6 +403,71 @@ impl Foo {
 	}
 }
 
+func TestAnalyzeCohesionJava(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		// The overloads of deposit are linked by the call between them, and
+		// describe reads owner by its bare name. The constructor, the
+		// static format and the stubs toString and label stay out: label
+		// calls only a static method, and hashCode is inherited, not a
+		// field.
+		"src/main/java/p/Account.java": `package p;
+
+class Account {
+  private long balance;
+  private final List<String> log = new ArrayList<>();
+  private String owner;
+  private static int opened;
+
+  Account(String owner) { this.owner = owner; opened++; }
+
+  void deposit(long amount) { deposit(amount, "deposit"); }
+  void deposit(long amount, String note) { balance += amount; record(note); }
+  private void record(String note) { log.add(note); }
+  long balance() { return balance; }
+
+  String owner() { return owner; }
+  String describe() { return format(owner) + hashCode(); }
+
+  static String format(String s) { return s.trim(); }
+  String label() { return format("account"); }
+  public String toString() { return "Account"; }
+}
+`,
+		// A test class is a fixture and stays out.
+		"src/test/java/p/AccountTest.java": `package p;
+
+class AccountTest {
+  int a, b;
+  void x() { a++; }
+  void y() { b++; }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if report.Cohesion == nil {
+		t.Fatal("cohesion is nil for a Java tree")
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want Account: %+v", len(classes), classes)
+	}
+	account := classes[0]
+	if account.Name != "Account" || account.Language != "Java" || account.LCOM4 != 2 || account.TotalMethods != 10 || account.ExcludedMethods != 4 {
+		t.Errorf("Account = %+v, want LCOM4 2 over 10 methods with 4 excluded", account)
+	}
+	wantGroups := [][]string{{"balance", "deposit", "deposit", "record"}, {"describe", "owner"}}
+	if !reflect.DeepEqual(account.MethodGroups, wantGroups) {
+		t.Errorf("Account groups = %v, want %v", account.MethodGroups, wantGroups)
+	}
+	if !reflect.DeepEqual(account.InstanceVariables, []string{"balance", "log", "owner"}) {
+		t.Errorf("Account instance variables = %v, want balance, log and owner", account.InstanceVariables)
+	}
+}
+
 func TestAnalyzeCohesionAbsentWithoutSupportedLanguage(t *testing.T) {
 	dir := writeFiles(t, map[string]string{"a.cpp": "struct S { int a; void m() { a = 1; } };\n"})
 	report, err := Analyze([]string{dir}, Options{LCOM: true, Complexity: true, ComplexityThresholds: testThresholds}, nil)
