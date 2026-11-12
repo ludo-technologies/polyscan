@@ -1,11 +1,11 @@
 ---
 name: health-check
-description: Get an overall code quality health score for JavaScript/TypeScript, Go, Rust, or C++ using polyscan. Use when user asks how healthy or good the code is, wants a quality overview, a grade, a summary of technical debt, or a before/after quality comparison.
+description: Get an overall code quality health score for JavaScript/TypeScript, Go, Rust, C++, or Java using polyscan. Use when user asks how healthy or good the code is, wants a quality overview, a grade, a summary of technical debt, or a before/after quality comparison.
 ---
 
 # Code Health Check with polyscan
 
-Run the polyscan CLI to give a quick, quantified picture of code quality across JavaScript, TypeScript, Go, Rust and C++. No install needed:
+Run the polyscan CLI to give a quick, quantified picture of code quality across JavaScript, TypeScript, Go, Rust, C++ and Java. No install needed:
 
 ```bash
 npx polyscan@latest analyze --format text <path>

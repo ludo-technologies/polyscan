@@ -1,11 +1,11 @@
 ---
 name: refactoring
-description: Find refactoring targets in JavaScript/TypeScript, Go, Rust, or C++ code using polyscan - duplicate code (clones), overly complex functions, and dead code. Use when user asks about refactoring, code duplication, complexity hotspots, unreachable code, or cleaning up a codebase.
+description: Find refactoring targets in JavaScript/TypeScript, Go, Rust, C++, or Java code using polyscan - duplicate code (clones), overly complex functions, and dead code. Use when user asks about refactoring, code duplication, complexity hotspots, unreachable code, or cleaning up a codebase.
 ---
 
 # Refactoring Analysis with polyscan
 
-Run the polyscan CLI to locate concrete refactoring targets in JavaScript, TypeScript, Go, Rust and C++ code. No install needed: `npx polyscan@latest analyze <path>`.
+Run the polyscan CLI to locate concrete refactoring targets in JavaScript, TypeScript, Go, Rust, C++ and Java code. No install needed: `npx polyscan@latest analyze <path>`.
 
 ## Commands
 

@@ -1,11 +1,11 @@
 ---
 name: cli-analysis
-description: Run the polyscan command-line tool for code quality analysis of JavaScript/TypeScript, Go, Rust, and C++ - CI quality gates, HTML/JSON/text reports, and project configuration. Use when user wants a CI check, a shareable report file, machine-readable results, or to configure polyscan for a project.
+description: Run the polyscan command-line tool for code quality analysis of JavaScript/TypeScript, Go, Rust, C++, and Java - CI quality gates, HTML/JSON/text reports, and project configuration. Use when user wants a CI check, a shareable report file, machine-readable results, or to configure polyscan for a project.
 ---
 
 # Code Quality Analysis with the polyscan CLI
 
-Use the `polyscan` command-line tool when the task needs report files, CI integration, or machine-readable results. It analyzes JavaScript, TypeScript, Go, Rust and C++ in one run; the language of each file is detected from its extension.
+Use the `polyscan` command-line tool when the task needs report files, CI integration, or machine-readable results. It analyzes JavaScript, TypeScript, Go, Rust, C++ and Java in one run; the language of each file is detected from its extension.
 
 No install needed: `npx polyscan@latest analyze <path>` (or `npm install -g polyscan` for a permanent install). The examples below use a bare `polyscan` for readability — prefix with `npx polyscan@latest` when polyscan isn't installed.
 
@@ -29,7 +29,7 @@ Key flags:
 - `-o <path>`: HTML report path (default: `polyscan-report.html` in the current directory)
 - `--min-complexity <n>`: hide functions below this complexity from the listing (scores still cover everything)
 - `--exclude <patterns>`: leave files and directories out of every analysis; a glob without a slash matches a file name or a directory anywhere on the path (`fixtures`), one with a slash matches a path relative to the analyzed directory with `**` for any number of segments (`src/generated/**`)
-- `--include-tests`: analyze test files and test code, which are left out by default (`*_test.go`, `*.test.*`, `*.spec.*`, `__tests__/`, Rust `#[cfg(test)]` and `tests/`, C++ `*_test.*` and `test/`)
+- `--include-tests`: analyze test files and test code, which are left out by default (`*_test.go`, `*.test.*`, `*.spec.*`, `__tests__/`, Rust `#[cfg(test)]` and `tests/`, C++ `*_test.*` and `test/`, Java `*Test.java` and `src/test/`)
 
 With `--format json`, the machine-readable results go to stdout and the health-score summary goes to stderr, so stdout stays parseable.
 
