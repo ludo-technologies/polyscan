@@ -403,6 +403,42 @@ impl Foo {
 	}
 }
 
+func TestAnalyzeCohesionRustLinksSameNamedForwarder(t *testing.T) {
+	// The trait method is_client forwards to the inherent is_client, which
+	// describe also calls, so every method is one component (#216).
+	dir := writeFiles(t, map[string]string{
+		"lib.rs": `
+pub struct Conn { client: bool, buf: Vec<u8> }
+
+impl Conn {
+    pub fn is_client(&self) -> bool { self.client }
+    pub fn len(&self) -> usize { self.buf.len() }
+    pub fn describe(&self) -> String { format!("{} {}", self.is_client(), self.len()) }
+}
+
+pub trait Transport { fn is_client(&self) -> bool; fn size(&self) -> usize; }
+
+impl Transport for Conn {
+    fn is_client(&self) -> bool { self.is_client() }
+    fn size(&self) -> usize { self.len() }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	classes := report.Cohesion.Classes
+	if len(classes) != 1 {
+		t.Fatalf("got %d classes, want Conn: %+v", len(classes), classes)
+	}
+	want := [][]string{{"describe", "is_client", "is_client", "len", "size"}}
+	if conn := classes[0]; conn.LCOM4 != 1 || !reflect.DeepEqual(conn.MethodGroups, want) {
+		t.Errorf("Conn: LCOM4 %d, groups %v; want 1, %v", conn.LCOM4, conn.MethodGroups, want)
+	}
+}
+
 func TestAnalyzeCohesionJava(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
 		// The overloads of deposit are linked by the call between them, and
