@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust and C++">
+        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust, C++ and Java">
       
       
         <meta name="author" content="ludo-technologies">
@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/icon.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -33,10 +33,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -1207,10 +1207,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#go-rust-or-c-project" class="md-nav__link">
+  <a href="#go-rust-c-or-java-project" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Go, Rust or C++ project
+        Go, Rust, C++ or Java project
       
     </span>
   </a>
@@ -1731,10 +1731,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#go-rust-or-c-project" class="md-nav__link">
+  <a href="#go-rust-c-or-java-project" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Go, Rust or C++ project
+        Go, Rust, C++ or Java project
       
     </span>
   </a>
@@ -1859,7 +1859,7 @@
 
 
 <h1 id="configuration-examples">Configuration Examples<a class="headerlink" href="#configuration-examples" title="Permanent link">&para;</a></h1>
-<p>Complete <code>.polyscan.toml</code> files for common project shapes. Each file is valid as written and applies to every language in the project: Go, Rust, C++ and JavaScript/TypeScript.</p>
+<p>Complete <code>.polyscan.toml</code> files for common project shapes. Each file is valid as written and applies to every language in the project: Go, Rust, C++, Java and JavaScript/TypeScript.</p>
 <p>Remember three rules while reading these:</p>
 <ul>
 <li><code>analysis.exclude</code> adds to the built-in skips and never replaces them. Dependency directories such as <code>node_modules</code> and <code>vendor</code>, build output such as <code>dist</code> and <code>build</code>, and minified files are already skipped, so you only list what is specific to your project. The <a href="../reference/#built-in-skips">reference</a> has the full list.</li>
@@ -1908,7 +1908,7 @@
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>polyscan<span class="w"> </span>check<span class="w"> </span>--select<span class="w"> </span>deadcode<span class="w"> </span>src/
 </span></code></pre></div>
 <p>You still get value from the full dead code analysis in the report, where the critical findings, which are genuinely unreachable statements, are worth acting on even though the warnings are not.</p>
-<h2 id="go-rust-or-c-project">Go, Rust or C++ project<a class="headerlink" href="#go-rust-or-c-project" title="Permanent link">&para;</a></h2>
+<h2 id="go-rust-c-or-java-project">Go, Rust, C++ or Java project<a class="headerlink" href="#go-rust-c-or-java-project" title="Permanent link">&para;</a></h2>
 <p>The same file works for the other languages. This example leaves out generated code and a directory of test fixtures, and it analyzes test code too.</p>
 <div class="language-toml highlight"><span class="filename">.polyscan.toml</span><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">[analysis]</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"testdata"</span><span class="p">,</span><span class="w"> </span><span class="s2">"internal/gen/**"</span><span class="p">,</span><span class="w"> </span><span class="s2">"*.pb.go"</span><span class="p">]</span>
@@ -2058,10 +2058,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

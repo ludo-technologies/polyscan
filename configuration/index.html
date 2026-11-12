@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust and C++">
+        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust, C++ and Java">
       
       
         <meta name="author" content="ludo-technologies">
@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../assets/icon.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -33,10 +33,10 @@
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -1714,7 +1714,7 @@
 
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
-<p>polyscan runs without any configuration. A configuration file lets you change the complexity thresholds, leave more files out, analyze test code, and set the limits of <code>polyscan check</code>. The same file configures every language: Go, Rust, C++ and JavaScript/TypeScript.</p>
+<p>polyscan runs without any configuration. A configuration file lets you change the complexity thresholds, leave more files out, analyze test code, and set the limits of <code>polyscan check</code>. The same file configures every language: Go, Rust, C++, Java and JavaScript/TypeScript.</p>
 <p>The file is named <code>.polyscan.toml</code> and is written in TOML. Write one by hand, or copy a <a href="examples/">complete example</a>. The <a href="reference/">reference</a> documents every key.</p>
 <div class="language-toml highlight"><span class="filename">.polyscan.toml</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">[analysis]</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"fixtures"</span><span class="p">,</span><span class="w"> </span><span class="s2">"src/generated/**"</span><span class="p">]</span>
@@ -1801,7 +1801,7 @@
 <p>The <code>[check]</code> section sets the defaults of the <code>polyscan check</code> flags. <code>polyscan analyze</code> reads that section but does not use it, so one file can serve both commands.</p>
 <h2 id="files-that-are-skipped-without-configuration">Files that are skipped without configuration<a class="headerlink" href="#files-that-are-skipped-without-configuration" title="Permanent link">&para;</a></h2>
 <p>Some files are left out before any pattern applies.</p>
-<p>For Go, Rust and C++, polyscan skips any directory whose name starts with a dot, and directories named <code>node_modules</code>, <code>vendor</code>, <code>target</code>, <code>build</code>, <code>dist</code> and <code>third_party</code>. A path named on the command line is analyzed whatever it is called.</p>
+<p>For Go, Rust, C++ and Java, polyscan skips any directory whose name starts with a dot, and directories named <code>node_modules</code>, <code>vendor</code>, <code>target</code>, <code>build</code>, <code>dist</code> and <code>third_party</code>. A path named on the command line is analyzed whatever it is called.</p>
 <p>For JavaScript/TypeScript, polyscan skips a built-in list of dependency directories, build outputs, framework caches and minified files. The <a href="reference/#built-in-skips">reference</a> has the complete list.</p>
 <p>The <code>exclude</code> key adds to these skips. It cannot remove one.</p>
 <h3 id="the-gitignore">The <code>.gitignore</code><a class="headerlink" href="#the-gitignore" title="Permanent link">&para;</a></h3>
@@ -1810,7 +1810,7 @@
 <li>Only the <code>.gitignore</code> at the root of the analyzed path is read. Running <code>polyscan analyze src/</code> uses <code>src/.gitignore</code> and does not read the repository's top-level <code>.gitignore</code>. Running <code>polyscan analyze .</code> from the repository root does read it.</li>
 <li>Global and nested gitignore files are not consulted, and neither is <code>.git/info/exclude</code>.</li>
 </ul>
-<p>Go, Rust and C++ files are not filtered by the <code>.gitignore</code>.</p>
+<p>Go, Rust, C++ and Java files are not filtered by the <code>.gitignore</code>.</p>
 <p>If a file you expected in the report is missing, check the built-in skips, your <code>.gitignore</code> and the patterns in <code>analysis.exclude</code>.</p>
 <h2 id="migrating-from-a-jscan-configuration-file">Migrating from a jscan configuration file<a class="headerlink" href="#migrating-from-a-jscan-configuration-file" title="Permanent link">&para;</a></h2>
 <p>polyscan no longer reads the configuration files that jscan read: <code>jscan.config.json</code>, <code>.jscanrc.json</code>, <code>jscan.yaml</code>, <code>jscan.yml</code>, <code>.jscan.toml</code>, <code>.jscan.yml</code>, <code>jscan.json</code> and <code>.jscan.json</code>. It also no longer reads the <code>JSCAN_CONFIG</code> environment variable.</p>
@@ -1965,10 +1965,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

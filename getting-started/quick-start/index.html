@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust and C++">
+        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust, C++ and Java">
       
       
         <meta name="author" content="ludo-technologies">
@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/icon.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -33,10 +33,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -1798,7 +1798,7 @@
 <p>Point polyscan at the directory that holds your source:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>polyscan<span class="w"> </span>analyze<span class="w"> </span>.
 </span></code></pre></div>
-<p>polyscan collects every supported source file below that directory — JavaScript, TypeScript, Go, Rust and C++, detected by extension — runs the analyses in parallel, writes an HTML report to <code>polyscan-report.html</code>, and opens it in your browser. It also prints a summary to the terminal:</p>
+<p>polyscan collects every supported source file below that directory — JavaScript, TypeScript, Go, Rust, C++ and Java, detected by extension — runs the analyses in parallel, writes an HTML report to <code>polyscan-report.html</code>, and opens it in your browser. It also prints a summary to the terminal:</p>
 <div class="language-console highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="gp">$ </span>polyscan<span class="w"> </span>analyze<span class="w"> </span>.
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="go">HTML report written to /home/you/project/polyscan-report.html</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
@@ -1839,7 +1839,7 @@
 </span></code></pre></div>
 <p><code>check</code> exits 1 when a function is too complex, when it finds critical dead code, or when it finds a circular dependency, and 2 when the analysis fails. The <a href="../../cli/check/">check page</a> lists its thresholds, and the <a href="../../integrations/ci-cd/">CI/CD page</a> has complete pipeline configurations.</p>
 <h2 id="5-configure-polyscan">5. Configure polyscan<a class="headerlink" href="#5-configure-polyscan" title="Permanent link">&para;</a></h2>
-<p>polyscan reads a <code>.polyscan.toml</code> when the project has one. It searches the analyzed directory and then each parent directory, and the same file configures Go, Rust, C++ and JavaScript/TypeScript. It supplies complexity thresholds, extra files to leave out, and the limits of <code>polyscan check</code>:</p>
+<p>polyscan reads a <code>.polyscan.toml</code> when the project has one. It searches the analyzed directory and then each parent directory, and the same file configures Go, Rust, C++, Java and JavaScript/TypeScript. It supplies complexity thresholds, extra files to leave out, and the limits of <code>polyscan check</code>:</p>
 <div class="language-toml highlight"><span class="filename">.polyscan.toml</span><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">[complexity]</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">low_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">medium_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">20</span>
@@ -1944,10 +1944,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust and C++">
+        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust, C++ and Java">
       
       
         <meta name="author" content="ludo-technologies">
@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/icon.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -33,10 +33,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -2018,7 +2018,7 @@
 <p>Without <code>--config</code>, polyscan reads the nearest <code>.polyscan.toml</code> in the first path or a directory above it. The file sets the complexity thresholds, the files to leave out and whether test code is analyzed for every language, and a flag takes precedence over it. See <a href="../../configuration/#how-polyscan-finds-your-config-file">how polyscan finds your config file</a>. A configuration error ends the command with exit code 1.</p>
 <h2 id="language-coverage">Language coverage<a class="headerlink" href="#language-coverage" title="Permanent link">&para;</a></h2>
 <p>The language of each file is detected from its extension. Complexity and clone detection cover every supported language. Dependency analysis covers Go and JavaScript/TypeScript. Coupling (CBO) covers Go, Rust and JavaScript/TypeScript, and cohesion (LCOM4) Go and Rust. Dead code exists for JavaScript/TypeScript only, and the health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.</p>
-<p>For Go, Rust and C++, version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and <code>node_modules</code>, <code>vendor</code>, <code>target</code>, <code>build</code>, <code>dist</code> and <code>third_party</code>. A path named on the command line is analyzed whatever it is called. JavaScript/TypeScript additionally skips a longer built-in list and the files its root <code>.gitignore</code> ignores. Further exclusions for every language come from <code>analysis.exclude</code> in the configuration file and from <code>--exclude</code>; see the <a href="../../configuration/reference/#built-in-skips">built-in skips</a>. A file that cannot be read is skipped and listed under errors. A file with a syntax error is analyzed without the functions that contain it, counted as partial, and listed under warnings. C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.</p>
+<p>For Go, Rust, C++ and Java, version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and <code>node_modules</code>, <code>vendor</code>, <code>target</code>, <code>build</code>, <code>dist</code> and <code>third_party</code>. A path named on the command line is analyzed whatever it is called. JavaScript/TypeScript additionally skips a longer built-in list and the files its root <code>.gitignore</code> ignores. Further exclusions for every language come from <code>analysis.exclude</code> in the configuration file and from <code>--exclude</code>; see the <a href="../../configuration/reference/#built-in-skips">built-in skips</a>. A file that cannot be read is skipped and listed under errors. A file with a syntax error is analyzed without the functions that contain it, counted as partial, and listed under warnings. C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.</p>
 <h2 id="output-behavior">Output behavior<a class="headerlink" href="#output-behavior" title="Permanent link">&para;</a></h2>
 <p>The format determines where results go and what else is printed.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:3"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">HTML (default)</label><label for="__tabbed_1_2">JSON</label><label for="__tabbed_1_3">Text</label></div>
@@ -2059,9 +2059,13 @@
 <td>C++</td>
 <td><code>if</code>/<code>else if</code>; <code>?:</code>; <code>for</code>, range <code>for</code>, <code>while</code>, <code>do</code>; each <code>case</code> (<code>default</code> excluded); <code>catch</code>; <code>&amp;&amp;</code> and <code>\|\|</code></td>
 </tr>
+<tr>
+<td>Java</td>
+<td><code>if</code>/<code>else if</code>; <code>?:</code>; <code>for</code>, enhanced <code>for</code>, <code>while</code>, <code>do</code>; each <code>case</code> arm of a <code>switch</code> statement or expression, in both the <code>:</code> and <code>-&gt;</code> forms (<code>default</code> excluded, <code>case A, B</code> counted once); each <code>when</code> guard; <code>catch</code>; <code>&amp;&amp;</code> and <code>\|\|</code></td>
+</tr>
 </tbody>
 </table>
-<p>In Go, Rust and C++, function literals, closures and lambdas are not reported on their own: their decision points count toward the enclosing function, so the Go numbers match gocyclo.</p>
+<p>In Go, Rust, C++ and Java, function literals, closures and lambdas are not reported on their own: their decision points count toward the enclosing function, so the Go numbers match gocyclo and the Java numbers match lizard, except for the <code>when</code> guard, which lizard does not count. The methods of a Java anonymous class are reported on their own.</p>
 <p>Functions are assigned a risk level from two thresholds, which are the same for every language and are set by <code>complexity.low_threshold</code> and <code>complexity.medium_threshold</code> in the configuration file:</p>
 <table>
 <thead>
@@ -2183,14 +2187,14 @@
 <tr>
 <td>Type 2</td>
 <td>Identical after renaming identifiers and literals</td>
-<td>0.80 for Go, Rust and C++; 0.75 for JS/TS</td>
+<td>0.80 for Go, Rust, C++ and Java; 0.75 for JS/TS</td>
 <td>Yes</td>
 </tr>
 <tr>
 <td>Type 3</td>
 <td>Copies with statements added, removed, or changed</td>
-<td>0.80 for Go, Rust and C++; 0.70 for JS/TS</td>
-<td>No (JS/TS); reported for Go, Rust and C++</td>
+<td>0.80 for Go, Rust, C++ and Java; 0.70 for JS/TS</td>
+<td>No (JS/TS); reported for Go, Rust, C++ and Java</td>
 </tr>
 <tr>
 <td>Type 4</td>
@@ -2201,7 +2205,7 @@
 </tbody>
 </table>
 <p>A fragment must be at least 10 lines and 20 syntax tree nodes to be considered, which keeps short boilerplate such as getters out of the results.</p>
-<p>In Go, Rust and C++, test code is analyzed for complexity but excluded from clone detection, because test functions share a skeleton by convention: for Go that is <code>*_test.go</code> files; for C++ it is <code>*_test.*</code>, <code>*_tests.*</code>, <code>test_*.*</code> and <code>*Test.*</code> source files and any <code>test</code> or <code>tests</code> directory; for Rust it is <code>#[test]</code> functions, items under <code>#[cfg(test)]</code>, <code>tests.rs</code> and <code>*_tests.rs</code> files and any <code>tests</code> directory.</p>
+<p>In Go, Rust, C++ and Java, test code is analyzed for complexity but excluded from clone detection, because test functions share a skeleton by convention: for Go that is <code>*_test.go</code> files; for C++ it is <code>*_test.*</code>, <code>*_tests.*</code>, <code>test_*.*</code> and <code>*Test.*</code> source files and any <code>test</code> or <code>tests</code> directory; for Java it is <code>*Test.java</code>, <code>*Tests.java</code>, <code>*TestCase.java</code> and <code>*IT.java</code> files and any <code>test</code>, <code>tests</code>, <code>javatests</code> or <code>androidTest</code> directory; for Rust it is <code>#[test]</code> functions, items under <code>#[cfg(test)]</code>, <code>tests.rs</code> and <code>*_tests.rs</code> files and any <code>tests</code> directory.</p>
 <h3 id="cbo">Coupling between objects<a class="headerlink" href="#cbo" title="Permanent link">&para;</a></h3>
 <p><em>Go, Rust and JavaScript/TypeScript.</em> Counts how many other types each unit depends on.</p>
 <p>For Go and Rust the unit is a type: a Go struct, interface or other named type, a Rust struct, enum, union or trait. Its dependencies are the types named by its declaration (fields, embedded types, method signatures of an interface) and by the bodies of its methods, and only types declared somewhere in the analyzed tree count. A Go name <code>pkg.T</code> resolves through the nearest <code>go.mod</code> to a package of the tree; a tree without one resolves same-package names only and says so in a warning. A Rust name resolves to a declaration in the same file, or else anywhere in the tree. The standard library, third-party crates and other modules therefore never count. An embedded field or interface and an implemented trait count as inheritance. A type coupled to nothing is not listed, and test files and <code>#[cfg(test)]</code> code stay out.</p>
@@ -2338,10 +2342,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>

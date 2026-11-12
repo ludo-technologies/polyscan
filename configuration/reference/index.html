@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust and C++">
+        <meta name="description" content="A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust, C++ and Java">
       
       
         <meta name="author" content="ludo-technologies">
@@ -25,7 +25,7 @@
       
       
       <link rel="icon" href="../../assets/icon.svg">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.1">
     
     
       
@@ -33,10 +33,10 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.57a0d79d.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.fb2fffe2.min.css">
       
       
 
@@ -1297,10 +1297,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#go-rust-and-c" class="md-nav__link">
+  <a href="#go-rust-c-and-java" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Go, Rust and C++
+        Go, Rust, C++ and Java
       
     </span>
   </a>
@@ -1950,10 +1950,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#go-rust-and-c" class="md-nav__link">
+  <a href="#go-rust-c-and-java" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Go, Rust and C++
+        Go, Rust, C++ and Java
       
     </span>
   </a>
@@ -2061,7 +2061,7 @@
 
 
 <h1 id="configuration-reference">Configuration Reference<a class="headerlink" href="#configuration-reference" title="Permanent link">&para;</a></h1>
-<p>Every key that <code>.polyscan.toml</code> accepts, with its type, its default, and its rules. The file configures every language: Go, Rust, C++ and JavaScript/TypeScript. These are all the keys. A key or section that is not listed here is an error. The <a href="../">configuration guide</a> explains how polyscan finds the file and how flags combine with it.</p>
+<p>Every key that <code>.polyscan.toml</code> accepts, with its type, its default, and its rules. The file configures every language: Go, Rust, C++, Java and JavaScript/TypeScript. These are all the keys. A key or section that is not listed here is an error. The <a href="../">configuration guide</a> explains how polyscan finds the file and how flags combine with it.</p>
 <p>A key that the file leaves out keeps its default.</p>
 <hr />
 <h2 id="analysis"><code>analysis</code><a class="headerlink" href="#analysis" title="Permanent link">&para;</a></h2>
@@ -2130,7 +2130,7 @@
 <hr />
 <h2 id="built-in-skips">Built-in skips<a class="headerlink" href="#built-in-skips" title="Permanent link">&para;</a></h2>
 <p>Some files are left out before <code>analysis.exclude</code> applies. These skips are fixed behavior and not keys. The <code>exclude</code> key adds to them and cannot remove any of them.</p>
-<h3 id="go-rust-and-c">Go, Rust and C++<a class="headerlink" href="#go-rust-and-c" title="Permanent link">&para;</a></h3>
+<h3 id="go-rust-c-and-java">Go, Rust, C++ and Java<a class="headerlink" href="#go-rust-c-and-java" title="Permanent link">&para;</a></h3>
 <p>polyscan skips any directory whose name starts with a dot, and directories named <code>node_modules</code>, <code>vendor</code>, <code>target</code>, <code>build</code>, <code>dist</code> and <code>third_party</code>. A path named on the command line is analyzed whatever it is called.</p>
 <h3 id="javascripttypescript">JavaScript/TypeScript<a class="headerlink" href="#javascripttypescript" title="Permanent link">&para;</a></h3>
 <p>polyscan skips the files and directories that match this list:</p>
@@ -2294,10 +2294,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "navigation.path", "navigation.top", "navigation.indexes", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.annotate", "content.tabs.link", "content.action.edit", "content.tooltips"], "search": "../../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../assets/javascripts/bundle.a5f9d56c.min.js"></script>
       
     
   </body>
