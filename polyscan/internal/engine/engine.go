@@ -31,7 +31,11 @@ type Language struct {
 	// name. An optional @receiver capture holds a receiver type declared on
 	// the function itself, as Go methods do, and is prefixed to the name
 	// with the ScopeSeparator. An optional @self capture holds the receiver
-	// parameter of a method that has one.
+	// parameter of a method that has one. In a language with a Fields query,
+	// whose methods have no receiver parameter, an optional @static capture
+	// marks a function of a type that does not work on an instance of it: a
+	// static method, or a constructor, which builds the instance and sets
+	// the fields that the other methods share.
 	Definitions string
 	// Scopes is an optional tree-sitter query for the named scopes that
 	// enclose functions, such as classes, impl blocks and namespaces:
@@ -82,17 +86,33 @@ type Language struct {
 	// self.a, (1) in a macro's flat token tree. The Definitions query marks
 	// the receiver with @self: a function with a receiver type but no @self,
 	// such as a Rust associated function, is a method that cannot touch
-	// instance state and is left out of cohesion. A language without a
-	// Members query has no cohesion analysis.
+	// instance state and is left out of cohesion. A @bare capture is a name
+	// used without a receiver, which a language with a Fields query reads
+	// as a field: it is an access to the field of that name when the
+	// method's type declares one and no binding of the name is in scope
+	// there. A language without a Members query has no cohesion analysis.
 	Members string
 	// Bindings is an optional tree-sitter query for the local declarations
-	// that can shadow the receiver a Members match goes through: @binding
-	// is the declared name, @declaration the node after whose end the name
-	// is in scope, as the right-hand side of a short variable declaration
-	// still sees the outer name, and @scope the node at whose end it goes
-	// out of scope. A Members match whose @object is shadowed at that point
-	// is not an access to the receiver.
+	// that can shadow the receiver a Members match goes through, or the
+	// field a @bare name would read: @binding is the declared name,
+	// @declaration the node after whose end the name is in scope, as the
+	// right-hand side of a short variable declaration still sees the outer
+	// name, and @scope the node at whose end it goes out of scope. A match
+	// without @scope is in scope to the end of the function that holds it,
+	// which covers a name whose scope follows the flow of control, as that
+	// of a Java pattern variable does. A Members match whose @object or
+	// @bare name is shadowed at that point is not an access to the
+	// receiver.
 	Bindings string
+	// Fields is an optional tree-sitter query for the instance fields of a
+	// language whose methods reach their instance without a receiver
+	// parameter, as Java's do through an implicit this. @field is the name
+	// of a field and @receiver the name of the type that declares it, which
+	// is qualified with its enclosing scopes as function names are. A match
+	// that captures @static declares a field of the type rather than of its
+	// instances and is left out. In such a language every method of a type
+	// has a receiver unless its Definitions match captures @static.
+	Fields string
 	// Types is an optional tree-sitter query for the named types a file
 	// declares, which the coupling (CBO) analysis measures: @name is the
 	// type's name and the capture that spans the match says what it is,
@@ -155,6 +175,7 @@ type Language struct {
 	scopes      *sitter.Query
 	members     *sitter.Query
 	bindings    *sitter.Query
+	fields      *sitter.Query
 	types       *sitter.Query
 	references  *sitter.Query
 	testCode    *sitter.Query
@@ -239,10 +260,11 @@ type Function struct {
 	// Receiver is the qualified name of the type the function is a method
 	// of, or empty for a free function.
 	Receiver string
-	// HasSelf reports that the method has a receiver parameter through
-	// which it can reach instance state. Fields and Calls are the names of
-	// the fields it accesses and the sibling methods it calls, per the
-	// language's Members query.
+	// HasSelf reports that the method has a receiver through which it can
+	// reach instance state: a receiver parameter, or, in a language with a
+	// Fields query, the implicit receiver of a method that is not static.
+	// Fields and Calls are the names of the fields it accesses and the
+	// sibling methods it calls, per the language's Members query.
 	HasSelf bool
 	Fields  map[string]bool
 	Calls   map[string]bool
@@ -251,6 +273,7 @@ type Function struct {
 	endByte   uint32
 	hasError  bool
 	self      string
+	static    bool
 	// points are the function's decision points, which
 	// EffectiveComplexity needs beyond the per-capture counts.
 	points []decisionPoint
@@ -312,10 +335,12 @@ const (
 	nameCapture         = "name"
 	receiverCapture     = "receiver"
 	selfCapture         = "self"
+	staticCapture       = "static"
 	scopeCapture        = "scope"
 	moduleCapture       = "module"
 	fieldCapture        = "field"
 	callCapture         = "call"
+	bareCapture         = "bare"
 	objectCapture       = "object"
 	argumentsCapture    = "arguments"
 	bindingCapture      = "binding"
@@ -339,6 +364,12 @@ const (
 // with its type, which the cohesion (LCOM4) analysis needs.
 func (l *Language) HasCohesion() bool {
 	return l.Members != ""
+}
+
+// DeclaresFields reports whether the language has a Fields query, so that
+// every field a method reaches is one the Members query names.
+func (l *Language) DeclaresFields() bool {
+	return l.Fields != ""
 }
 
 // HasCoupling reports whether the language declares its types and their
@@ -417,9 +448,14 @@ func (l *Language) Analyze(source []byte) (*Result, error) {
 	functions := l.extractFunctions(root, source)
 	scopes := l.collectScopes(root, source)
 	applyScopes(scopes, functions, l.Separator())
+	if l.fields != nil {
+		for i := range functions {
+			functions[i].HasSelf = functions[i].Receiver != "" && !functions[i].static
+		}
+	}
 	l.countDecisions(root, source, functions)
 	l.measureNesting(root, source, functions)
-	l.collectMembers(root, source, functions)
+	l.collectMembers(root, source, functions, scopes)
 	tests := l.testSpans(root, source)
 	markTests(tests, functions)
 	result.Types = l.collectTypes(root, source, functions, scopes, tests)
@@ -493,6 +529,14 @@ func (l *Language) compile() error {
 			}
 			l.bindings = bindings
 		}
+		if l.Fields != "" {
+			fields, err := sitter.NewQuery([]byte(l.Fields), l.Grammar)
+			if err != nil {
+				l.compileErr = fmt.Errorf("%s fields query: %w", l.Name, err)
+				return
+			}
+			l.fields = fields
+		}
 		if l.Types != "" {
 			types, err := sitter.NewQuery([]byte(l.Types), l.Grammar)
 			if err != nil {
@@ -548,6 +592,8 @@ func (l *Language) extractFunctions(root *sitter.Node, source []byte) []Function
 				receiver = capture.Node.Content(source)
 			case name == selfCapture:
 				fn.self = capture.Node.Content(source)
+			case name == staticCapture:
+				fn.static = true
 			}
 		}
 		if node == nil || fn.Name == "" {
@@ -891,12 +937,11 @@ func applyScopes(scopes []scope, functions []Function, separator string) {
 	}
 }
 
-// collectMembers records, for each method with a receiver parameter, the
-// fields it accesses and the sibling methods it calls; a free function or a
-// method without one keeps nil maps. A name captured as
-// both, as the callee of a method call is by a field pattern that also
-// matches it, is a call.
-func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []Function) {
+// collectMembers records, for each method with a receiver, the fields it
+// accesses and the sibling methods it calls; a free function or a method
+// without one keeps nil maps. A name captured as both, as the callee of a
+// method call is by a field pattern that also matches it, is a call.
+func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []Function, scopes []scope) {
 	if l.members == nil {
 		return
 	}
@@ -912,14 +957,15 @@ func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []
 	}
 	fields := map[uintptr]member{}
 	calls := map[uintptr]struct{}{}
-	bindings := l.collectBindings(root, source)
+	bindings := l.collectBindings(root, source, functions)
+	declared := l.collectFields(root, source, scopes)
 	ForEachMatch(l.members, root, source, func(match *sitter.QueryMatch) {
 		var fn *Function
 		var node, object, arguments *sitter.Node
 		var kind string
 		for _, capture := range match.Captures {
 			switch l.members.CaptureNameForId(capture.Index) {
-			case fieldCapture, callCapture:
+			case fieldCapture, callCapture, bareCapture:
 				kind = l.members.CaptureNameForId(capture.Index)
 				node = capture.Node
 				fn = innermost(functions, node.StartByte(), node.EndByte())
@@ -942,6 +988,9 @@ func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []
 			}
 		}
 		name := node.Content(source)
+		if kind == bareCapture && (!declared[fn.Receiver][name] || bindings.shadows(name, node.StartByte())) {
+			return
+		}
 		if kind == callCapture {
 			fn.Calls[name] = true
 			calls[node.ID()] = struct{}{}
@@ -965,19 +1014,19 @@ type binding struct {
 type bindings map[string][]binding
 
 // collectBindings gathers the file's local declarations by name.
-func (l *Language) collectBindings(root *sitter.Node, source []byte) bindings {
+func (l *Language) collectBindings(root *sitter.Node, source []byte, functions []Function) bindings {
 	result := bindings{}
 	if l.bindings == nil {
 		return result
 	}
 	ForEachMatch(l.bindings, root, source, func(match *sitter.QueryMatch) {
-		var name string
+		var name *sitter.Node
 		var b binding
 		var scope *sitter.Node
 		for _, capture := range match.Captures {
 			switch l.bindings.CaptureNameForId(capture.Index) {
 			case bindingCapture:
-				name = capture.Node.Content(source)
+				name = capture.Node
 			case declarationCapture:
 				b.declarationEnd = capture.Node.EndByte()
 			case scopeCapture:
@@ -985,11 +1034,57 @@ func (l *Language) collectBindings(root *sitter.Node, source []byte) bindings {
 				b.scopeStart, b.scopeEnd = scope.StartByte(), scope.EndByte()
 			}
 		}
-		// A declaration whose scope is the whole file is a package-level
-		// one, which a receiver shadows rather than the other way around.
-		if name != "" && scope != nil && scope.Parent() != nil {
-			result[name] = append(result[name], b)
+		if name == nil {
+			return
 		}
+		if scope == nil {
+			fn := innermost(functions, name.StartByte(), name.EndByte())
+			if fn == nil {
+				return
+			}
+			b.scopeStart, b.scopeEnd = fn.startByte, fn.endByte
+		} else if scope.Parent() == nil {
+			// A declaration whose scope is the whole file is a
+			// package-level one, which a receiver shadows rather than the
+			// other way around.
+			return
+		}
+		declared := name.Content(source)
+		result[declared] = append(result[declared], b)
+	})
+	return result
+}
+
+// collectFields gathers, by qualified type name, the instance fields each
+// type of the file declares, or nothing for a language without a Fields
+// query.
+func (l *Language) collectFields(root *sitter.Node, source []byte, scopes []scope) map[string]map[string]bool {
+	result := map[string]map[string]bool{}
+	if l.fields == nil {
+		return result
+	}
+	separator := l.Separator()
+	ForEachMatch(l.fields, root, source, func(match *sitter.QueryMatch) {
+		var field, receiver *sitter.Node
+		for _, capture := range match.Captures {
+			switch l.fields.CaptureNameForId(capture.Index) {
+			case fieldCapture:
+				field = capture.Node
+			case receiverCapture:
+				receiver = capture.Node
+			case staticCapture:
+				return
+			}
+		}
+		if field == nil || receiver == nil {
+			return
+		}
+		names, _ := enclosing(scopes, receiver.StartByte(), receiver.EndByte())
+		owner := strings.Join(append(names, receiver.Content(source)), separator)
+		if result[owner] == nil {
+			result[owner] = map[string]bool{}
+		}
+		result[owner][field.Content(source)] = true
 	})
 	return result
 }
