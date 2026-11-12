@@ -10,7 +10,9 @@ import (
 // their decision points count toward the enclosing method, as Go's function
 // literals do. The methods of an anonymous class are extracted like any
 // other method. Initializer blocks and field initializers are not
-// functions, so their decision points are not counted.
+// functions. In a class declared inside a method, an anonymous class
+// included, their decision points count toward that method, as a lambda's
+// do. Elsewhere they are not counted.
 var Language = &engine.Language{
 	Name:       "Java",
 	Extensions: []string{".java"},

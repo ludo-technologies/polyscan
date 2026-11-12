@@ -129,6 +129,8 @@ func TestComplexityCountsDecisionPoints(t *testing.T) {
 		{"bitwise operators do not count", `return n & 1 | 2;`, 1, map[string]int{}},
 		{"throw does not count", `throw new IllegalStateException();`, 1, map[string]int{}},
 		{"lambda counts toward its enclosing method", `java.util.function.IntUnaryOperator f = z -> { if (z > 0) return z; return 0; }; return f.applyAsInt(n);`, 2, map[string]int{"branch": 1}},
+		{"anonymous class initializer counts toward its enclosing method", `return new java.util.HashMap<String, Integer>() {{ if (a) put("x", 1); }}.size();`, 2, map[string]int{"branch": 1}},
+		{"local class initializer counts toward its enclosing method", `class L { int v = a ? 1 : 0; } return new L().v;`, 2, map[string]int{"ternary": 1}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

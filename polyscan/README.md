@@ -108,7 +108,7 @@ Cyclomatic complexity is one plus the number of decision points in a function, c
 | `catch` | 1, the exception edge `core/cfg` counts; a multi-catch `catch (A \| B e)` is one |
 | `&&`, `\|\|` | 1 each |
 
-Function literals, closures and lambdas are not reported on their own. Their decision points count toward the enclosing function, so the Go numbers match gocyclo and the Java numbers match lizard, except for the `when` guard of a pattern `case`, which lizard does not count. The methods of a Java anonymous class are functions of their own, named after the type the class extends, such as `Outer.Runnable.run`. Java initializer blocks and field initializers are not functions, so their decision points are not counted.
+Function literals, closures and lambdas are not reported on their own. Their decision points count toward the enclosing function, so the Go numbers match gocyclo and the Java numbers match lizard, except for the `when` guard of a pattern `case`, which lizard does not count. The methods of a Java anonymous class are functions of their own, named after the type the class extends, such as `Outer.Runnable.run`. Java initializer blocks and field initializers are not functions. In a class declared inside a method, an anonymous class included, their decision points count toward that method, as a lambda's do. Elsewhere they are not counted.
 
 Risk levels use the thresholds shared by every polyscan analyzer: low up to 9, medium up to 19, high from 20.
 
