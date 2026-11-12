@@ -1,5 +1,5 @@
 site_name: polyscan
-site_description: A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust and C++
+site_description: A multi-language code quality analyzer for JavaScript, TypeScript, Go, Rust, C++ and Java
 site_url: https://docs.codescan.dev/polyscan/
 site_author: ludo-technologies
 repo_url: https://github.com/ludo-technologies/polyscan

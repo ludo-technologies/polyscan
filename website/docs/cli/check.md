@@ -31,7 +31,7 @@ A pipeline can treat 1 and 2 differently. Code 1 means the code needs work. Code
 
 Only critical dead code fails the check. Unused imports and exports are warnings, and they never fail it, because a library's exports are usually imported outside the analyzed directory.
 
-A file that cannot be read or parsed fails the check with exit code 2, because the check cannot say anything about that file. `--allow-parse-errors` skips files with a syntax error and lets the check pass on the rest. A file that cannot be read still fails. Go, Rust and C++ files are parsed with error recovery, so a syntax error in one of them leaves out only the functions that contain it and does not fail the check. The [analyze page](analyze.md#language-coverage) explains this.
+A file that cannot be read or parsed fails the check with exit code 2, because the check cannot say anything about that file. `--allow-parse-errors` skips files with a syntax error and lets the check pass on the rest. A file that cannot be read still fails. Go, Rust, C++ and Java files are parsed with error recovery, so a syntax error in one of them leaves out only the functions that contain it and does not fail the check. The [analyze page](analyze.md#language-coverage) explains this.
 
 ## Synopsis
 

@@ -1,6 +1,6 @@
 # Configuration
 
-polyscan runs without any configuration. A configuration file lets you change the complexity thresholds, leave more files out, analyze test code, and set the limits of `polyscan check`. The same file configures every language: Go, Rust, C++ and JavaScript/TypeScript.
+polyscan runs without any configuration. A configuration file lets you change the complexity thresholds, leave more files out, analyze test code, and set the limits of `polyscan check`. The same file configures every language: Go, Rust, C++, Java and JavaScript/TypeScript.
 
 The file is named `.polyscan.toml` and is written in TOML. Write one by hand, or copy a [complete example](examples.md). The [reference](reference.md) documents every key.
 
@@ -81,7 +81,7 @@ The `[check]` section sets the defaults of the `polyscan check` flags. `polyscan
 
 Some files are left out before any pattern applies.
 
-For Go, Rust and C++, polyscan skips any directory whose name starts with a dot, and directories named `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called.
+For Go, Rust, C++ and Java, polyscan skips any directory whose name starts with a dot, and directories named `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called.
 
 For JavaScript/TypeScript, polyscan skips a built-in list of dependency directories, build outputs, framework caches and minified files. The [reference](reference.md#built-in-skips) has the complete list.
 
@@ -94,7 +94,7 @@ For JavaScript/TypeScript files, polyscan also reads the `.gitignore` in the dir
 - Only the `.gitignore` at the root of the analyzed path is read. Running `polyscan analyze src/` uses `src/.gitignore` and does not read the repository's top-level `.gitignore`. Running `polyscan analyze .` from the repository root does read it.
 - Global and nested gitignore files are not consulted, and neither is `.git/info/exclude`.
 
-Go, Rust and C++ files are not filtered by the `.gitignore`.
+Go, Rust, C++ and Java files are not filtered by the `.gitignore`.
 
 If a file you expected in the report is missing, check the built-in skips, your `.gitignore` and the patterns in `analysis.exclude`.
 

@@ -4,7 +4,7 @@
 
 ### Which languages does polyscan analyze?
 
-JavaScript, TypeScript, Go, Rust and C++, detected by file extension in one run. Complexity and clone detection cover every language; dependency analysis covers Go and JavaScript/TypeScript; dead code and coupling (CBO) exist for JavaScript/TypeScript. Python has its own analyzer, [pyscn](https://github.com/ludo-technologies/pyscn), built on the same core.
+JavaScript, TypeScript, Go, Rust, C++ and Java, detected by file extension in one run. Complexity and clone detection cover every language; dependency analysis covers Go and JavaScript/TypeScript; dead code and coupling (CBO) exist for JavaScript/TypeScript. Python has its own analyzer, [pyscn](https://github.com/ludo-technologies/pyscn), built on the same core.
 
 ### What happened to jscan?
 
@@ -14,9 +14,9 @@ It merged into polyscan: `polyscan analyze` runs the full jscan analysis on Java
 
 Check your exclude patterns first. A pattern in `analysis.exclude` or in `--exclude` that has no slash matches a whole file or directory name, so `dist` skips a directory named `dist` and leaves `src/utils/distance.ts` alone. A pattern that names a directory you did not mean to exclude removes every file under it, and nothing in the output names the missing files. Compare the `Analyzing N files...` line against a `find` count to confirm. The [configuration reference](configuration/reference.md#analysisexclude) describes the matching rules.
 
-A second possibility is the built-in skips. Go, Rust and C++ skip every directory whose name starts with a dot, and directories named `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. JavaScript/TypeScript skips a longer built-in list. The [reference](configuration/reference.md#built-in-skips) lists both. A path named on the command line is analyzed whatever it is called.
+A second possibility is the built-in skips. Go, Rust, C++ and Java skip every directory whose name starts with a dot, and directories named `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. JavaScript/TypeScript skips a longer built-in list. The [reference](configuration/reference.md#built-in-skips) lists both. A path named on the command line is analyzed whatever it is called.
 
-A third possibility is your `.gitignore`. polyscan reads the one at the root of the analyzed directory and skips whatever JavaScript/TypeScript files it ignores. The `.gitignore` does not apply to Go, Rust and C++ files.
+A third possibility is your `.gitignore`. polyscan reads the one at the root of the analyzed directory and skips whatever JavaScript/TypeScript files it ignores. The `.gitignore` does not apply to Go, Rust, C++ and Java files.
 
 ### Why is every one of my exports reported as unused?
 
@@ -26,7 +26,7 @@ This happens in two situations. Analyzing a subdirectory, such as `src/component
 
 ### Does polyscan need my project to compile?
 
-No. It parses the source with tree-sitter and never invokes `tsc`, `go build`, `cargo` or a C++ compiler. It works on code that currently fails to compile, and it does not read `tsconfig.json`. One consequence for C++: files are parsed without the preprocessor, so code whose syntax only makes sense after macro expansion is reported as a partial file and the functions containing the error are left out.
+No. It parses the source with tree-sitter and never invokes `tsc`, `go build`, `cargo`, a C++ compiler or `javac`. It works on code that currently fails to compile, and it does not read `tsconfig.json`. One consequence for C++: files are parsed without the preprocessor, so code whose syntax only makes sense after macro expansion is reported as a partial file and the functions containing the error are left out.
 
 ### Does polyscan read `tsconfig.json` path aliases?
 
@@ -72,9 +72,9 @@ Check whether the `--select` value changed, or whether the analyzed language mix
 
 `.polyscan.toml`, for every language. polyscan checks the directory of the first path you asked it to analyze, then each parent directory up to the filesystem root, and reads the first `.polyscan.toml` it finds. It searches nowhere else: not the current directory, not your home directory, and not an environment variable. `--config` names a file explicitly and skips the search. See [config discovery](configuration/index.md#how-polyscan-finds-your-config-file).
 
-### Is there a config file for Go, Rust or C++?
+### Is there a config file for Go, Rust, C++ or Java?
 
-Yes. The same `.polyscan.toml` configures Go, Rust, C++ and JavaScript/TypeScript. It sets the complexity thresholds, the files to leave out, whether test code is analyzed, and the limits of `polyscan check`. The [reference](configuration/reference.md) lists every key.
+Yes. The same `.polyscan.toml` configures Go, Rust, C++, Java and JavaScript/TypeScript. It sets the complexity thresholds, the files to leave out, whether test code is analyzed, and the limits of `polyscan check`. The [reference](configuration/reference.md) lists every key.
 
 ### polyscan fails with "unknown key". What is wrong?
 
@@ -94,7 +94,7 @@ No. `analysis.exclude` and `--exclude` add to the built-in skips and never repla
 
 Each decision point adds one to a baseline of 1. For JavaScript/TypeScript that is: `if`, `else if`, each loop, each `catch`, each `case` label, each ternary, and each `&&`, `||`, or `??`. A `default` clause adds nothing, the same as `else`, and neither does optional chaining with `?.`. A function with no branching scores 1.
 
-Go, Rust and C++ count the equivalent constructs of each language — including `select` cases in Go, `match` arms and `?` in Rust, and `catch` in C++ — and closures count toward their enclosing function, so the Go numbers match gocyclo. The [analyze reference](cli/analyze.md#complexity) has the per-language tables.
+Go, Rust, C++ and Java count the equivalent constructs of each language — including `select` cases in Go, `match` arms and `?` in Rust, and `catch` in C++ and Java — and closures count toward their enclosing function, so the Go numbers match gocyclo and the Java numbers match lizard apart from pattern `when` guards. The [analyze reference](cli/analyze.md#complexity) has the per-language tables.
 
 ### The CBO section says "classes" but my code has none. Why?
 

@@ -7,7 +7,7 @@ hide:
 <div class="polyscan-hero" markdown>
 <div class="polyscan-hero__copy" markdown>
 
-<p class="polyscan-hero__eyebrow">JavaScript · TypeScript · Go · Rust · C++</p>
+<p class="polyscan-hero__eyebrow">JavaScript · TypeScript · Go · Rust · C++ · Java</p>
 
 # Find what to fix first
 
