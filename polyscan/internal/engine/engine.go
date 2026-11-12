@@ -117,16 +117,20 @@ type Language struct {
 	// Types is an optional tree-sitter query for the named types a file
 	// declares, which the coupling (CBO) analysis measures: @name is the
 	// type's name and the capture that spans the match says what it is,
-	// @type a concrete declaration, @abstract an interface or trait, @impl a
-	// block that adds to a type without declaring it, as a Rust impl does,
+	// @type a concrete declaration, @abstract an interface, trait or
+	// abstract class, @impl a block that adds to a type without declaring
+	// it, as a Rust impl does,
 	// @alias a name that denotes another type, as a Go type alias does. A
 	// language without a Types query has no coupling analysis.
 	Types string
 	// References is an optional tree-sitter query, paired with Types, for
 	// the places a type is referred to: @reference is the name node, and an
 	// optional @package the qualifier it is reached through, as in Go's
-	// pkg.T or Rust's a::b::T. A match may capture @embedded instead of
-	// @reference for an embedded field or interface or an implemented
+	// pkg.T or Rust's a::b::T. A match may capture @qualifier instead of
+	// @package for a qualifier whose names are only segments of the path,
+	// as java and util are in Java's java.util.List, so that no reference
+	// inside it counts on its own. A match may capture @embedded instead
+	// of @reference for an embedded field or interface or an implemented
 	// trait, which is inheritance rather than use. A match may capture
 	// @token_reference for a name among the flat tokens of a macro argument,
 	// where no node spans the path before it: its qualifier is read from
@@ -308,7 +312,7 @@ type Type struct {
 	// methods to a type, as Go files of one package and Rust impl blocks do;
 	// such a type is not Declared here.
 	Declared bool
-	// Abstract reports an interface or trait.
+	// Abstract reports an interface, trait or abstract class.
 	Abstract bool
 	// IsTest reports that every part of the type lies in test code.
 	IsTest bool
@@ -358,6 +362,7 @@ const (
 	tokenRefCapture     = "token_reference"
 	embeddedCapture     = "embedded"
 	packageCapture      = "package"
+	qualifierCapture    = "qualifier"
 	operatorField       = "operator"
 )
 
@@ -1127,9 +1132,10 @@ func (l *Language) testSpans(root *sitter.Node, source []byte) []span {
 	return spans
 }
 
-func inTest(tests []span, start, end uint32) bool {
-	for _, test := range tests {
-		if test.contains(start, end) {
+// within reports whether one of the spans contains the byte range.
+func within(spans []span, start, end uint32) bool {
+	for _, s := range spans {
+		if s.contains(start, end) {
 			return true
 		}
 	}
@@ -1139,7 +1145,7 @@ func inTest(tests []span, start, end uint32) bool {
 // markTests flags every function inside a test span.
 func markTests(tests []span, functions []Function) {
 	for i := range functions {
-		if inTest(tests, functions[i].startByte, functions[i].endByte) {
+		if within(tests, functions[i].startByte, functions[i].endByte) {
 			functions[i].IsTest = true
 		}
 	}
@@ -1228,7 +1234,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 	}
 	for _, s := range spans {
 		t := typeOf(s.name)
-		t.IsTest = t.IsTest && inTest(tests, s.start, s.end)
+		t.IsTest = t.IsTest && within(tests, s.start, s.end)
 		if s.declared && !t.Declared || t.StartLine == 0 {
 			t.StartLine, t.EndLine = s.startLine, s.endLine
 		}
@@ -1258,7 +1264,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 			start, end = fn.startByte, fn.endByte
 		}
 		found := innermostSpan(spans, start, end)
-		if found == nil || inTest(tests, found.start, found.end) {
+		if found == nil || within(tests, found.start, found.end) {
 			return nil
 		}
 		return typeOf(found.name)
@@ -1271,6 +1277,7 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 	}
 	refs := map[uintptr]reference{}
 	var order []uintptr
+	var qualifiers []span
 	ForEachMatch(l.references, root, source, func(match *sitter.QueryMatch) {
 		var ref reference
 		for _, capture := range match.Captures {
@@ -1285,6 +1292,9 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 				ref.embedded = true
 			case packageCapture:
 				ref.pkg = capture.Node.Content(source)
+			case qualifierCapture:
+				ref.pkg = capture.Node.Content(source)
+				qualifiers = append(qualifiers, span{capture.Node.StartByte(), capture.Node.EndByte()})
 			}
 		}
 		if ref.node == nil {
@@ -1307,6 +1317,9 @@ func (l *Language) collectTypes(root *sitter.Node, source []byte, functions []Fu
 	seen := map[string]map[Reference]bool{}
 	for _, id := range order {
 		ref := refs[id]
+		if within(qualifiers, ref.node.StartByte(), ref.node.EndByte()) {
+			continue
+		}
 		// A reference inside an alias declaration is the aliased type, not
 		// a use of that type by the alias name.
 		if s := innermostSpan(spans, ref.node.StartByte(), ref.node.EndByte()); s != nil && s.alias {
