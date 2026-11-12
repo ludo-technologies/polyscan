@@ -11,7 +11,9 @@ import (
 	"github.com/ludo-technologies/polyscan/core/domain"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/engine"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/godeps"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/javadeps"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/lang/golang"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/lang/java"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/lang/rust"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/rustdeps"
 )
@@ -63,6 +65,8 @@ type couplingFile struct {
 	// and crate is the crate the file belongs to, nil outside of one.
 	uses  map[string][]string
 	crate *rustdeps.Crate
+	// java is the package and the imports of a Java file.
+	java  *javadeps.File
 	types []engine.Type
 }
 
@@ -79,11 +83,12 @@ type coupledType struct {
 	refs     []siteReference
 }
 
-// siteReference is a reference together with the file that makes it, which
-// decides how the name resolves.
+// siteReference is a reference together with the file and the type that
+// make it, which decide how the name resolves.
 type siteReference struct {
-	file *couplingFile
-	ref  engine.Reference
+	file  *couplingFile
+	scope string
+	ref   engine.Reference
 }
 
 // aliasTarget is the type a Go type alias names. importPath is empty when
@@ -128,7 +133,7 @@ func newCouplingBuilder() *couplingBuilder {
 // with no go.mod above it keeps its unqualified references only, with one
 // warning per directory. A Rust file contributes its use declarations, its
 // crate and its modules, which tell its references to types of other crates
-// apart.
+// apart. A Java file contributes its package and its imports.
 func (b *couplingBuilder) add(language *engine.Language, display, path string, content []byte, result *engine.Result) error {
 	file := &couplingFile{language: language, display: display, location: display}
 	if language.TypeSpansDirectory {
@@ -185,6 +190,10 @@ func (b *couplingBuilder) add(language *engine.Language, display, path string, c
 				b.rustModules[module] = true
 			}
 		}
+	case java.Language:
+		if file.java, err = javadeps.ParseFile(content); err != nil {
+			return err
+		}
 	}
 	b.files = append(b.files, file)
 	return nil
@@ -195,10 +204,12 @@ func (b *couplingBuilder) add(language *engine.Language, display, path string, c
 // type of the same package and a qualified one is looked up through the
 // file's imports; for Rust a name is a type of the same file, or else of
 // any file, unless the path it is written with or imported from by a use
-// leads out of the tree, to a type of another crate. A type whose methods a
-// file holds without declaring it, as a Go type is across its package and a
-// Rust type across impl blocks, joins its declaration; a Rust impl for a
-// type no file declares is left out.
+// leads out of the tree, to a type of another crate; for Java a name is
+// looked up as javac looks it up, through the enclosing types, the imports
+// and the package of its file. A type whose methods a file holds without
+// declaring it, as a Go type is across its package and a Rust type across
+// impl blocks, joins its declaration; a Rust impl for a type no file
+// declares is left out, and so is a Java class declared in a method.
 func (b *couplingBuilder) build() *Coupling {
 	types := map[string]*coupledType{}
 	var order []string
@@ -214,11 +225,14 @@ func (b *couplingBuilder) build() *Coupling {
 	}
 	// byImportPath maps a Go package's import path and type name to the
 	// declared type; byBare maps a language and bare type name to the
-	// declared types of the whole tree, byFileBare to those of one file.
+	// declared types of the whole tree, byFileBare to those of one file;
+	// byCanonical maps the canonical name of a Java type, its package and
+	// its name, to its declarations.
 	byImportPath := map[string]*coupledType{}
 	packageNames := map[string]string{}
 	byBare := map[string][]*coupledType{}
 	byFileBare := map[*couplingFile]map[string]*coupledType{}
+	byCanonical := map[string][]*coupledType{}
 	bareKey := func(language *engine.Language, name string) string {
 		return language.Name + "\x00" + bareName(language, name)
 	}
@@ -240,9 +254,13 @@ func (b *couplingBuilder) build() *Coupling {
 				bare := bareKey(file.language, et.Name)
 				byBare[bare] = append(byBare[bare], t)
 				byFileBare[file][bareName(file.language, et.Name)] = t
+				if file.java != nil {
+					canonical := qualifyJava(file.java.Package, et.Name)
+					byCanonical[canonical] = append(byCanonical[canonical], t)
+				}
 			}
 			for _, ref := range et.References {
-				t.refs = append(t.refs, siteReference{file: file, ref: ref})
+				t.refs = append(t.refs, siteReference{file: file, scope: et.Name, ref: ref})
 			}
 		}
 	}
@@ -275,13 +293,13 @@ func (b *couplingBuilder) build() *Coupling {
 	}
 	b.mergeAliasMethods(types, aliases)
 
-	// A Rust impl block or a method group in a file that does not declare
-	// its type belongs to the declaration elsewhere when there is exactly
-	// one. An ambiguous bare name with more than one declaration across
-	// the tree is left unresolved with a warning.
+	// A Rust impl block in a file that does not declare its type belongs
+	// to the declaration elsewhere when there is exactly one. An ambiguous
+	// bare name with more than one declaration across the tree is left
+	// unresolved with a warning.
 	for _, key := range order {
 		t := types[key]
-		if t.declared || t.language.TypeSpansDirectory {
+		if t.declared || t.language != rust.Language {
 			continue
 		}
 		candidates := byBare[bareKey(t.language, t.name)]
@@ -315,6 +333,8 @@ func (b *couplingBuilder) build() *Coupling {
 				return nil, ""
 			}
 			return target, ref.Name
+		case file.language == java.Language:
+			return b.resolveJava(site, byCanonical)
 		default:
 			// A name the file declares is that declaration, whatever a use
 			// in a nested scope imports under the same name.
@@ -487,6 +507,98 @@ func (b *couplingBuilder) treeCrate(file *couplingFile, name string) bool {
 	}
 	pkg, ok := file.crate.Dependencies[name]
 	return ok && b.rustPackages[pkg]
+}
+
+// resolveJava finds the type of the tree a Java reference names. A simple
+// name is the type javaType finds. A qualified name a.b.C is a member type
+// of the type its first segment names, or else the type C of the package
+// a.b, as in java.util.List. A name that leads to a type of the JDK or of a
+// library resolves to nothing, as does a name of a variable or a package.
+// Two declarations of one canonical name, as in two copies of a source
+// tree, leave the reference unresolved with a warning.
+func (b *couplingBuilder) resolveJava(site siteReference, byCanonical map[string][]*coupledType) (*coupledType, string) {
+	file, ref := site.file, site.ref
+	first, rest := ref.Name, ""
+	if ref.Package != "" {
+		first, rest, _ = strings.Cut(strings.Join(strings.Fields(ref.Package), "")+"."+ref.Name, ".")
+	}
+	canonical, ok := b.javaType(file, site.scope, first, byCanonical)
+	if !ok && rest != "" {
+		canonical, ok = first, true
+	}
+	if !ok || canonical == "" {
+		return nil, ""
+	}
+	if rest != "" {
+		canonical += "." + rest
+	}
+	candidates := byCanonical[canonical]
+	switch len(candidates) {
+	case 0:
+		return nil, ""
+	case 1:
+		return candidates[0], candidates[0].name
+	}
+	b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous reference %q: %d files declare %s, left unresolved", file.display, ref.Name, len(candidates), canonical))
+	return nil, ""
+}
+
+// javaType returns the canonical name of the type a simple Java name
+// denotes where scope, the type making the reference, uses it. The name is
+// looked up in the order javac follows: a member type of scope or of a
+// type that encloses it, a single import, a type of the same package and an
+// import on demand. A single import names the type even when it lies
+// outside the tree. ok is false when no type of that name is in scope, so
+// the name may be a package or a variable; the name is empty when imports
+// on demand bring in more than one type of the tree under the name, which
+// is ambiguous and warned about.
+func (b *couplingBuilder) javaType(file *couplingFile, scope, name string, byCanonical map[string][]*coupledType) (string, bool) {
+	pkg := file.java.Package
+	for enclosing := scope; enclosing != ""; {
+		if canonical := qualifyJava(pkg, enclosing+"."+name); len(byCanonical[canonical]) > 0 {
+			return canonical, true
+		}
+		i := strings.LastIndex(enclosing, ".")
+		enclosing = enclosing[:max(i, 0)]
+	}
+	var imported, onDemand []string
+	for _, imp := range file.java.Imports {
+		switch {
+		case !imp.OnDemand && bareName(file.language, imp.Name) == name && !slices.Contains(imported, imp.Name):
+			imported = append(imported, imp.Name)
+		case imp.OnDemand && len(byCanonical[imp.Name+"."+name]) > 0 && !slices.Contains(onDemand, imp.Name+"."+name):
+			onDemand = append(onDemand, imp.Name+"."+name)
+		}
+	}
+	if len(imported) > 0 {
+		return b.oneJavaType(file, name, imported), true
+	}
+	if canonical := qualifyJava(pkg, name); len(byCanonical[canonical]) > 0 {
+		return canonical, true
+	}
+	if len(onDemand) > 0 {
+		return b.oneJavaType(file, name, onDemand), true
+	}
+	return "", false
+}
+
+// oneJavaType returns the only canonical name a Java name can denote, or
+// warns that its imports make it ambiguous and returns the empty name.
+func (b *couplingBuilder) oneJavaType(file *couplingFile, name string, candidates []string) string {
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+	b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous reference %q: imported as %s, left unresolved", file.display, name, strings.Join(candidates, " and ")))
+	return ""
+}
+
+// qualifyJava returns the canonical name of a type of a Java package, which
+// is the type's own name in the unnamed package.
+func qualifyJava(pkg, name string) string {
+	if pkg == "" {
+		return name
+	}
+	return pkg + "." + name
 }
 
 // resolveQualified finds the type a Go reference pkg.T names: the file's

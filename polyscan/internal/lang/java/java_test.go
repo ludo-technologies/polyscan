@@ -2,6 +2,7 @@ package java
 
 import (
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -514,4 +515,78 @@ func names(functions map[string]engine.Function) []string {
 		out = append(out, name)
 	}
 	return out
+}
+
+func TestTypesAndReferences(t *testing.T) {
+	result, err := Language.Analyze([]byte(`
+package p;
+
+public abstract class Shape extends Base<Item> implements Comparable<Shape>, java.io.Serializable, Outer.Marker {
+    private java.util.List<Outer.Inner> items;
+    private a.b.Deep.Nested deep;
+    private Wrapper<String>.Part part;
+    abstract Area area();
+
+    static Shape of(Kind k) throws ShapeException {
+        Util.check(k);
+        Color c = Color.RED;
+        com.example.Registry.register(c);
+        Supplier<Circle> s = Circle::new;
+        return new Circle();
+    }
+
+    interface Visitor extends Base.Listener { void visit(Node n); }
+
+    enum Kind { ROUND; Kind next() { return Helper.next(this); } }
+}
+
+record Point(Coord x) {}
+
+@interface Marker { Class<?> value(); }
+
+class Holder {
+    @Inject @com.example.Named("x") Service service;
+    void run() {
+        Runnable r = new Runnable() { public void run() { Task.go(); } };
+        class Local { Gadget g() { return null; } }
+    }
+}
+`))
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if result.SyntaxError != nil {
+		t.Fatalf("syntax error: %v", result.SyntaxError)
+	}
+	want := []engine.Type{
+		// The names before the last of a qualified type are its qualifier,
+		// even before type arguments; a name after a dot in an expression
+		// keeps the names before it, which are still names of their own.
+		{Name: "Shape", StartLine: 4, EndLine: 21, Declared: true, Abstract: true, References: []engine.Reference{
+			{Name: "Base", Embedded: true}, {Name: "Item"}, {Name: "Comparable", Embedded: true}, {Name: "Shape"},
+			{Name: "Serializable", Package: "java.io", Embedded: true}, {Name: "Marker", Package: "Outer", Embedded: true},
+			{Name: "List", Package: "java.util"}, {Name: "Inner", Package: "Outer"}, {Name: "Nested", Package: "a.b.Deep"},
+			{Name: "String"}, {Name: "Part", Package: "Wrapper"}, {Name: "Area"}, {Name: "Kind"}, {Name: "ShapeException"},
+			{Name: "Util"}, {Name: "Color"}, {Name: "RED", Package: "Color"},
+			{Name: "com"}, {Name: "example", Package: "com"}, {Name: "Registry", Package: "com.example"},
+			{Name: "Supplier"}, {Name: "Circle"},
+		}},
+		{Name: "Shape.Visitor", StartLine: 18, EndLine: 18, Declared: true, Abstract: true, References: []engine.Reference{
+			{Name: "Listener", Package: "Base", Embedded: true}, {Name: "Node"},
+		}},
+		{Name: "Shape.Kind", StartLine: 20, EndLine: 20, Declared: true, References: []engine.Reference{{Name: "Kind"}, {Name: "Helper"}}},
+		{Name: "Point", StartLine: 23, EndLine: 23, Declared: true, References: []engine.Reference{{Name: "Coord"}}},
+		{Name: "Marker", StartLine: 25, EndLine: 25, Declared: true, Abstract: true, References: []engine.Reference{{Name: "Class"}}},
+		// Annotations are not references, and the methods of an anonymous
+		// class refer for the class that holds them.
+		{Name: "Holder", StartLine: 27, EndLine: 33, Declared: true, References: []engine.Reference{
+			{Name: "Service"}, {Name: "Runnable"}, {Name: "Task"},
+		}},
+		// A class declared in a method is local to it, so the file does not
+		// declare it.
+		{Name: "Holder.Local", StartLine: 31, EndLine: 31, References: []engine.Reference{{Name: "Gadget"}}},
+	}
+	if !reflect.DeepEqual(result.Types, want) {
+		t.Errorf("types = %+v\nwant   %+v", result.Types, want)
+	}
 }
