@@ -43,7 +43,7 @@ Without `--config`, polyscan reads the nearest `.polyscan.toml` in the first pat
 
 The language of each file is detected from its extension. Complexity and clone detection cover every supported language. Dependency analysis covers Go and JavaScript/TypeScript. Coupling (CBO) covers Go, Rust and JavaScript/TypeScript, and cohesion (LCOM4) Go and Rust. Dead code exists for JavaScript/TypeScript only, and the health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.
 
-For Go, Rust and C++, version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. JavaScript/TypeScript additionally skips a longer built-in list and the files its root `.gitignore` ignores. Further exclusions for every language come from `analysis.exclude` in the configuration file and from `--exclude`; see the [built-in skips](../configuration/reference.md#built-in-skips). A file that cannot be read is skipped and listed under errors. A file with a syntax error is analyzed without the functions that contain it, counted as partial, and listed under warnings. C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
+For Go, Rust, C++ and Java, version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. JavaScript/TypeScript additionally skips a longer built-in list and the files its root `.gitignore` ignores. Further exclusions for every language come from `analysis.exclude` in the configuration file and from `--exclude`; see the [built-in skips](../configuration/reference.md#built-in-skips). A file that cannot be read is skipped and listed under errors. A file with a syntax error is analyzed without the functions that contain it, counted as partial, and listed under warnings. C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
 
 ## Output behavior
 
@@ -76,8 +76,9 @@ The other languages count decision points the same way on their own constructs:
 | Go | `if`/`else if`; every `for`; each `case` of a `switch`, type switch or `select` (`default` excluded); `&&` and `\|\|` |
 | Rust | `if`/`else if`/`if let`; `for`, `while`, `while let`, `loop`; each `match` arm except the last, plus each arm guard; `let ... else`; `&&` and `\|\|`; `?` |
 | C++ | `if`/`else if`; `?:`; `for`, range `for`, `while`, `do`; each `case` (`default` excluded); `catch`; `&&` and `\|\|` |
+| Java | `if`/`else if`; `?:`; `for`, enhanced `for`, `while`, `do`; each `case` arm of a `switch` statement or expression, in both the `:` and `->` forms (`default` excluded, `case A, B` counted once); each `when` guard; `catch`; `&&` and `\|\|` |
 
-In Go, Rust and C++, function literals, closures and lambdas are not reported on their own: their decision points count toward the enclosing function, so the Go numbers match gocyclo.
+In Go, Rust, C++ and Java, function literals, closures and lambdas are not reported on their own: their decision points count toward the enclosing function, so the Go numbers match gocyclo and the Java numbers match lizard, except for the `when` guard, which lizard does not count. The methods of a Java anonymous class are reported on their own.
 
 Functions are assigned a risk level from two thresholds, which are the same for every language and are set by `complexity.low_threshold` and `complexity.medium_threshold` in the configuration file:
 
@@ -127,13 +128,13 @@ Clones are graded by how much the copies differ:
 | Type | Description | Default threshold | Enabled by default (JS/TS) |
 | --- | --- | --- | --- |
 | Type 1 | Identical apart from whitespace and comments | 0.85 | Yes |
-| Type 2 | Identical after renaming identifiers and literals | 0.80 for Go, Rust and C++; 0.75 for JS/TS | Yes |
-| Type 3 | Copies with statements added, removed, or changed | 0.80 for Go, Rust and C++; 0.70 for JS/TS | No (JS/TS); reported for Go, Rust and C++ |
+| Type 2 | Identical after renaming identifiers and literals | 0.80 for Go, Rust, C++ and Java; 0.75 for JS/TS | Yes |
+| Type 3 | Copies with statements added, removed, or changed | 0.80 for Go, Rust, C++ and Java; 0.70 for JS/TS | No (JS/TS); reported for Go, Rust, C++ and Java |
 | Type 4 | Different code that computes the same thing | 0.65 | Yes (JS/TS only) |
 
 A fragment must be at least 10 lines and 20 syntax tree nodes to be considered, which keeps short boilerplate such as getters out of the results.
 
-In Go, Rust and C++, test code is analyzed for complexity but excluded from clone detection, because test functions share a skeleton by convention: for Go that is `*_test.go` files; for C++ it is `*_test.*`, `*_tests.*`, `test_*.*` and `*Test.*` source files and any `test` or `tests` directory; for Rust it is `#[test]` functions, items under `#[cfg(test)]`, `tests.rs` and `*_tests.rs` files and any `tests` directory.
+In Go, Rust, C++ and Java, test code is analyzed for complexity but excluded from clone detection, because test functions share a skeleton by convention: for Go that is `*_test.go` files; for C++ it is `*_test.*`, `*_tests.*`, `test_*.*` and `*Test.*` source files and any `test` or `tests` directory; for Java it is `*Test.java`, `*Tests.java`, `*TestCase.java` and `*IT.java` files and any `test`, `tests`, `javatests` or `androidTest` directory; for Rust it is `#[test]` functions, items under `#[cfg(test)]`, `tests.rs` and `*_tests.rs` files and any `tests` directory.
 
 ### Coupling between objects {#cbo}
 

@@ -1,6 +1,6 @@
 # polyscan
 
-A multi-language code quality analyzer. It detects the language of each file by its extension. Go, Rust and C++ get cyclomatic complexity and code clone detection from the generic engine, Go and Rust also class coupling (CBO) and cohesion (LCOM4), and Go package dependencies; JavaScript/TypeScript files get the full [jscan](../jscan/README.md) analysis (complexity, dead code, clones, coupling, dependencies). Every language lands in one report with one health score: each analyzed dimension is scored against what it could have charged, and a dimension a language does not have is left out of the score rather than scored as clean.
+A multi-language code quality analyzer. It detects the language of each file by its extension. Go, Rust, C++ and Java get cyclomatic complexity and code clone detection from the generic engine, Go and Rust also class coupling (CBO) and cohesion (LCOM4), and Go package dependencies; JavaScript/TypeScript files get the full [jscan](../jscan/README.md) analysis (complexity, dead code, clones, coupling, dependencies). Every language lands in one report with one health score: each analyzed dimension is scored against what it could have charged, and a dimension a language does not have is left out of the score rather than scored as clean.
 
 ## Installation
 
@@ -44,7 +44,7 @@ polyscan analyze --include-tests .
 
 Version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. `--exclude` leaves out further files and directories, for every language and every analysis: a pattern without a slash is a glob matched against the file name and against each directory on the path, so `fixtures` drops every `fixtures` directory; a pattern with a slash is matched against the path relative to the analyzed directory, with `**` standing for any number of segments, so `src/generated/**` drops that tree. The flag takes a comma-separated list or may be repeated.
 
-Test files and test code are left out of every analysis unless `--include-tests` is given. For Go that is `*_test.go`; for C++ it is `*_test.*`, `*_tests.*`, `test_*.*` and `*Test.*` source files and any `test` or `tests` directory; for Rust it is `#[test]` functions, items under `#[cfg(test)]` or `#[cfg(all(test, ...))]`, `tests.rs` and `*_tests.rs` files and any `tests` directory, the conventional homes of a test module split into its own file and of Cargo's integration tests; for JavaScript/TypeScript it is `*.test.*` and `*.spec.*` files and any `__tests__` directory. With `--include-tests` the test code is analyzed for complexity and dead code, but it still stays out of clone detection, cohesion, coupling and dependency analysis: test functions share a skeleton by convention, and a test's types and imports describe the tests, not the package. A file that cannot be read is skipped and listed under `Errors`. A file with a syntax error is analyzed without the functions that contain the error, counted as partial, and listed under `Warnings`; C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
+Test files and test code are left out of every analysis unless `--include-tests` is given. For Go that is `*_test.go`; for C++ it is `*_test.*`, `*_tests.*`, `test_*.*` and `*Test.*` source files and any `test` or `tests` directory; for Java it is `*Test.java`, `*Tests.java`, `*TestCase.java` and `*IT.java` files and any `test`, `tests`, `javatests` or `androidTest` directory, which covers the Maven, Gradle, Bazel and Android layouts; for Rust it is `#[test]` functions, items under `#[cfg(test)]` or `#[cfg(all(test, ...))]`, `tests.rs` and `*_tests.rs` files and any `tests` directory, the conventional homes of a test module split into its own file and of Cargo's integration tests; for JavaScript/TypeScript it is `*.test.*` and `*.spec.*` files and any `__tests__` directory. With `--include-tests` the test code is analyzed for complexity and dead code, but it still stays out of clone detection, cohesion, coupling and dependency analysis: test functions share a skeleton by convention, and a test's types and imports describe the tests, not the package. A file that cannot be read is skipped and listed under `Errors`. A file with a syntax error is analyzed without the functions that contain the error, counted as partial, and listed under `Warnings`; C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
 
 ## Configuration
 
@@ -98,7 +98,17 @@ Cyclomatic complexity is one plus the number of decision points in a function, c
 | `catch` | 1, the exception edge `core/cfg` counts |
 | `&&`, `\|\|` | 1 each |
 
-Function literals, closures and lambdas are not reported on their own. Their decision points count toward the enclosing function, so the Go numbers match gocyclo.
+| Java construct | Decision points |
+| --- | --- |
+| `if`, `else if` | 1 each |
+| `?:` | 1 |
+| `for`, enhanced `for`, `while`, `do` | 1 each |
+| `switch` statement or expression | 1 per `case` arm, in the `case X:` and `case X ->` forms, `default` excluded; `case A, B` is one arm |
+| `when` guard of a pattern `case` | 1 |
+| `catch` | 1, the exception edge `core/cfg` counts; a multi-catch `catch (A \| B e)` is one |
+| `&&`, `\|\|` | 1 each |
+
+Function literals, closures and lambdas are not reported on their own. Their decision points count toward the enclosing function, so the Go numbers match gocyclo and the Java numbers match lizard, except for the `when` guard of a pattern `case`, which lizard does not count. The methods of a Java anonymous class are functions of their own, named after the type the class extends, such as `Outer.Runnable.run`. Java initializer blocks and field initializers are not functions. In a class declared inside a method, an anonymous class included, their decision points count toward that method, as a lambda's do. Elsewhere they are not counted.
 
 Risk levels use the thresholds shared by every polyscan analyzer: low up to 9, medium up to 19, high from 20.
 
@@ -117,6 +127,8 @@ Pairs below 0.80 are not reported. Test code stays out of clone detection even u
 C++ files are parsed one at a time without the preprocessor. Every branch of an `#if` is analyzed, macros are not expanded, and code whose syntax only makes sense after expansion is a syntax error: the file is reported as partial and the functions containing the error are left out. Heavily templated code is parsed on a best-effort basis. Header files, `.h` included, are analyzed as C++.
 
 Rust macro invocations parse as token trees, so the code inside a macro call contributes tokens but no structure. Clone detection recall is lower on macro-heavy code. The bundled tree-sitter-rust grammar predates Rust 2024 edition syntax such as `unsafe extern` blocks; a file that uses it is reported as partial, which affected 0.75% of the files in a sample of 369 crates.
+
+The bundled tree-sitter-java grammar predates the `import module` declaration of Java 25. A file that uses one is reported as partial, and every method in it is still analyzed, because the declaration lies outside any method.
 
 Pairs are merged into groups by connected components, and the groups are deduplicated by the shared `core/clone` passes. When there are more than 10,000 candidate pairs, only pairs that share a MinHash band are compared, and within a band each function is compared with at most 1,024 of the functions that follow it. Neighbours in a band are always compared, so a large set of near-identical functions still ends up in one group.
 

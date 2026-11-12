@@ -347,6 +347,28 @@ func TestAnalyzeCpp(t *testing.T) {
 	}
 }
 
+func TestAnalyzeJava(t *testing.T) {
+	report, err := Analyze([]string{"../../testdata/java"}, Options{Complexity: true, Clones: true, ComplexityThresholds: testThresholds}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	byName := map[string]Function{}
+	for _, fn := range report.Complexity.Functions {
+		byName[fn.Name] = fn
+	}
+	if fn := byName["Sample.Server.handle"]; fn.Complexity != 9 || fn.Language != "Java" {
+		t.Errorf("Sample.Server.handle = %+v, want complexity 9 in Java", fn)
+	}
+	if _, ok := byName["SampleTest.sumPositiveAgain"]; ok {
+		t.Error("functions in test directories are left out by default")
+	}
+	// sumPositiveAgain is a copy of sumPositive but lies under src/test.
+	stats := report.Clones.Statistics
+	if stats.TotalFragments != 3 || stats.TotalClonePairs != 1 || stats.ClonesByType["Type-2"] != 1 {
+		t.Errorf("statistics = %+v, want one Type-2 pair among three fragments", stats)
+	}
+}
+
 func TestAnalyzeSkipsDependencyAndBuildDirectories(t *testing.T) {
 	dir := t.TempDir()
 	sample, err := os.ReadFile("../../testdata/go/sample.go")

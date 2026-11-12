@@ -357,7 +357,7 @@ func TestAnalyzeMixedTreeJSON(t *testing.T) {
 	for _, fn := range doc.Complexity.Functions {
 		languages[fn.Language]++
 	}
-	for _, language := range []string{"Go", "Rust", "C++", "JavaScript"} {
+	for _, language := range []string{"Go", "Rust", "C++", "Java", "JavaScript"} {
 		if languages[language] == 0 {
 			t.Errorf("no %s function in the unified complexity report, got %v", language, languages)
 		}

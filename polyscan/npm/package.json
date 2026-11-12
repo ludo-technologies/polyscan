@@ -8,6 +8,7 @@
     "rust",
     "cpp",
     "c++",
+    "java",
     "code-quality",
     "static-analysis",
     "analyzer",

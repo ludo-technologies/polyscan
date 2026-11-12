@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Java support. `.java` files get cyclomatic complexity, nesting depth and clone detection. Methods with a body, constructors and compact record constructors are functions, named after the classes, enums, records and interfaces that enclose them, such as `Outer.Inner.method`. Lambdas count toward the enclosing method, and the methods of an anonymous class are reported on their own. Test files follow the Maven, Gradle, Bazel and Android conventions: `*Test.java`, `*Tests.java`, `*TestCase.java` and `*IT.java` files and any `test`, `tests`, `javatests` or `androidTest` directory. Coupling (CBO), cohesion (LCOM4) and dependency analysis do not cover Java yet
+
 ### Fixed
 
 - Rust coupling (CBO) counts a type named inside a macro argument, either as a path segment, such as the `State` of `matches!(s, State::Up)`, or as a struct literal, such as `vec![Update { port: 1 }]`. The path before the name decides whether it belongs to the tree, as it does outside a macro, so `std::io::ErrorKind` inside a macro stays out. A bare name in a macro argument, such as `Some` or an argument of `format!`, is not read as a type. Before, a type referred to only inside a macro was missing from `dependent_classes` (#225)

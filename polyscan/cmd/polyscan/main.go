@@ -28,7 +28,7 @@ func rootCmd() *cobra.Command {
 		// main prints the error itself, once.
 		SilenceErrors: true,
 		Long: "polyscan is a static analyzer that measures code quality across Go, Rust, C++, " +
-			"and JavaScript/TypeScript.\nIt analyzes cyclomatic complexity, code clones, " +
+			"Java and JavaScript/TypeScript.\nIt analyzes cyclomatic complexity, code clones, " +
 			"dependencies, dead code, coupling (CBO), and cohesion (LCOM4), with availability " +
 			"depending on the language.",
 		Version: version.Version,

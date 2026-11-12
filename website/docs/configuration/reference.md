@@ -1,6 +1,6 @@
 # Configuration Reference
 
-Every key that `.polyscan.toml` accepts, with its type, its default, and its rules. The file configures every language: Go, Rust, C++ and JavaScript/TypeScript. These are all the keys. A key or section that is not listed here is an error. The [configuration guide](index.md) explains how polyscan finds the file and how flags combine with it.
+Every key that `.polyscan.toml` accepts, with its type, its default, and its rules. The file configures every language: Go, Rust, C++, Java and JavaScript/TypeScript. These are all the keys. A key or section that is not listed here is an error. The [configuration guide](index.md) explains how polyscan finds the file and how flags combine with it.
 
 A key that the file leaves out keeps its default.
 
@@ -126,7 +126,7 @@ allow_dead_code = true
 
 Some files are left out before `analysis.exclude` applies. These skips are fixed behavior and not keys. The `exclude` key adds to them and cannot remove any of them.
 
-### Go, Rust and C++
+### Go, Rust, C++ and Java
 
 polyscan skips any directory whose name starts with a dot, and directories named `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called.
 

@@ -10,7 +10,7 @@ Point polyscan at the directory that holds your source:
 polyscan analyze .
 ```
 
-polyscan collects every supported source file below that directory — JavaScript, TypeScript, Go, Rust and C++, detected by extension — runs the analyses in parallel, writes an HTML report to `polyscan-report.html`, and opens it in your browser. It also prints a summary to the terminal:
+polyscan collects every supported source file below that directory — JavaScript, TypeScript, Go, Rust, C++ and Java, detected by extension — runs the analyses in parallel, writes an HTML report to `polyscan-report.html`, and opens it in your browser. It also prints a summary to the terminal:
 
 ```console
 $ polyscan analyze .
@@ -71,7 +71,7 @@ polyscan check src/
 
 ## 5. Configure polyscan
 
-polyscan reads a `.polyscan.toml` when the project has one. It searches the analyzed directory and then each parent directory, and the same file configures Go, Rust, C++ and JavaScript/TypeScript. It supplies complexity thresholds, extra files to leave out, and the limits of `polyscan check`:
+polyscan reads a `.polyscan.toml` when the project has one. It searches the analyzed directory and then each parent directory, and the same file configures Go, Rust, C++, Java and JavaScript/TypeScript. It supplies complexity thresholds, extra files to leave out, and the limits of `polyscan check`:
 
 ```toml title=".polyscan.toml"
 [complexity]

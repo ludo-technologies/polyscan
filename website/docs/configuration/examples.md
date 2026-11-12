@@ -1,6 +1,6 @@
 # Configuration Examples
 
-Complete `.polyscan.toml` files for common project shapes. Each file is valid as written and applies to every language in the project: Go, Rust, C++ and JavaScript/TypeScript.
+Complete `.polyscan.toml` files for common project shapes. Each file is valid as written and applies to every language in the project: Go, Rust, C++, Java and JavaScript/TypeScript.
 
 Remember three rules while reading these:
 
@@ -77,7 +77,7 @@ polyscan check --select deadcode src/
 
 You still get value from the full dead code analysis in the report, where the critical findings, which are genuinely unreachable statements, are worth acting on even though the warnings are not.
 
-## Go, Rust or C++ project
+## Go, Rust, C++ or Java project
 
 The same file works for the other languages. This example leaves out generated code and a directory of test fixtures, and it analyzes test code too.
 
