@@ -1969,7 +1969,7 @@
 <td><code>--select</code></td>
 <td><code>-s</code></td>
 <td><code>complexity,deadcode,clone,cbo,lcom,deps</code></td>
-<td>Comma-separated list of analyses to run. <code>deps</code> applies to Go and JavaScript/TypeScript; <code>cbo</code> to Go, Rust and JavaScript/TypeScript; <code>lcom</code> to Go and Rust; <code>deadcode</code> to JavaScript/TypeScript only</td>
+<td>Comma-separated list of analyses to run. <code>deps</code> applies to Go and JavaScript/TypeScript; <code>cbo</code> to Go, Rust and JavaScript/TypeScript; <code>lcom</code> to Go, Rust and Java; <code>deadcode</code> to JavaScript/TypeScript only</td>
 </tr>
 <tr>
 <td><code>--format</code></td>
@@ -2017,7 +2017,7 @@
 </table>
 <p>Without <code>--config</code>, polyscan reads the nearest <code>.polyscan.toml</code> in the first path or a directory above it. The file sets the complexity thresholds, the files to leave out and whether test code is analyzed for every language, and a flag takes precedence over it. See <a href="../../configuration/#how-polyscan-finds-your-config-file">how polyscan finds your config file</a>. A configuration error ends the command with exit code 1.</p>
 <h2 id="language-coverage">Language coverage<a class="headerlink" href="#language-coverage" title="Permanent link">&para;</a></h2>
-<p>The language of each file is detected from its extension. Complexity and clone detection cover every supported language. Dependency analysis covers Go and JavaScript/TypeScript. Coupling (CBO) covers Go, Rust and JavaScript/TypeScript, and cohesion (LCOM4) Go and Rust. Dead code exists for JavaScript/TypeScript only, and the health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.</p>
+<p>The language of each file is detected from its extension. Complexity and clone detection cover every supported language. Dependency analysis covers Go and JavaScript/TypeScript. Coupling (CBO) covers Go, Rust and JavaScript/TypeScript, and cohesion (LCOM4) covers Go, Rust and Java. Dead code exists for JavaScript/TypeScript only, and the health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.</p>
 <p>For Go, Rust, C++ and Java, version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and <code>node_modules</code>, <code>vendor</code>, <code>target</code>, <code>build</code>, <code>dist</code> and <code>third_party</code>. A path named on the command line is analyzed whatever it is called. JavaScript/TypeScript additionally skips a longer built-in list and the files its root <code>.gitignore</code> ignores. Further exclusions for every language come from <code>analysis.exclude</code> in the configuration file and from <code>--exclude</code>; see the <a href="../../configuration/reference/#built-in-skips">built-in skips</a>. A file that cannot be read is skipped and listed under errors. A file with a syntax error is analyzed without the functions that contain it, counted as partial, and listed under warnings. C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.</p>
 <h2 id="output-behavior">Output behavior<a class="headerlink" href="#output-behavior" title="Permanent link">&para;</a></h2>
 <p>The format determines where results go and what else is printed.</p>
