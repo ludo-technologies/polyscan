@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -65,8 +66,12 @@ type couplingFile struct {
 	// and crate is the crate the file belongs to, nil outside of one.
 	uses  map[string][]string
 	crate *rustdeps.Crate
-	// java is the package and the imports of a Java file.
+	// java is the package and the imports of a Java file, and root its
+	// source root: the directory its package path starts in, such as src
+	// for src/com/example/A.java of package com.example, or the file's own
+	// directory when the path does not end in the package.
 	java  *javadeps.File
+	root  string
 	types []engine.Type
 }
 
@@ -80,7 +85,9 @@ type coupledType struct {
 	end      int
 	declared bool
 	abstract bool
-	refs     []siteReference
+	// root is the source root of the file that declares a Java type.
+	root string
+	refs []siteReference
 }
 
 // siteReference is a reference together with the file and the type that
@@ -114,17 +121,22 @@ type couplingBuilder struct {
 	rustCrates   map[string]bool
 	rustPackages map[string]bool
 	rustModules  map[string]bool
-	warnings     []string
+	// javaDuplicates maps a Java source root to the canonical names its
+	// files refer to that the tree declares more than once and not exactly
+	// once under that root. They are reported once per root.
+	javaDuplicates map[string]map[string]bool
+	warnings       []string
 }
 
 func newCouplingBuilder() *couplingBuilder {
 	return &couplingBuilder{
-		resolver:     godeps.NewResolver(),
-		noModule:     map[string]bool{},
-		crates:       rustdeps.NewResolver(),
-		rustCrates:   map[string]bool{},
-		rustPackages: map[string]bool{},
-		rustModules:  map[string]bool{},
+		resolver:       godeps.NewResolver(),
+		noModule:       map[string]bool{},
+		crates:         rustdeps.NewResolver(),
+		rustCrates:     map[string]bool{},
+		rustPackages:   map[string]bool{},
+		rustModules:    map[string]bool{},
+		javaDuplicates: map[string]map[string]bool{},
 	}
 }
 
@@ -194,6 +206,15 @@ func (b *couplingBuilder) add(language *engine.Language, display, path string, c
 		if file.java, err = javadeps.ParseFile(content); err != nil {
 			return err
 		}
+		file.root = filepath.Dir(display)
+		if file.java.Package != "" {
+			packageDir := filepath.Join(strings.Split(file.java.Package, ".")...)
+			if file.root == packageDir {
+				file.root = "."
+			} else {
+				file.root = strings.TrimSuffix(file.root, string(filepath.Separator)+packageDir)
+			}
+		}
 	}
 	b.files = append(b.files, file)
 	return nil
@@ -255,6 +276,7 @@ func (b *couplingBuilder) build() *Coupling {
 				byBare[bare] = append(byBare[bare], t)
 				byFileBare[file][bareName(file.language, et.Name)] = t
 				if file.java != nil {
+					t.root = file.root
 					canonical := qualifyJava(file.java.Package, et.Name)
 					byCanonical[canonical] = append(byCanonical[canonical], t)
 				}
@@ -396,6 +418,15 @@ func (b *couplingBuilder) build() *Coupling {
 		owners = append(owners, t)
 	}
 
+	for _, root := range slices.Sorted(maps.Keys(b.javaDuplicates)) {
+		names := slices.Sorted(maps.Keys(b.javaDuplicates[root]))
+		types := fmt.Sprintf("%d types", len(names))
+		if len(names) == 1 {
+			types = "1 type"
+		}
+		b.warnings = append(b.warnings, fmt.Sprintf("%s: references to %s that the tree declares more than once, and not once under this source root, are left unresolved, such as %s", root, types, names[0]))
+	}
+
 	coupling := &Coupling{Classes: []CoupledClass{}, TotalClasses: len(classes), FilesAnalyzed: len(b.files), Warnings: b.warnings}
 	for i, result := range cbo.ComputeCBO(classes, cbo.DefaultConfig()) {
 		if result.CouplingCount == 0 {
@@ -514,8 +545,11 @@ func (b *couplingBuilder) treeCrate(file *couplingFile, name string) bool {
 // of the type its first segment names, or else the type C of the package
 // a.b, as in java.util.List. A name that leads to a type of the JDK or of a
 // library resolves to nothing, as does a name of a variable or a package.
-// Two declarations of one canonical name, as in two copies of a source
-// tree, leave the reference unresolved with a warning.
+// A canonical name the tree declares more than once, as two copies of a
+// source tree do, is the declaration under the source root of the file
+// that refers to it, which javac compiles together with that file; a
+// reference from another root is left unresolved, with one warning per
+// root.
 func (b *couplingBuilder) resolveJava(site siteReference, byCanonical map[string][]*coupledType) (*coupledType, string) {
 	file, ref := site.file, site.ref
 	first, rest := ref.Name, ""
@@ -533,14 +567,26 @@ func (b *couplingBuilder) resolveJava(site siteReference, byCanonical map[string
 		canonical += "." + rest
 	}
 	candidates := byCanonical[canonical]
-	switch len(candidates) {
-	case 0:
-		return nil, ""
-	case 1:
-		return candidates[0], candidates[0].name
+	if len(candidates) > 1 {
+		var local []*coupledType
+		for _, candidate := range candidates {
+			if candidate.root == file.root {
+				local = append(local, candidate)
+			}
+		}
+		if len(local) != 1 {
+			if b.javaDuplicates[file.root] == nil {
+				b.javaDuplicates[file.root] = map[string]bool{}
+			}
+			b.javaDuplicates[file.root][canonical] = true
+			return nil, ""
+		}
+		candidates = local
 	}
-	b.warnings = append(b.warnings, fmt.Sprintf("%s: ambiguous reference %q: %d files declare %s, left unresolved", file.display, ref.Name, len(candidates), canonical))
-	return nil, ""
+	if len(candidates) == 0 {
+		return nil, ""
+	}
+	return candidates[0], candidates[0].name
 }
 
 // javaType returns the canonical name of the type a simple Java name

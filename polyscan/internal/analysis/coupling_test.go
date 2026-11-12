@@ -623,10 +623,20 @@ public class Main {
 
 func TestAnalyzeCouplingJavaAmbiguousNames(t *testing.T) {
 	dir := writeFiles(t, map[string]string{
-		// Two declarations of com.example.model.Entity.
+		// Two source roots declare com.example.model.Entity. A file of
+		// either root refers to its own copy, and a file of a third root
+		// cannot tell them apart.
 		"one/com/example/model/Entity.java": "package com.example.model;\n\npublic class Entity {}\n",
 		"two/com/example/model/Entity.java": "package com.example.model;\n\npublic class Entity {}\n",
 		"one/com/example/model/User.java":   "package com.example.model;\n\npublic class User extends Entity { Graph g; }\n",
+		"two/com/example/model/Admin.java":  "package com.example.model;\n\npublic class Admin extends Entity {}\n",
+		"three/com/example/app/App.java": `package com.example.app;
+
+import com.example.model.Entity;
+import com.example.model.User;
+
+public class App { Entity current; User user; }
+`,
 		"one/com/example/model/Graph.java": `package com.example.model;
 
 import com.example.a.*;
@@ -647,21 +657,21 @@ public class Graph { Node root; Edge edge; }
 	for _, class := range report.Coupling.Classes {
 		got[class.Name] = class.DependentClasses
 	}
-	want := map[string][]string{"User": {"Graph"}, "Graph": {"Edge"}}
+	want := map[string][]string{
+		"User":  {"Entity", "Graph"},
+		"Admin": {"Entity"},
+		"Graph": {"Edge"},
+		"App":   {"User"},
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("dependencies = %v\nwant %v", got, want)
 	}
-	for _, warning := range []string{
-		`ambiguous reference "Entity": 2 files declare com.example.model.Entity`,
-		`ambiguous reference "Node": imported as com.example.a.Node and com.example.b.Node`,
-	} {
-		found := false
-		for _, w := range report.Coupling.Warnings {
-			found = found || strings.Contains(w, warning)
-		}
-		if !found {
-			t.Errorf("warnings = %v, want one containing %q", report.Coupling.Warnings, warning)
-		}
+	wantWarnings := []string{
+		filepath.Join(dir, "one/com/example/model/Graph.java") + `: ambiguous reference "Node": imported as com.example.a.Node and com.example.b.Node, left unresolved`,
+		filepath.Join(dir, "three") + ": references to 1 type that the tree declares more than once, and not once under this source root, are left unresolved, such as com.example.model.Entity",
+	}
+	if !reflect.DeepEqual(report.Coupling.Warnings, wantWarnings) {
+		t.Errorf("warnings = %q\nwant %q", report.Coupling.Warnings, wantWarnings)
 	}
 }
 
