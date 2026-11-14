@@ -6,6 +6,17 @@ import (
 	tsjava "github.com/smacker/go-tree-sitter/java"
 )
 
+// supertype matches the type an extends or implements clause names, with
+// the qualifier it is written with, as an @embedded reference.
+const supertype = `[
+  (type_identifier) @embedded
+  (scoped_type_identifier . [(type_identifier) (scoped_type_identifier)] @qualifier (type_identifier) @embedded .)
+  (generic_type . [
+    (type_identifier) @embedded
+    (scoped_type_identifier . [(type_identifier) (scoped_type_identifier)] @qualifier (type_identifier) @embedded .)
+  ])
+]`
+
 // Language is the Java definition. Lambdas are not extracted on their own:
 // their decision points count toward the enclosing method, as Go's function
 // literals do. The methods of an anonymous class are extracted like any
@@ -114,6 +125,43 @@ var Language = &engine.Language{
   (formal_parameter name: (identifier) @field)
   (spread_parameter (variable_declarator name: (identifier) @field))
 ]))
+`,
+	// Classes, enums and records are types. An interface, an annotation type
+	// and an abstract class are abstract ones.
+	Types: `
+(class_declaration name: (identifier) @name) @type
+(class_declaration (modifiers "abstract") name: (identifier) @name) @abstract
+(enum_declaration name: (identifier) @name) @type
+(record_declaration name: (identifier) @name) @type
+(interface_declaration name: (identifier) @name) @abstract
+(annotation_type_declaration name: (identifier) @name) @abstract
+`,
+	// Every type_identifier is a reference, and in a qualified name such as
+	// java.util.List or Outer.Inner the names before the last are only its
+	// qualifier. A type named in an expression is an identifier: the object
+	// of a static call or field access, as in Util.run() or Color.RED, and
+	// the type of a method reference, as in Foo::new. A name after a dot in
+	// an expression keeps the names before it as its package, so the
+	// analysis can tell com.example.Util.run() from a field of a variable.
+	// A name that turns out to be a variable, a type parameter or a package
+	// is dropped by the analysis when no type of the tree has that name.
+	// The class a class extends and the interfaces it implements, or an
+	// interface extends, are inheritance. Annotations are not references, as
+	// decorators are not in Python.
+	References: `
+(type_identifier) @reference
+(scoped_type_identifier . [
+  (type_identifier) @qualifier
+  (scoped_type_identifier) @qualifier
+  (generic_type . [(type_identifier) (scoped_type_identifier)] @qualifier)
+] (type_identifier) @reference .)
+(method_invocation object: (identifier) @reference)
+(field_access object: (identifier) @reference)
+(field_access object: [(identifier) (field_access)] @package field: (identifier) @reference)
+(method_reference . (identifier) @reference)
+(superclass ` + supertype + `)
+(super_interfaces (type_list ` + supertype + `))
+(extends_interfaces (type_list ` + supertype + `))
 `,
 	// A switch arm counts when its label is a case: the default label has
 	// no value, and it is the path the other arms branch away from. The
