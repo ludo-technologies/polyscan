@@ -177,6 +177,25 @@ func AnalyzeDependencyGraph(ctx context.Context, graph *domain.DependencyGraph, 
 	return buildAnalysisResult(graph, circularDeps, couplingAnalysis, moduleMetrics, maxDepth, chainFinder), nil
 }
 
+// AnalyzeDependencies analyzes a graph built outside this service, such as
+// a Go or Java package graph or the union of several graphs, with the
+// default coupling thresholds and cycle detection, and wraps the result in a
+// response stamped now.
+func AnalyzeDependencies(graph *domain.DependencyGraph, warnings, errors []string) (*domain.DependencyGraphResponse, error) {
+	analysis, err := AnalyzeDependencyGraph(context.Background(), graph, analyzer.DefaultCouplingMetricsConfig(), true)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.DependencyGraphResponse{
+		Graph:       graph,
+		Analysis:    analysis,
+		Warnings:    warnings,
+		Errors:      errors,
+		GeneratedAt: time.Now().Format(time.RFC3339),
+		Version:     version.GetVersion(),
+	}, nil
+}
+
 // buildAnalysisResult builds a DependencyAnalysisResult from the analysis components
 func buildAnalysisResult(
 	graph *domain.DependencyGraph,
