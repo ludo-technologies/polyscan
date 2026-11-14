@@ -13,17 +13,20 @@ import (
 	"github.com/ludo-technologies/polyscan/polyscan/internal/clone"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/engine"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/godeps"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/javadeps"
 	jsdomain "github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/js/service"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/lang"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/lang/golang"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/lang/java"
 )
 
 // Options selects the analyses to run and tunes them.
 type Options struct {
 	Complexity bool
 	Clones     bool
-	// Deps builds the package dependency graph. Go is the only language of
-	// the generic engine with one so far.
+	// Deps builds the package dependency graph. Go and Java are the
+	// languages of the generic engine with one so far.
 	Deps bool
 	// LCOM measures the cohesion of each type's methods, for the languages
 	// whose definition declares how a method reaches its fields.
@@ -128,8 +131,8 @@ type Report struct {
 	Files      Files         `json:"files"`
 	Complexity *Complexity   `json:"complexity,omitempty"`
 	Clones     *clone.Report `json:"clone,omitempty"`
-	// Deps is the Go package dependency graph, in the shape the unified
-	// report renders, or nil when no Go package could be placed in one.
+	// Deps is the Go and Java package dependency graph, in the shape the
+	// unified report renders, or nil when no package could be placed in one.
 	Deps *jsdomain.DependencyGraphResponse `json:"deps,omitempty"`
 	// Cohesion is the LCOM4 analysis, or nil when no analyzed file belongs
 	// to a language that has one.
@@ -285,29 +288,43 @@ func withoutTests(functions []engine.Function) []engine.Function {
 	return kept
 }
 
-// analyzeDeps builds the dependency graph of the Go files among files. Test
-// files stay out of it: their imports describe the tests, not the package.
+// analyzeDeps builds the package dependency graph of the Go and Java files
+// among files. Test files stay out of it: their imports describe the tests,
+// not the package. The packages of both languages share one graph, which no
+// import crosses from one language to the other.
 func analyzeDeps(report *Report, files []collectedFile) error {
-	var goFiles []string
+	paths := map[*engine.Language][]string{}
 	for _, file := range files {
-		if language, ok := lang.ByPath(file.abs); ok && language == golang.Language && !language.IsTestFile(file.rel) {
-			goFiles = append(goFiles, file.path)
+		if language, ok := lang.ByPath(file.abs); ok && !language.IsTestFile(file.rel) {
+			paths[language] = append(paths[language], file.path)
 		}
 	}
-	if len(goFiles) == 0 {
+	graph := jsdomain.NewDependencyGraph()
+	var warnings []string
+	add := func(built *jsdomain.DependencyGraph, builtWarnings []string) error {
+		warnings = append(warnings, builtWarnings...)
+		if err := graph.Merge(built); err != nil {
+			return fmt.Errorf("a Go and a Java package share a name: %w", err)
+		}
 		return nil
 	}
-	deps, warnings, err := godeps.Analyze(goFiles, func(s string) string { return s })
-	if err != nil {
+	if err := add(godeps.Build(paths[golang.Language], func(s string) string { return s })); err != nil {
 		return err
 	}
-	if deps == nil {
+	if err := add(javadeps.Build(paths[java.Language])); err != nil {
+		return err
+	}
+	if graph.NodeCount() == 0 {
 		// Without a graph there is no dependency section to carry the
 		// warnings, so they travel with the run's other warnings.
 		report.Warnings = append(report.Warnings, warnings...)
 		return nil
 	}
-	deps.Warnings = warnings
+	graph.UpdateNodeFlags()
+	deps, err := service.AnalyzeDependencies(graph, warnings, nil)
+	if err != nil {
+		return err
+	}
 	report.Deps = deps
 	return nil
 }

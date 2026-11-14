@@ -369,6 +369,30 @@ func TestAnalyzeJava(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDependenciesOfGoAndJava(t *testing.T) {
+	report, err := Analyze([]string{"../../testdata/godeps", "../../testdata/javadeps"}, Options{Deps: true, IncludeTests: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	graph := report.Deps.Graph
+	want := []string{
+		"com.example.app", "com.example.model", "com.example.service",
+		"example.com/godeps/app", "example.com/godeps/lib", "example.com/godeps/model",
+	}
+	if got := graph.NodeIDs(); !reflect.DeepEqual(got, want) {
+		t.Errorf("nodes = %v, want %v", got, want)
+	}
+	// CircleTest imports com.example.app, but a test file stays out of the
+	// graph even with the tests included.
+	if got := graph.Successors("com.example.model"); !reflect.DeepEqual(got, []string{"com.example.service"}) {
+		t.Errorf("successors of com.example.model = %v, want only com.example.service", got)
+	}
+	cycles := report.Deps.Analysis.CircularDependencies
+	if cycles == nil || cycles.TotalCycles != 1 {
+		t.Errorf("cycles = %+v, want the cycle between com.example.model and com.example.service", cycles)
+	}
+}
+
 func TestAnalyzeSkipsDependencyAndBuildDirectories(t *testing.T) {
 	dir := t.TempDir()
 	sample, err := os.ReadFile("../../testdata/go/sample.go")
