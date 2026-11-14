@@ -5,7 +5,6 @@
 package report
 
 import (
-	"context"
 	"path/filepath"
 	"sort"
 	"time"
@@ -14,7 +13,6 @@ import (
 	"github.com/ludo-technologies/polyscan/polyscan/internal/analysis"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/clone"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js"
-	"github.com/ludo-technologies/polyscan/polyscan/internal/js/analyzer"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/service"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/version"
@@ -60,11 +58,11 @@ func Combine(generic *analysis.Report, javascript *js.Result) (domain.AnalysisRe
 	return results, nil
 }
 
-// mergeDeps joins the Go package graph and the JavaScript module graph into
-// one dependency response. A node is a Go import path on one side and a file
-// path on the other, so the two never collide, and no import crosses from one
-// language to the other; the union is re-analyzed so the depth, chains and
-// coupling summary describe the whole graph.
+// mergeDeps joins the Go and Java package graph and the JavaScript module
+// graph into one dependency response. A node is a package name on one side
+// and a file path on the other, and no import crosses from one language to
+// the other; the union is re-analyzed so the depth, chains and coupling
+// summary describe the whole graph.
 func mergeDeps(generic, javascript *domain.DependencyGraphResponse) (*domain.DependencyGraphResponse, error) {
 	if generic == nil {
 		return javascript, nil
@@ -75,28 +73,12 @@ func mergeDeps(generic, javascript *domain.DependencyGraphResponse) (*domain.Dep
 
 	graph := domain.NewDependencyGraph()
 	for _, source := range []*domain.DependencyGraph{generic.Graph, javascript.Graph} {
-		for _, node := range source.Nodes {
-			graph.AddNode(node)
-		}
-		for _, edges := range source.Edges {
-			for _, edge := range edges {
-				graph.AddEdge(edge)
-			}
+		if err := graph.Merge(source); err != nil {
+			return nil, err
 		}
 	}
 	graph.UpdateNodeFlags()
-	analysis, err := service.AnalyzeDependencyGraph(context.Background(), graph, analyzer.DefaultCouplingMetricsConfig(), true)
-	if err != nil {
-		return nil, err
-	}
-	return &domain.DependencyGraphResponse{
-		Graph:       graph,
-		Analysis:    analysis,
-		Warnings:    mergeStrings(generic.Warnings, javascript.Warnings),
-		Errors:      mergeStrings(generic.Errors, javascript.Errors),
-		GeneratedAt: javascript.GeneratedAt,
-		Version:     javascript.Version,
-	}, nil
+	return service.AnalyzeDependencies(graph, mergeStrings(generic.Warnings, javascript.Warnings), mergeStrings(generic.Errors, javascript.Errors))
 }
 
 // genericComplexity converts the generic engine's complexity analysis into

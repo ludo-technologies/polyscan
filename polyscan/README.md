@@ -1,6 +1,6 @@
 # polyscan
 
-A multi-language code quality analyzer. It detects the language of each file by its extension. Go, Rust, C++ and Java get cyclomatic complexity and code clone detection from the generic engine, Go, Rust and Java also class coupling (CBO) and class cohesion (LCOM4), and Go package dependencies; JavaScript/TypeScript files get the full [jscan](../jscan/README.md) analysis (complexity, dead code, clones, coupling, dependencies). Every language lands in one report with one health score: each analyzed dimension is scored against what it could have charged, and a dimension a language does not have is left out of the score rather than scored as clean.
+A multi-language code quality analyzer. It detects the language of each file by its extension. Go, Rust, C++ and Java get cyclomatic complexity and code clone detection from the generic engine, Go, Rust and Java also class coupling (CBO) and class cohesion (LCOM4), and Go and Java package dependencies; JavaScript/TypeScript files get the full [jscan](../jscan/README.md) analysis (complexity, dead code, clones, coupling, dependencies). Every language lands in one report with one health score: each analyzed dimension is scored against what it could have charged, and a dimension a language does not have is left out of the score rather than scored as clean.
 
 ## Installation
 
@@ -40,7 +40,7 @@ polyscan analyze --exclude 'src/generated/**' .
 polyscan analyze --include-tests .
 ```
 
-`--select` takes any of `complexity`, `deadcode`, `clone`, `cbo`, `lcom` and `deps` (default: all); `deps` exists for Go and JavaScript/TypeScript, `cbo` for Go, Rust, Java and JavaScript/TypeScript, `lcom` for Go, Rust and Java, `deadcode` for JavaScript/TypeScript only, and a deselected or missing dimension is left out of the health score. The JSON output is one document for every language, with `language` on every function and clone fragment.
+`--select` takes any of `complexity`, `deadcode`, `clone`, `cbo`, `lcom` and `deps` (default: all); `deps` exists for Go, Java and JavaScript/TypeScript, `cbo` for Go, Rust, Java and JavaScript/TypeScript, `lcom` for Go, Rust and Java, `deadcode` for JavaScript/TypeScript only, and a deselected or missing dimension is left out of the health score. The JSON output is one document for every language, with `language` on every function and clone fragment.
 
 Version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. `--exclude` leaves out further files and directories, for every language and every analysis: a pattern without a slash is a glob matched against the file name and against each directory on the path, so `fixtures` drops every `fixtures` directory; a pattern with a slash is matched against the path relative to the analyzed directory, with `**` standing for any number of segments, so `src/generated/**` drops that tree. The flag takes a comma-separated list or may be repeated.
 

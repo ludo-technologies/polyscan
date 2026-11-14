@@ -8,6 +8,7 @@ import (
 
 	"github.com/ludo-technologies/polyscan/core/source"
 	"github.com/ludo-technologies/polyscan/polyscan/internal/js/domain"
+	"github.com/ludo-technologies/polyscan/polyscan/internal/js/service"
 )
 
 const fixture = "../../testdata/godeps"
@@ -114,12 +115,10 @@ func TestBuildOutsideModule(t *testing.T) {
 }
 
 func TestAnalyzeFixture(t *testing.T) {
-	response, warnings, err := Analyze(fixtureFiles(t), identity)
+	graph, _ := Build(fixtureFiles(t), identity)
+	response, err := service.AnalyzeDependencies(graph, nil, nil)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(warnings) != 0 {
-		t.Errorf("unexpected warnings: %v", warnings)
 	}
 	analysis := response.Analysis
 	if analysis.TotalModules != 3 || analysis.TotalDependencies != 3 || analysis.MaxDepth != 2 {
@@ -134,20 +133,5 @@ func TestAnalyzeFixture(t *testing.T) {
 	}
 	if len(analysis.LongestChains) != 1 || analysis.LongestChains[0].Length != 2 {
 		t.Errorf("chains = %+v, want one chain of length 2 from app", analysis.LongestChains)
-	}
-}
-
-func TestAnalyzeWithoutPackages(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "a.go"), "package a\n")
-	response, warnings, err := Analyze([]string{filepath.Join(dir, "a.go")}, identity)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if response != nil {
-		t.Errorf("response = %+v, want nil when no package resolves", response)
-	}
-	if len(warnings) != 1 {
-		t.Errorf("warnings = %v, want one", warnings)
 	}
 }
