@@ -55,14 +55,21 @@ type sourceFile struct {
 	imports []Import
 }
 
+// NodePrefix starts the ID of every Java package node, as in
+// java:com.example.app. The node's name is the package name alone. A Go
+// import path cannot contain a colon, so the Go and Java packages of one tree
+// never share an ID, even when a Go module path such as example.com is also
+// the name of a Java package.
+const NodePrefix = "java:"
+
 // Build builds the package graph of files, which must be Java sources. A
 // file belongs to the package its package declaration names, wherever the
 // file lies, so the files of one package in several directories make one
-// node, placed in the directory that holds most of them. A file without a package declaration belongs to the unnamed package,
-// which no other package can import from, and is left out with one warning
-// per directory. module-info.java declares a module, not a package, and is
-// left out too. A file that cannot be read is left out and reported in the
-// warnings.
+// node, placed in the directory that holds most of them. A file without a
+// package declaration belongs to the unnamed package, which no other package
+// can import from, and is left out with one warning per directory.
+// module-info.java declares a module, not a package, and is left out too. A
+// file that cannot be read is left out and reported in the warnings.
 //
 // Edges join packages of the tree only: an import whose name leads to no
 // type the tree declares, such as one of the JDK or of a library, adds none.
@@ -129,9 +136,11 @@ func Build(files []string) (*domain.DependencyGraph, []string) {
 	}
 
 	graph := domain.NewDependencyGraph()
-	for name, p := range packages {
+	names := slices.Sorted(maps.Keys(packages))
+	for _, name := range names {
+		p := packages[name]
 		graph.AddNode(&domain.ModuleNode{
-			ID:           name,
+			ID:           NodePrefix + name,
 			Name:         name,
 			FilePath:     p.dir(),
 			ModuleType:   domain.ModuleTypePackage,
@@ -139,12 +148,12 @@ func Build(files []string) (*domain.DependencyGraph, []string) {
 			Exports:      []string{},
 		})
 	}
-	for _, from := range graph.NodeIDs() {
+	for _, from := range names {
 		imports := packages[from].imports
 		for _, to := range slices.Sorted(maps.Keys(imports)) {
 			graph.AddEdge(&domain.DependencyEdge{
-				From:     from,
-				To:       to,
+				From:     NodePrefix + from,
+				To:       NodePrefix + to,
 				EdgeType: domain.EdgeTypeImport,
 				Weight:   imports[to],
 			})

@@ -46,21 +46,21 @@ func TestBuildFixture(t *testing.T) {
 	// service through a static import and Service reaches model, which
 	// closes a cycle javac accepts. java.util adds no edge.
 	want := map[string][]string{
-		"com.example.app":     {"com.example.model", "com.example.service"},
-		"com.example.model":   {"com.example.service"},
-		"com.example.service": {"com.example.model"},
+		"java:com.example.app":     {"java:com.example.model", "java:com.example.service"},
+		"java:com.example.model":   {"java:com.example.service"},
+		"java:com.example.service": {"java:com.example.model"},
 	}
 	if got := successors(graph); !reflect.DeepEqual(got, want) {
 		t.Errorf("edges = %v, want %v", got, want)
 	}
-	for _, edge := range graph.GetOutgoingEdges("com.example.service") {
+	for _, edge := range graph.GetOutgoingEdges("java:com.example.service") {
 		if edge.Weight != 1 || edge.EdgeType != domain.EdgeTypeImport {
 			t.Errorf("edge service -> %s: weight %d type %s, want one file importing", edge.To, edge.Weight, edge.EdgeType)
 		}
 	}
 
-	app := graph.GetNode("com.example.app")
-	model := graph.GetNode("com.example.model")
+	app := graph.GetNode("java:com.example.app")
+	model := graph.GetNode("java:com.example.model")
 	if app.Name != "com.example.app" || !app.IsEntryPoint || app.IsLeaf || app.ModuleType != domain.ModuleTypePackage {
 		t.Errorf("app = %+v, want an entry point package", app)
 	}
@@ -108,11 +108,11 @@ class Library {}
 	// with com.example, from a type com.example does not declare, from the
 	// importing package itself and from the JDK adds no edge.
 	want := map[string][]string{
-		"com.example":         {},
-		"com.example.library": {},
-		"com.example.nested":  {"com.example"},
-		"com.example.split":   {"com.example"},
-		"com.example.statics": {"com.example"},
+		"java:com.example":         {},
+		"java:com.example.library": {},
+		"java:com.example.nested":  {"java:com.example"},
+		"java:com.example.split":   {"java:com.example"},
+		"java:com.example.statics": {"java:com.example"},
 	}
 	if got := successors(graph); !reflect.DeepEqual(got, want) {
 		t.Errorf("edges = %v, want %v", got, want)
@@ -121,19 +121,19 @@ class Library {}
 	// One package in two directories is one node, placed in the directory
 	// that holds most of its files, and its edge counts both importing
 	// files.
-	split := graph.GetNode("com.example.split")
+	split := graph.GetNode("java:com.example.split")
 	if want := filepath.Join(dir, "split", "b"); split.FilePath != want {
 		t.Errorf("split file path = %q, want %q", split.FilePath, want)
 	}
-	if edges := graph.GetOutgoingEdges("com.example.split"); len(edges) != 1 || edges[0].Weight != 2 {
+	if edges := graph.GetOutgoingEdges("java:com.example.split"); len(edges) != 1 || edges[0].Weight != 2 {
 		t.Errorf("split edges = %+v, want one edge of weight 2", edges)
 	}
 
 	// Core is public and abstract; Helper is not public.
-	if got := graph.GetNode("com.example").Abstractness; got != 1 {
+	if got := graph.GetNode("java:com.example").Abstractness; got != 1 {
 		t.Errorf("com.example abstractness = %v, want 1", got)
 	}
-	if got := graph.GetNode("com.example.statics").Abstractness; got != 0 {
+	if got := graph.GetNode("java:com.example.statics").Abstractness; got != 0 {
 		t.Errorf("com.example.statics abstractness = %v, want 0 without a public type", got)
 	}
 }
@@ -149,7 +149,7 @@ func TestBuildLeavesOutFilesOfNoPackage(t *testing.T) {
 	}
 	graph, warnings := Build(files)
 
-	if want := []string{"com.example"}; !reflect.DeepEqual(graph.NodeIDs(), want) {
+	if want := []string{"java:com.example"}; !reflect.DeepEqual(graph.NodeIDs(), want) {
 		t.Errorf("nodes = %v, want %v", graph.NodeIDs(), want)
 	}
 	// The files of the unnamed package warn once for their directory;

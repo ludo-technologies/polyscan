@@ -376,20 +376,46 @@ func TestAnalyzeDependenciesOfGoAndJava(t *testing.T) {
 	}
 	graph := report.Deps.Graph
 	want := []string{
-		"com.example.app", "com.example.model", "com.example.service",
 		"example.com/godeps/app", "example.com/godeps/lib", "example.com/godeps/model",
+		"java:com.example.app", "java:com.example.model", "java:com.example.service",
 	}
 	if got := graph.NodeIDs(); !reflect.DeepEqual(got, want) {
 		t.Errorf("nodes = %v, want %v", got, want)
 	}
 	// CircleTest imports com.example.app, but a test file stays out of the
 	// graph even with the tests included.
-	if got := graph.Successors("com.example.model"); !reflect.DeepEqual(got, []string{"com.example.service"}) {
+	if got := graph.Successors("java:com.example.model"); !reflect.DeepEqual(got, []string{"java:com.example.service"}) {
 		t.Errorf("successors of com.example.model = %v, want only com.example.service", got)
 	}
 	cycles := report.Deps.Analysis.CircularDependencies
 	if cycles == nil || cycles.TotalCycles != 1 {
 		t.Errorf("cycles = %+v, want the cycle between com.example.model and com.example.service", cycles)
+	}
+}
+
+func TestAnalyzeDependenciesOfAGoAndAJavaPackageOfOneName(t *testing.T) {
+	dir := t.TempDir()
+	for path, content := range map[string]string{
+		"go/go.mod":               "module example.com\n",
+		"go/root.go":              "package root\n",
+		"java/example/com/A.java": "package example.com;\n\npublic class A {}\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(path)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, path), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report, err := Analyze([]string{dir}, Options{Deps: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if got, want := report.Deps.Graph.NodeIDs(), []string{"example.com", "java:example.com"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("nodes = %v, want %v", got, want)
+	}
+	if got := report.Deps.Graph.GetNode("java:example.com").Name; got != "example.com" {
+		t.Errorf("Java node name = %q, want the package name", got)
 	}
 }
 

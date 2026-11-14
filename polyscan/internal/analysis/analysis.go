@@ -291,7 +291,9 @@ func withoutTests(functions []engine.Function) []engine.Function {
 // analyzeDeps builds the package dependency graph of the Go and Java files
 // among files. Test files stay out of it: their imports describe the tests,
 // not the package. The packages of both languages share one graph, which no
-// import crosses from one language to the other.
+// import crosses from one language to the other. A Java node's ID carries
+// javadeps.NodePrefix, so a Java package named like a Go import path stays a
+// node of its own.
 func analyzeDeps(report *Report, files []collectedFile) error {
 	paths := map[*engine.Language][]string{}
 	for _, file := range files {
@@ -303,10 +305,7 @@ func analyzeDeps(report *Report, files []collectedFile) error {
 	var warnings []string
 	add := func(built *jsdomain.DependencyGraph, builtWarnings []string) error {
 		warnings = append(warnings, builtWarnings...)
-		if err := graph.Merge(built); err != nil {
-			return fmt.Errorf("a Go and a Java package share a name: %w", err)
-		}
-		return nil
+		return graph.Merge(built)
 	}
 	if err := add(godeps.Build(paths[golang.Language], func(s string) string { return s })); err != nil {
 		return err
