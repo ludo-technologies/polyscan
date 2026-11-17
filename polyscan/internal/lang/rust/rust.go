@@ -6,6 +6,19 @@ import (
 	tsrust "github.com/smacker/go-tree-sitter/rust"
 )
 
+// accessorValue matches what a getter hands back: a field of self, a
+// reference to one, self itself or a literal.
+const accessorValue = `[
+  (field_expression value: (self) @receiver field: [(field_identifier) (integer_literal)] @field)
+  (reference_expression value: (field_expression value: (self) @receiver field: [(field_identifier) (integer_literal)] @field))
+  (self) @receiver
+  (boolean_literal) (integer_literal) (float_literal) (char_literal) (string_literal) (raw_string_literal)
+]`
+
+// accessorAssignment matches a plain assignment to a field of self.
+const accessorAssignment = `(assignment_expression
+  left: (field_expression value: (self) @receiver field: [(field_identifier) (integer_literal)] @field))`
+
 // Language is the Rust definition. Closures are not extracted on their
 // own: their decision points count toward the enclosing function, as Go's
 // function literals do. Macro invocations parse as token trees, so the
@@ -142,6 +155,27 @@ var Language = &engine.Language{
 ((self) . "." . (identifier) @call . [(token_tree . "(") "::"] @arguments)
 (((identifier) @path . "::" . (identifier) @call . (token_tree . "(") @arguments)
   (#eq? @path "Self"))
+`,
+	// A getter hands back a field of self as its tail expression or with
+	// return, and a setter assigns one with a plain =, with or without the
+	// semicolon. Either may also hand
+	// back self, as a builder's setter does, or a literal, and may guard
+	// its argument with an assertion or an if that only panics.
+	Accessors: `
+(function_item body: (block) @body)
+(self) @receiver
+` + accessorValue + ` @statement
+(return_expression ` + accessorValue + `) @statement
+(expression_statement (return_expression ` + accessorValue + `)) @statement
+(expression_statement ` + accessorAssignment + `) @statement
+` + accessorAssignment + ` @statement
+((expression_statement (macro_invocation macro: (identifier) @_macro)) @statement
+  (#match? @_macro "^(debug_)?assert(_eq|_ne)?$"))
+((expression_statement (if_expression !alternative consequence: (block . [
+  (macro_invocation macro: (identifier) @_macro)
+  (expression_statement (macro_invocation macro: (identifier) @_macro))
+] .))) @statement
+  (#eq? @_macro "panic"))
 `,
 	// A match is exhaustive, so its last arm is the path the other arms
 	// branch away from and only arms followed by another arm count, with

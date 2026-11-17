@@ -114,6 +114,24 @@ type Language struct {
 	// instances and is left out. In such a language every method of a type
 	// has a receiver unless its Definitions match captures @static.
 	Fields string
+	// Accessors is an optional tree-sitter query, paired with Members, for
+	// the shape of a method that only gets or sets one field. @body is the
+	// node whose children are the statements of a method, and @statement a
+	// statement such a method may hold: one that assigns a field, one that
+	// returns a field, the receiver or a constant, or a guard. A statement
+	// that reads or writes a field captures its name as @field, on the node
+	// the Members query captures. A @receiver capture is a mention of the
+	// receiver and an @object capture a variable that is one when it names
+	// the receiver, as in Members. Captured inside a @statement match, they
+	// are the mentions the statement is allowed, and the match only counts
+	// when its @object names the receiver. A statement that mentions the
+	// receiver or accesses a field anywhere else is not an accessor
+	// statement, so a setter's value and a guard's condition cannot depend
+	// on the instance. A call without an object is not a mention; the
+	// Members query reports it as a call. A method is an accessor when
+	// every statement of its body is an accessor statement and the
+	// statements name exactly one field between them.
+	Accessors string
 	// Types is an optional tree-sitter query for the named types a file
 	// declares, which the coupling (CBO) analysis measures: @name is the
 	// type's name and the capture that spans the match says what it is,
@@ -181,6 +199,7 @@ type Language struct {
 	members     *sitter.Query
 	bindings    *sitter.Query
 	fields      *sitter.Query
+	accessors   *sitter.Query
 	types       *sitter.Query
 	references  *sitter.Query
 	testCode    *sitter.Query
@@ -273,6 +292,9 @@ type Function struct {
 	HasSelf bool
 	Fields  map[string]bool
 	Calls   map[string]bool
+	// Accessor is the field a method only gets or sets, per the language's
+	// Accessors query, or empty for any other method.
+	Accessor string
 
 	startByte uint32
 	endByte   uint32
@@ -346,6 +368,8 @@ const (
 	fieldCapture        = "field"
 	callCapture         = "call"
 	bareCapture         = "bare"
+	bodyCapture         = "body"
+	statementCapture    = "statement"
 	objectCapture       = "object"
 	argumentsCapture    = "arguments"
 	bindingCapture      = "binding"
@@ -461,7 +485,9 @@ func (l *Language) Analyze(source []byte) (*Result, error) {
 	}
 	l.countDecisions(root, source, functions)
 	l.measureNesting(root, source, functions)
-	l.collectMembers(root, source, functions, scopes)
+	bindings := l.collectBindings(root, source, functions)
+	accesses := l.collectMembers(root, source, functions, scopes, bindings)
+	l.collectAccessors(root, source, functions, bindings, accesses)
 	tests := l.testSpans(root, source)
 	markTests(tests, functions)
 	result.Types = l.collectTypes(root, source, functions, scopes, tests)
@@ -542,6 +568,14 @@ func (l *Language) compile() error {
 				return
 			}
 			l.fields = fields
+		}
+		if l.Accessors != "" {
+			accessors, err := sitter.NewQuery([]byte(l.Accessors), l.Grammar)
+			if err != nil {
+				l.compileErr = fmt.Errorf("%s accessors query: %w", l.Name, err)
+				return
+			}
+			l.accessors = accessors
 		}
 		if l.Types != "" {
 			types, err := sitter.NewQuery([]byte(l.Types), l.Grammar)
@@ -946,10 +980,11 @@ func applyScopes(scopes []scope, functions []Function, separator string) {
 // collectMembers records, for each method with a receiver, the fields it
 // accesses and the sibling methods it calls; a free function or a method
 // without one keeps nil maps. A name captured as both, as the callee of a
-// method call is by a field pattern that also matches it, is a call.
-func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []Function, scopes []scope) {
+// method call is by a field pattern that also matches it, is a call. It
+// returns the span of the name of every field access it recorded.
+func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []Function, scopes []scope, bindings bindings) []span {
 	if l.members == nil {
-		return
+		return nil
 	}
 	for i := range functions {
 		if functions[i].Receiver != "" && functions[i].HasSelf {
@@ -960,10 +995,10 @@ func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []
 	type member struct {
 		fn   *Function
 		name string
+		at   span
 	}
 	fields := map[uintptr]member{}
 	calls := map[uintptr]struct{}{}
-	bindings := l.collectBindings(root, source, functions)
 	declared := l.collectFields(root, source, scopes)
 	ForEachMatch(l.members, root, source, func(match *sitter.QueryMatch) {
 		var fn *Function
@@ -1005,13 +1040,138 @@ func (l *Language) collectMembers(root *sitter.Node, source []byte, functions []
 			calls[node.ID()] = struct{}{}
 			return
 		}
-		fields[node.ID()] = member{fn, name}
+		fields[node.ID()] = member{fn, name, span{node.StartByte(), node.EndByte()}}
 	})
+	var accesses []span
 	for id, field := range fields {
 		if _, isCall := calls[id]; !isCall {
 			field.fn.Fields[field.name] = true
+			accesses = append(accesses, field.at)
 		}
 	}
+	return accesses
+}
+
+// accessorStatement is one @statement match of the Accessors query: the
+// field it reads or writes, if any, and the spans at which it may mention
+// the receiver.
+type accessorStatement struct {
+	field     string
+	permitted []span
+}
+
+// collectAccessors sets Accessor on every method whose body is made only of
+// accessor statements that name one field between them. accesses are the
+// field accesses the Members query recorded.
+func (l *Language) collectAccessors(root *sitter.Node, source []byte, functions []Function, bindings bindings, accesses []span) {
+	if l.accessors == nil {
+		return
+	}
+	isAccess := make(map[span]bool, len(accesses))
+	for _, access := range accesses {
+		isAccess[access] = true
+	}
+	// names reports whether the node is the receiver variable of the method
+	// that holds it.
+	names := func(object *sitter.Node) bool {
+		fn := innermost(functions, object.StartByte(), object.EndByte())
+		name := object.Content(source)
+		return fn != nil && name == fn.self && !bindings.shadows(name, object.StartByte())
+	}
+	mentions := accesses
+	bodies := map[*Function]*sitter.Node{}
+	statements := map[uintptr][]accessorStatement{}
+	ForEachMatch(l.accessors, root, source, func(match *sitter.QueryMatch) {
+		var statement, field, object *sitter.Node
+		var captured []span
+		for _, capture := range match.Captures {
+			node := capture.Node
+			at := span{node.StartByte(), node.EndByte()}
+			switch l.accessors.CaptureNameForId(capture.Index) {
+			case bodyCapture:
+				if fn := innermost(functions, at.start, at.end); fn != nil && fn.Fields != nil {
+					bodies[fn] = node
+				}
+			case statementCapture:
+				statement = node
+			case fieldCapture:
+				field = node
+				captured = append(captured, at)
+			case receiverCapture:
+				captured = append(captured, at)
+			case objectCapture:
+				object = node
+				captured = append(captured, at)
+			}
+		}
+		if statement == nil {
+			if object == nil || names(object) {
+				mentions = append(mentions, captured...)
+			}
+			return
+		}
+		if object != nil && !names(object) {
+			return
+		}
+		found := accessorStatement{permitted: captured}
+		if field != nil {
+			if !isAccess[span{field.StartByte(), field.EndByte()}] {
+				return
+			}
+			found.field = field.Content(source)
+		}
+		statements[statement.ID()] = append(statements[statement.ID()], found)
+	})
+	sort.Slice(mentions, func(i, j int) bool { return mentions[i].start < mentions[j].start })
+	// allowed reports whether the statement mentions the receiver only where
+	// the match permits it.
+	allowed := func(node *sitter.Node, found accessorStatement) bool {
+		first := sort.Search(len(mentions), func(i int) bool { return mentions[i].start >= node.StartByte() })
+		for _, mention := range mentions[first:] {
+			if mention.start >= node.EndByte() {
+				break
+			}
+			permitted := false
+			for _, at := range found.permitted {
+				permitted = permitted || at == mention
+			}
+			if !permitted {
+				return false
+			}
+		}
+		return true
+	}
+	for fn, body := range bodies {
+		fn.Accessor = accessorField(body, statements, allowed)
+	}
+}
+
+// accessorField returns the one field the statements of the body get or
+// set, or the empty string when a statement is not an accessor statement or
+// the statements name no field or more than one.
+func accessorField(body *sitter.Node, statements map[uintptr][]accessorStatement, allowed func(*sitter.Node, accessorStatement) bool) string {
+	field := ""
+	for i := 0; i < int(body.NamedChildCount()); i++ {
+		child := body.NamedChild(i)
+		if child.IsExtra() {
+			continue
+		}
+		matched := false
+		for _, found := range statements[child.ID()] {
+			if !allowed(child, found) || (found.field != "" && field != "" && found.field != field) {
+				continue
+			}
+			matched = true
+			if found.field != "" {
+				field = found.field
+			}
+			break
+		}
+		if !matched {
+			return ""
+		}
+	}
+	return field
 }
 
 // binding is one local declaration from the Bindings query: the name is in

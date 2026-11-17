@@ -58,6 +58,26 @@ var Language = &engine.Language{
 ])
 (call_expression function: (selector_expression operand: (identifier) @object field: (field_identifier) @call))
 `,
+	// A getter returns a field of the receiver, and a setter assigns one
+	// with a plain =, so an increment is not one. Either may also return
+	// the receiver, as a builder's setter does, or a constant, and may
+	// guard its argument with an if that only panics.
+	Accessors: `
+(method_declaration body: (block) @body)
+(identifier) @object
+(return_statement (expression_list . [
+  (selector_expression operand: (identifier) @object field: (field_identifier) @field)
+  (identifier) @object
+  (nil) (true) (false) (int_literal) (float_literal) (imaginary_literal) (rune_literal)
+  (interpreted_string_literal) (raw_string_literal)
+] .)) @statement
+(assignment_statement
+  left: (expression_list . (selector_expression operand: (identifier) @object field: (field_identifier) @field) .)
+  operator: "=") @statement
+((if_statement !initializer !alternative
+  consequence: (block . (expression_statement (call_expression function: (identifier) @_callee)) .)) @statement
+  (#eq? @_callee "panic"))
+`,
 	// A local declaration hides the receiver from its end to the end of
 	// the block, case clause, if, for or switch statement that holds it; a
 	// type switch alias from the end of the switched value; a function

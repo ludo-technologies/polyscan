@@ -84,6 +84,28 @@ var Language = &engine.Language{
 (method_invocation object: (this) name: (identifier) @call)
 (method_reference . (this) . (identifier) @call)
 `,
+	// A getter returns a field, and a setter assigns one with a plain =.
+	// Either may also return this, as a builder's setter does, or a
+	// literal, and may guard its argument with an assertion or an if that
+	// only throws.
+	Accessors: `
+(method_declaration body: (block) @body)
+(this) @receiver
+(return_statement [
+  (field_access object: (this) @receiver field: (identifier) @field)
+  (identifier) @field
+  (this) @receiver
+  (true) (false) (null_literal) (character_literal) (string_literal)
+  (decimal_integer_literal) (hex_integer_literal) (octal_integer_literal) (binary_integer_literal)
+  (decimal_floating_point_literal) (hex_floating_point_literal)
+]) @statement
+(expression_statement (assignment_expression left: [
+  (field_access object: (this) @receiver field: (identifier) @field)
+  (identifier) @field
+] operator: "=")) @statement
+(if_statement !alternative consequence: [(throw_statement) (block . (throw_statement) .)]) @statement
+(assert_statement) @statement
+`,
 	// A parameter is in scope throughout its method or lambda, and a local
 	// variable from its name to the end of its block, as the JLS scopes it,
 	// or to the end of the switch block for one declared in a case group. An

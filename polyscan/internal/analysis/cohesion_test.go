@@ -118,11 +118,11 @@ impl Counter {
     pub fn new() -> Self { Counter { n: 0, log: vec![], a: 0, b: 0, c: 0, d: 0, e: 0 } }
     pub fn inc(&mut self) { self.n += 1; self.record() }
     fn record(&mut self) { self.log.push(String::new()) }
-    pub fn a(&self) -> u32 { self.a }
-    pub fn b(&self) -> u32 { self.b }
-    pub fn c(&self) -> u32 { self.c }
-    pub fn d(&self) -> u32 { self.d }
-    pub fn e(&self) -> u32 { self.e }
+    pub fn a(&self) -> u32 { self.a + 1 }
+    pub fn b(&self) -> u32 { self.b + 1 }
+    pub fn c(&self) -> u32 { self.c + 1 }
+    pub fn d(&self) -> u32 { self.d + 1 }
+    pub fn e(&self) -> u32 { self.e + 1 }
     pub fn kind(&self) -> &'static str { "counter" }
 }
 
@@ -536,7 +536,7 @@ type server struct {
 
 func (s *server) Setup()  { register(s.handle) }
 func (s *server) handle() { s.count++ }
-func (s *server) Name() string { return s.name }
+func (s *server) Name() string { return s.name + "!" }
 
 func register(f func()) {}
 `,
@@ -570,8 +570,8 @@ func TestAnalyzeCohesionRustFieldNamedLikeAMethod(t *testing.T) {
 pub struct Slot { value: u32, cache: u32 }
 
 impl Slot {
-    pub fn value(&self) -> u32 { self.cache }
-    pub fn read(&self) -> u32 { self.value }
+    pub fn value(&self) -> u32 { self.cache + 1 }
+    pub fn read(&self) -> u32 { self.value + 1 }
     pub fn write(&mut self) { self.value = 1 }
 }
 `,
@@ -594,5 +594,93 @@ impl Slot {
 	}
 	if !reflect.DeepEqual(slot.InstanceVariables, []string{"cache", "value"}) {
 		t.Errorf("Slot instance variables = %v, want cache and value", slot.InstanceVariables)
+	}
+}
+
+func TestAnalyzeCohesionExcludesAccessors(t *testing.T) {
+	dir := writeFiles(t, map[string]string{
+		// Toggle and Stop share running. The get and set pair of name and the
+		// builder setter of port touch a field no other method uses, so
+		// they stay out. Limit is a getter too, but Check also reads limit,
+		// and Count calls a sibling, so both stay in.
+		"server.go": `package p
+
+type Server struct {
+	running bool
+	name    string
+	port    int
+	limit   int
+	count   int
+}
+
+func (s *Server) Toggle() { s.running = !s.running }
+func (s *Server) Stop()   { s.running = false }
+
+func (s *Server) Name() string        { return s.name }
+func (s *Server) SetName(name string) { s.name = name }
+func (s *Server) WithPort(port int) *Server {
+	if port < 0 {
+		panic("negative port")
+	}
+	s.port = port
+	return s
+}
+
+func (s *Server) Limit() int        { return s.limit }
+func (s *Server) Check(n int) bool  { return n < s.limit }
+func (s *Server) Count() int        { return s.count }
+func (s *Server) Total() int        { return s.Count() * 2 }
+`,
+		// Every method of a data class is a getter or setter, so it has no
+		// cohesion to measure.
+		"Point.java": `class Point {
+  private int x, y;
+  int getX() { return x; }
+  void setX(int x) { this.x = x; }
+  int getY() { return y; }
+}
+`,
+		"lib.rs": `
+pub struct Config { depth: u32, seen: u32, hits: u32 }
+
+impl Config {
+    pub fn depth(&self) -> u32 { self.depth }
+    pub fn set_depth(&mut self, depth: u32) { self.depth = depth }
+    pub fn visit(&mut self) { self.seen += 1; self.hits += 1 }
+    pub fn ratio(&self) -> u32 { self.hits / self.seen }
+}
+`,
+	})
+
+	report, err := Analyze([]string{dir}, Options{LCOM: true}, nil)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	byName := map[string]Class{}
+	for _, class := range report.Cohesion.Classes {
+		byName[class.Name] = class
+	}
+	if len(byName) != 2 {
+		t.Fatalf("got %d classes, want Server and Config: %+v", len(byName), report.Cohesion.Classes)
+	}
+
+	server := byName["Server"]
+	if server.LCOM4 != 3 || server.TotalMethods != 9 || server.ExcludedMethods != 3 {
+		t.Errorf("Server: LCOM4 %d, %d methods, %d excluded; want 3, 9, 3", server.LCOM4, server.TotalMethods, server.ExcludedMethods)
+	}
+	wantGroups := [][]string{{"Check", "Limit"}, {"Count", "Total"}, {"Stop", "Toggle"}}
+	if !reflect.DeepEqual(server.MethodGroups, wantGroups) {
+		t.Errorf("Server groups = %v, want %v", server.MethodGroups, wantGroups)
+	}
+	if want := []string{"count", "limit", "name", "port", "running"}; !reflect.DeepEqual(server.InstanceVariables, want) {
+		t.Errorf("Server instance variables = %v, want %v", server.InstanceVariables, want)
+	}
+
+	config := byName["Config"]
+	if config.LCOM4 != 1 || config.ExcludedMethods != 2 {
+		t.Errorf("Config: LCOM4 %d, %d excluded; want 1, 2", config.LCOM4, config.ExcludedMethods)
+	}
+	if want := []string{"depth", "hits", "seen"}; !reflect.DeepEqual(config.InstanceVariables, want) {
+		t.Errorf("Config instance variables = %v, want %v", config.InstanceVariables, want)
 	}
 }

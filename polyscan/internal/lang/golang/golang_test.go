@@ -634,3 +634,52 @@ func TestEffectiveComplexityGroupsEachReturnedValue(t *testing.T) {
 		t.Errorf("complexity = %d and effective complexity = %d, want 3 and 3", fn.Complexity, fn.EffectiveComplexity)
 	}
 }
+
+func TestAccessors(t *testing.T) {
+	functions := analyze(t, `package p
+
+type T struct {
+	a, b int
+	other *T
+}
+
+func (t *T) A() int      { return t.a }
+func (t *T) SetA(a int)  { t.a = a }
+func (t *T) WithA(a int) *T {
+	// A builder's setter.
+	if a < 0 {
+		panic("negative")
+	}
+	t.a = a
+	return t
+}
+func (t *T) SetChecked(a int) error { t.a = check(a); return nil }
+
+func (t *T) Constant() int       { return 1 }
+func (t *T) Self() *T            { return t }
+func (t *T) Local(a int) int     { return a }
+func (t *T) Both() (int, int)    { return t.a, t.b }
+func (t *T) SetBoth(v int)       { t.a = v; t.b = v }
+func (t *T) SetFromField()       { t.a = t.b }
+func (t *T) SetFromReceiver()    { t.a = size(t) }
+func (t *T) Increment(v int)     { t.a += v }
+func (t *T) GuardOnSelf(v int)   { if t.a > v { panic("smaller") }; t.a = v }
+func (t *T) GuardReturns(v int)  { if v < 0 { return }; t.a = v }
+func (t *T) Deep() int           { return t.other.a }
+func (t *T) Compute() int        { return t.a + 1 }
+func (t *T) Shadowed(o *T) int   { t := o; return t.a }
+func (t *T) Other(o *T) int      { return o.a }
+func (T) Unnamed() int           { return 1 }
+`)
+	want := map[string]string{
+		"T.A":          "a",
+		"T.SetA":       "a",
+		"T.WithA":      "a",
+		"T.SetChecked": "a",
+	}
+	for name, fn := range functions {
+		if fn.Accessor != want[name] {
+			t.Errorf("%s: Accessor = %q, want %q", name, fn.Accessor, want[name])
+		}
+	}
+}
