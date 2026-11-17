@@ -382,7 +382,7 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
 }
 ```
 
-`lcom4` is the number of groups the type's methods fall into when two methods are connected by a shared field or a call between them; `method_groups` lists them. `excluded_methods` counts the methods that stay out of the graph: Go and Rust methods without a receiver parameter and Java static methods, which cannot reach instance state, Java constructors, which set the fields the other methods share, and stub methods that touch no field, call no sibling method and are called by none, such as the constant returns an interface requires or a placeholder that only panics. `summary` carries `total_classes`, `average_lcom`, `max_lcom`, `min_lcom` and the `low_risk_classes`, `medium_risk_classes` and `high_risk_classes` counts.
+`lcom4` is the number of groups the type's methods fall into when two methods are connected by a shared field or a call between them; `method_groups` lists them. `excluded_methods` counts the methods that stay out of the graph: Go and Rust methods without a receiver parameter and Java static methods, which cannot reach instance state, Java constructors, which set the fields the other methods share, stub methods that touch no field, call no sibling method and are called by none, such as the constant returns an interface requires or a placeholder that only panics, and getters and setters of one field that no other method uses, which no call connects to a sibling method. The field of such a getter or setter is still listed in `instance_variables`. `summary` carries `total_classes`, `average_lcom`, `max_lcom`, `min_lcom` and the `low_risk_classes`, `medium_risk_classes` and `high_risk_classes` counts.
 
 ## `deps`
 

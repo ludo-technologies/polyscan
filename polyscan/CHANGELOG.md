@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Go, Rust and Java cohesion (LCOM4) leaves a getter or setter out of the graph when no other method uses its field. Such a method is listed in `excluded_methods`, and its field stays in `instance_variables`. A getter returns one field of the receiver, and a setter assigns one from a value that does not use the receiver. Either may also return the receiver or a constant and guard its argument with an assertion or an `if` that only panics or throws. The method stays in the graph when another method calls it, when it calls a sibling method, or when a method that is not such a getter or setter touches the field. Before, each of these methods stood as a group of its own, so a builder with six independent setters reported `lcom4: 6`. A type whose every method is such a getter or setter is no longer listed (#234)
 - A clone group is labeled with the weakest clone type among its pairs. A group in which two members are identical and a third only matches after renames is now Type-2. Before, the identical pair made the whole group Type-1. The group type does not change the health score (#226)
 
 ### Fixed
