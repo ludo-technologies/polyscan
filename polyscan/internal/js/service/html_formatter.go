@@ -631,7 +631,7 @@ func buildReportFacts(summary *domain.AnalyzeSummary, moduleQuality []domain.Mod
 }
 
 // countClasses counts the distinct types the coupling and cohesion analyses
-// report between them. A Go or Rust type can appear in both, under one name
+// report between them. A Go, Rust or Java type can appear in both, under one name
 // in the unit its language scopes a type to: the package directory when the
 // language lets a type's methods span one, as Go does, and the file
 // otherwise, so two Rust types of one name in sibling files stay two. A
@@ -1163,7 +1163,8 @@ func cloneContent(fragment *domain.Clone) string {
 }
 
 // buildReportClasses summarizes the class analyses that ran: coupling for
-// Go, Rust and JavaScript/TypeScript, cohesion for Go and Rust. A type the
+// Go, Rust, Java and JavaScript/TypeScript, cohesion for Go, Rust and Java.
+// A type the
 // two share is counted once.
 func buildReportClasses(summary *domain.AnalyzeSummary, cbo *domain.CBOResponse, lcom *domain.LCOMResponse) *reportClasses {
 	if !summary.CBOEnabled || cbo == nil {
