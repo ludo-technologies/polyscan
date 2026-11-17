@@ -1418,6 +1418,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cohesion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cohesion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#dependencies" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1826,6 +1837,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#cohesion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cohesion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#dependencies" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1990,6 +2012,10 @@
 <td>20</td>
 </tr>
 <tr>
+<td>Cohesion</td>
+<td>20</td>
+</tr>
+<tr>
 <td>Dependencies</td>
 <td>16</td>
 </tr>
@@ -1998,7 +2024,7 @@
 <p>The score charges the run against the dimensions that actually ran:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>score = 100 - round(100 × total penalty ÷ maximum possible penalty)
 </span></code></pre></div>
-<p>where both sums cover only the enabled dimensions. A dimension that did not run — because <code>--select</code> excluded it, or because no analyzed language has it — is left out of both sums entirely, rather than scored as clean. A pure C++ project is therefore judged on complexity and duplication alone, out of a budget of 40, while a JavaScript project is judged on all five, out of 96. In both cases a clean codebase scores 100 and a fully saturated one scores near 0.</p>
+<p>where both sums cover only the enabled dimensions. A dimension that did not run — because <code>--select</code> excluded it, or because no analyzed language has it — is left out of both sums entirely, rather than scored as clean. A pure C++ project is therefore judged on complexity and duplication alone, out of a budget of 40. A JavaScript project is judged on every dimension except cohesion, and a Go or Java project on every dimension except dead code, so both have a budget of 96. In every case a clean codebase scores 100 and a fully saturated one scores near 0.</p>
 <p>Files that could not be parsed at all are charged separately, after the projection: the parse-error penalty grows with the skipped-file ratio, from a floor of 11 points — enough to cost grade A — up to 56 points when everything was skipped. It exists because every dimension above silently excludes unparsable files, so without it a broken tree would look healthy.</p>
 <p>The result is clamped to the range 0 to 100.</p>
 <div class="admonition note">
@@ -2075,7 +2101,7 @@
 <p>The scale is reported for context only. It does not change the health score or the grade in any way, so two repositories of different sizes with identical metrics receive identical scores.</p>
 <p>The line count comes from the clone analysis, which is the stage that reads whole files. When clone analysis is turned off, the line count is omitted and the line reads <code>Project Scale: Medium (123 files, 456 functions)</code>.</p>
 <h2 id="how-each-penalty-is-computed">How each penalty is computed<a class="headerlink" href="#how-each-penalty-is-computed" title="Permanent link">&para;</a></h2>
-<p>Four of the dimensions use the same shape. A ratio is computed, and the penalty grows linearly from 0 until the ratio reaches a saturation point, beyond which the penalty stays at its maximum.</p>
+<p>Five of the dimensions use the same shape. A ratio is computed, and the penalty grows linearly from 0 until the ratio reaches a saturation point, beyond which the penalty stays at its maximum.</p>
 <h3 id="complexity">Complexity<a class="headerlink" href="#complexity" title="Permanent link">&para;</a></h3>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>ratio   = (high risk functions + 0.5 × medium risk functions) ÷ total functions
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>penalty = 20 × ratio ÷ 0.30, capped at 20, at least 1 when ratio &gt; 0
@@ -2097,42 +2123,47 @@
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>penalty = 20 × ratio ÷ 0.40, capped at 20
 </span></code></pre></div>
 <p>Medium risk modules are weighted at 0.3 rather than 0.5, which is more forgiving than the complexity weighting. The penalty saturates when the weighted ratio reaches 40 percent, slightly later than the complexity penalty.</p>
+<h3 id="cohesion">Cohesion<a class="headerlink" href="#cohesion" title="Permanent link">&para;</a></h3>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>ratio   = (high risk classes + 0.3 × medium risk classes) ÷ total classes
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>penalty = 20 × ratio ÷ 0.40, capped at 20
+</span></code></pre></div>
+<p>The classes are the Go, Rust and Java types that the cohesion (LCOM4) analysis lists. A class is medium risk when its LCOM4 is above 2 and high risk when it is above 5. The weights and the saturation point are the same as for coupling.</p>
 <h3 id="dependencies">Dependencies<a class="headerlink" href="#dependencies" title="Permanent link">&para;</a></h3>
 <p>This penalty is the sum of three independent parts.</p>
 <p><strong>Cycles, up to 10 points.</strong> Two candidate values are computed and the larger wins:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>proportional = 10 × modules in cycles ÷ total modules
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>floor        = log₂(modules in cycles + 1)
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>cycle points = min(10, max(proportional, floor))
+<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>proportional = 10 × modules in cycles ÷ total modules
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>floor        = log₂(modules in cycles + 1)
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>cycle points = min(10, max(proportional, floor))
 </span></code></pre></div>
 <p>The logarithmic floor exists so that circular imports always cost something. Without it, three modules in a cycle inside a thousand-module repository would round away to nothing.</p>
 <p><strong>Depth, up to 3 points.</strong> polyscan compares your longest import chain against the depth a healthy graph of that size would have:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>expected     = max(3, ⌈log₂(total modules + 1)⌉ + 1)
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>depth points = min(3, max(0, max depth - expected))
+<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>expected     = max(3, ⌈log₂(total modules + 1)⌉ + 1)
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>depth points = min(3, max(0, max depth - expected))
 </span></code></pre></div>
 <p><strong>Main sequence deviation, up to 3 points.</strong> The Martin distance from the main sequence, a value between 0 and 1, multiplied by 3 and rounded. The <a href="../../guides/dependency-graph/">dependency graph guide</a> explains what that metric means.</p>
 <h2 id="category-scores">Category scores<a class="headerlink" href="#category-scores" title="Permanent link">&para;</a></h2>
 <p>Alongside the overall number, polyscan reports a 0 to 100 score per dimension. These are presentation values and do not feed back into the total.</p>
-<p>For complexity, dead code, duplication, and coupling the conversion is direct:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>category score = 100 - (penalty × 5)
+<p>For complexity, dead code, duplication, coupling, and cohesion the conversion is direct:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>category score = 100 - (penalty × 5)
 </span></code></pre></div>
-<p>A penalty of 4 out of 20 therefore displays as 80 out of 100.</p>
+<p>A penalty of 4 out of 20 therefore displays as 80 out of 100. A dimension that did not run has no penalty, so its category score reads 100.</p>
 <p>The dependency score is normalized first, because its maximum penalty is 16 rather than 20:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>normalized     = round(penalty ÷ 16 × 20)
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>category score = 100 - (normalized × 5)
+<div class="language-text highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>normalized     = round(penalty ÷ 16 × 20)
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>category score = 100 - (normalized × 5)
 </span></code></pre></div>
 <p>The <code>architecture_score</code> field in the JSON output is always 0, because architecture validation is not implemented in polyscan; the field exists because the scoring code is shared with pyscn. Ignore it.</p>
 <h2 id="selecting-fewer-analyses-changes-the-budget">Selecting fewer analyses changes the budget<a class="headerlink" href="#selecting-fewer-analyses-changes-the-budget" title="Permanent link">&para;</a></h2>
 <p>A dimension that did not run is left out of both the penalty and the budget, so scores from different <code>--select</code> values are computed over different denominators and are not comparable:</p>
-<div class="language-console highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="gp">$ </span>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>--select<span class="w"> </span>complexity<span class="w"> </span>src/<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.summary.health_score
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="go">100</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="gp">$ </span>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>src/<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.summary.health_score
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="go">91</span>
+<div class="language-console highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="gp">$ </span>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>--select<span class="w"> </span>complexity<span class="w"> </span>src/<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.summary.health_score
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="go">100</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="gp">$ </span>polyscan<span class="w"> </span>analyze<span class="w"> </span>--format<span class="w"> </span>json<span class="w"> </span>src/<span class="w"> </span><span class="m">2</span>&gt;/dev/null<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.summary.health_score
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="go">91</span>
 </span></code></pre></div>
 <p>The code is identical in both runs. Only the set of dimensions being scored changed. The same applies across languages: a Go project's 90 and a TypeScript project's 90 are both grade A, but they are earned over different dimension sets.</p>
 <p>If you track the score over time, always run the same selection on the same tree. The default, which runs everything a language supports, is the right choice for a tracked metric.</p>
 <h2 id="worked-example">Worked example<a class="headerlink" href="#worked-example" title="Permanent link">&para;</a></h2>
-<p>Take a TypeScript run summarized as 91 out of 100 with grade A. All five dimensions ran, so the budget is 20 + 20 + 20 + 20 + 16 = 96:</p>
+<p>Take a TypeScript run summarized as 91 out of 100 with grade A. Every dimension except cohesion ran, because TypeScript has no cohesion analysis, so the budget is 20 + 20 + 20 + 20 + 16 = 96:</p>
 <table>
 <thead>
 <tr>
@@ -2179,7 +2210,7 @@
 <p>The dead code figure is the one worth following through. The weighted finding count is <code>1.0 × 1 + 0.5 × 2 = 2.0</code>, spread over 2 files, giving a rate of 1.0. That is one third of the way to the saturation point of 3.0, so the penalty is one third of 20, which rounds to 7. The category score is <code>100 - 7 × 5 = 65</code>.</p>
 <h2 id="what-moves-the-score-most">What moves the score most<a class="headerlink" href="#what-moves-the-score-most" title="Permanent link">&para;</a></h2>
 <p>Because every dimension saturates, the fastest gains come from whichever dimension is furthest from zero rather than from whichever has the most raw findings. A project with a dead code score of 65 and a complexity score of 100 should fix dead code first, even if it has far more functions than findings.</p>
-<p>The dimensions also differ in how quickly they saturate. Complexity saturates at a weighted ratio of 30 percent and coupling at 40 percent, so a handful of complex functions costs a few points, while a single unparsable file costs at least 11.</p>
+<p>The dimensions also differ in how quickly they saturate. Complexity saturates at a weighted ratio of 30 percent and coupling and cohesion at 40 percent, so a handful of complex functions costs a few points, while a single unparsable file costs at least 11.</p>
 
 
 

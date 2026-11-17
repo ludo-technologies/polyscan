@@ -1015,15 +1015,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-five-analyses" class="md-nav__link">
+  <a href="#the-six-analyses" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The five analyses
+        The six analyses
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The five analyses">
+    <nav class="md-nav" aria-label="The six analyses">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1064,6 +1064,17 @@
     <span class="md-ellipsis">
       
         Coupling between objects
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lcom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cohesion
       
     </span>
   </a>
@@ -1770,15 +1781,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-five-analyses" class="md-nav__link">
+  <a href="#the-six-analyses" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The five analyses
+        The six analyses
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The five analyses">
+    <nav class="md-nav" aria-label="The six analyses">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1819,6 +1830,17 @@
     <span class="md-ellipsis">
       
         Coupling between objects
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lcom" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cohesion
       
     </span>
   </a>
@@ -2034,7 +2056,7 @@
 </div>
 </div>
 </div>
-<h2 id="the-five-analyses">The five analyses<a class="headerlink" href="#the-five-analyses" title="Permanent link">&para;</a></h2>
+<h2 id="the-six-analyses">The six analyses<a class="headerlink" href="#the-six-analyses" title="Permanent link">&para;</a></h2>
 <h3 id="complexity">Complexity<a class="headerlink" href="#complexity" title="Permanent link">&para;</a></h3>
 <p>Measures the cyclomatic complexity of every function, which counts the number of linearly independent paths through it: one plus the number of decision points.</p>
 <p>For JavaScript and TypeScript, polyscan builds a control flow graph for each function and derives the count from the graph. Starting from a baseline of 1, each of the following adds 1: an <code>if</code> or <code>else if</code>, a loop, a <code>catch</code>, a <code>case</code> label, a ternary, and each <code>&amp;&amp;</code>, <code>||</code>, or <code>??</code> operator. A <code>default</code> clause adds nothing, the same as <code>else</code>, and neither does optional chaining with <code>?.</code>. Counting each <code>case</code> label means a <code>switch</code> scores the same as the equivalent chain of <code>if</code> statements.</p>
@@ -2234,6 +2256,38 @@
 <tr>
 <td>High</td>
 <td>CBO &gt; 7</td>
+</tr>
+</tbody>
+</table>
+<h3 id="lcom">Cohesion<a class="headerlink" href="#lcom" title="Permanent link">&para;</a></h3>
+<p><em>Go, Rust and Java.</em> Counts the groups that the methods of a type fall into (LCOM4). Two methods are in one group when they use the same field or one calls the other, so a value of 1 means the methods work on shared state and a higher value means the type holds several unrelated sets of methods.</p>
+<p>A Go type is measured over the methods of its package, a Rust type over its <code>impl</code> blocks, and a Java class, enum or record over its own methods. A Java method uses a field when it reads or writes it through <code>this</code> or by its bare name, and the class itself must declare the field, so an inherited field and a field of an enclosing class do not count.</p>
+<p>Some methods stay out of the graph and are counted as <code>excluded_methods</code>:</p>
+<ul>
+<li>Go and Rust methods without a receiver parameter, Java static methods and Java constructors.</li>
+<li>Stub methods that touch no field, call no sibling method and are called by none.</li>
+<li>Getters and setters of one field that no other method uses.</li>
+</ul>
+<p>A type with no method left in the graph is not listed, and test code stays out.</p>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Condition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Low</td>
+<td>LCOM4 ≤ 2</td>
+</tr>
+<tr>
+<td>Medium</td>
+<td>2 &lt; LCOM4 ≤ 5</td>
+</tr>
+<tr>
+<td>High</td>
+<td>LCOM4 &gt; 5</td>
 </tr>
 </tbody>
 </table>
