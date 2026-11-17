@@ -18,6 +18,7 @@ Each analyzed dimension produces an integer penalty with a fixed maximum:
 | Dead code | 20 |
 | Duplication | 20 |
 | Coupling | 20 |
+| Cohesion | 20 |
 | Dependencies | 16 |
 
 The score charges the run against the dimensions that actually ran:
@@ -26,7 +27,7 @@ The score charges the run against the dimensions that actually ran:
 score = 100 - round(100 × total penalty ÷ maximum possible penalty)
 ```
 
-where both sums cover only the enabled dimensions. A dimension that did not run — because `--select` excluded it, or because no analyzed language has it — is left out of both sums entirely, rather than scored as clean. A pure C++ project is therefore judged on complexity and duplication alone, out of a budget of 40, while a JavaScript project is judged on all five, out of 96. In both cases a clean codebase scores 100 and a fully saturated one scores near 0.
+where both sums cover only the enabled dimensions. A dimension that did not run — because `--select` excluded it, or because no analyzed language has it — is left out of both sums entirely, rather than scored as clean. A pure C++ project is therefore judged on complexity and duplication alone, out of a budget of 40. A JavaScript project is judged on every dimension except cohesion, and a Go or Java project on every dimension except dead code, so both have a budget of 96. In every case a clean codebase scores 100 and a fully saturated one scores near 0.
 
 Files that could not be parsed at all are charged separately, after the projection: the parse-error penalty grows with the skipped-file ratio, from a floor of 11 points — enough to cost grade A — up to 56 points when everything was skipped. It exists because every dimension above silently excludes unparsable files, so without it a broken tree would look healthy.
 
@@ -72,7 +73,7 @@ The line count comes from the clone analysis, which is the stage that reads whol
 
 ## How each penalty is computed
 
-Four of the dimensions use the same shape. A ratio is computed, and the penalty grows linearly from 0 until the ratio reaches a saturation point, beyond which the penalty stays at its maximum.
+Five of the dimensions use the same shape. A ratio is computed, and the penalty grows linearly from 0 until the ratio reaches a saturation point, beyond which the penalty stays at its maximum.
 
 ### Complexity
 
@@ -112,6 +113,15 @@ penalty = 20 × ratio ÷ 0.40, capped at 20
 
 Medium risk modules are weighted at 0.3 rather than 0.5, which is more forgiving than the complexity weighting. The penalty saturates when the weighted ratio reaches 40 percent, slightly later than the complexity penalty.
 
+### Cohesion
+
+```text
+ratio   = (high risk classes + 0.3 × medium risk classes) ÷ total classes
+penalty = 20 × ratio ÷ 0.40, capped at 20
+```
+
+The classes are the Go, Rust and Java types that the cohesion (LCOM4) analysis lists. A class is medium risk when its LCOM4 is above 2 and high risk when it is above 5. The weights and the saturation point are the same as for coupling.
+
 ### Dependencies
 
 This penalty is the sum of three independent parts.
@@ -139,13 +149,13 @@ depth points = min(3, max(0, max depth - expected))
 
 Alongside the overall number, polyscan reports a 0 to 100 score per dimension. These are presentation values and do not feed back into the total.
 
-For complexity, dead code, duplication, and coupling the conversion is direct:
+For complexity, dead code, duplication, coupling, and cohesion the conversion is direct:
 
 ```text
 category score = 100 - (penalty × 5)
 ```
 
-A penalty of 4 out of 20 therefore displays as 80 out of 100.
+A penalty of 4 out of 20 therefore displays as 80 out of 100. A dimension that did not run has no penalty, so its category score reads 100.
 
 The dependency score is normalized first, because its maximum penalty is 16 rather than 20:
 
@@ -174,7 +184,7 @@ If you track the score over time, always run the same selection on the same tree
 
 ## Worked example
 
-Take a TypeScript run summarized as 91 out of 100 with grade A. All five dimensions ran, so the budget is 20 + 20 + 20 + 20 + 16 = 96:
+Take a TypeScript run summarized as 91 out of 100 with grade A. Every dimension except cohesion ran, because TypeScript has no cohesion analysis, so the budget is 20 + 20 + 20 + 20 + 16 = 96:
 
 | Dimension | Measurement | Penalty | Category score |
 | --- | --- | --- | --- |
@@ -192,4 +202,4 @@ The dead code figure is the one worth following through. The weighted finding co
 
 Because every dimension saturates, the fastest gains come from whichever dimension is furthest from zero rather than from whichever has the most raw findings. A project with a dead code score of 65 and a complexity score of 100 should fix dead code first, even if it has far more functions than findings.
 
-The dimensions also differ in how quickly they saturate. Complexity saturates at a weighted ratio of 30 percent and coupling at 40 percent, so a handful of complex functions costs a few points, while a single unparsable file costs at least 11.
+The dimensions also differ in how quickly they saturate. Complexity saturates at a weighted ratio of 30 percent and coupling and cohesion at 40 percent, so a handful of complex functions costs a few points, while a single unparsable file costs at least 11.

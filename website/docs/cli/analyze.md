@@ -61,7 +61,7 @@ The format determines where results go and what else is printed.
 
     The full human-readable report goes to standard output, ending with the health score breakdown. No separate summary is printed to standard error, because the text report already contains one.
 
-## The five analyses
+## The six analyses
 
 ### Complexity {#complexity}
 
@@ -155,6 +155,26 @@ For JavaScript/TypeScript the dependencies come in four kinds: imports, `new` ex
 | Low | CBO ≤ 3 |
 | Medium | 3 < CBO ≤ 7 |
 | High | CBO > 7 |
+
+### Cohesion {#lcom}
+
+*Go, Rust and Java.* Counts the groups that the methods of a type fall into (LCOM4). Two methods are in one group when they use the same field or one calls the other, so a value of 1 means the methods work on shared state and a higher value means the type holds several unrelated sets of methods.
+
+A Go type is measured over the methods of its package, a Rust type over its `impl` blocks, and a Java class, enum or record over its own methods. A Java method uses a field when it reads or writes it through `this` or by its bare name, and the class itself must declare the field, so an inherited field and a field of an enclosing class do not count.
+
+Some methods stay out of the graph and are counted as `excluded_methods`:
+
+- Go and Rust methods without a receiver parameter, Java static methods and Java constructors.
+- Stub methods that touch no field, call no sibling method and are called by none.
+- Getters and setters of one field that no other method uses.
+
+A type with no method left in the graph is not listed, and test code stays out.
+
+| Risk | Condition |
+| --- | --- |
+| Low | LCOM4 ≤ 2 |
+| Medium | 2 < LCOM4 ≤ 5 |
+| High | LCOM4 > 5 |
 
 ### Dependencies {#deps}
 
