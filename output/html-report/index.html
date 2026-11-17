@@ -1856,7 +1856,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>polyscan<span class="w"> </span>analyze<span class="w"> </span>--output<span class="w"> </span>reports/quality.html<span class="w"> </span>--no-open<span class="w"> </span>src/
 </span></code></pre></div>
 <h2 id="layout">Layout<a class="headerlink" href="#layout" title="Permanent link">&para;</a></h2>
-<p>The report opens on an Overview and puts the per-analysis detail behind four more tabs. Tabs appear only for the analyses that ran, so a report produced with <code>--select complexity</code> has two tabs rather than five, and a project with no JavaScript/TypeScript files has no Classes or Architecture tab. A tab carries a badge with the number of problems it holds, colored red when any of them is high risk.</p>
+<p>The report opens on an Overview and puts the per-analysis detail behind four more tabs. Tabs appear only for the analyses that ran, so a report produced with <code>--select complexity</code> has two tabs rather than five, and a project whose languages have no dependency analysis, such as a pure Rust or C++ project, has no Architecture tab. A tab carries a badge with the number of problems it holds, colored red when any of them is high risk.</p>
 <table>
 <thead>
 <tr>
@@ -1879,11 +1879,11 @@
 </tr>
 <tr>
 <td>Classes</td>
-<td>Coupling statistics and the most coupled classes (JavaScript/TypeScript)</td>
+<td>Coupling and cohesion statistics, with the most coupled and the least cohesive class (Go, Rust, Java and JavaScript/TypeScript)</td>
 </tr>
 <tr>
 <td>Architecture</td>
-<td>Module dependencies, main sequence zones, circular imports, and the longest dependency chains (JavaScript/TypeScript)</td>
+<td>Module dependencies, main sequence zones, circular imports, and the longest dependency chains (Go, Java and JavaScript/TypeScript)</td>
 </tr>
 </tbody>
 </table>
