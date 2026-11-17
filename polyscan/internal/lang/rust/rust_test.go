@@ -516,3 +516,62 @@ func TestEffectiveComplexityCollapsesReturnedPredicate(t *testing.T) {
 		})
 	}
 }
+
+func TestAccessors(t *testing.T) {
+	functions := analyze(t, `
+struct T { a: i32, b: i32, other: Box<T> }
+struct P(i32);
+
+impl T {
+    fn a(&self) -> i32 { self.a }
+    fn a_ref(&self) -> &i32 { &self.a }
+    fn a_mut(&mut self) -> &mut i32 { &mut self.a }
+    fn a_return(&self) -> i32 { return self.a; }
+    fn set_a(&mut self, a: i32) { self.a = a; }
+    fn set_a_tail(&mut self, a: i32) { self.a = a }
+    fn with_a(mut self, a: i32) -> Self {
+        // A builder's setter.
+        assert!(a >= 0);
+        if a > 9 { panic!("too large"); }
+        self.a = a;
+        self
+    }
+    fn set_checked(&mut self, a: i32) -> bool { self.a = check(a); true }
+
+    fn constant(&self) -> i32 { 1 }
+    fn this(&self) -> &Self { self }
+    fn new(a: i32) -> i32 { a }
+    fn local(&self, a: i32) -> i32 { a }
+    fn both(&self) -> (i32, i32) { (self.a, self.b) }
+    fn set_both(&mut self, v: i32) { self.a = v; self.b = v; }
+    fn set_from_field(&mut self) { self.a = self.b; }
+    fn set_from_self(&mut self) { self.a = size(self); }
+    fn increment(&mut self, v: i32) { self.a += v; }
+    fn guard_on_self(&mut self, v: i32) { assert!(self.a < v); self.a = v; }
+    fn guard_on_self_macro(&mut self, v: i32) { assert!(self.len() < v); self.a = v; }
+    fn deep(&self) -> i32 { self.other.a }
+    fn compute(&self) -> i32 { self.a + 1 }
+    fn cloned(&self) -> i32 { self.a.clone() }
+}
+
+impl P {
+    fn get(&self) -> i32 { self.0 }
+}
+`)
+	want := map[string]string{
+		"T::a":           "a",
+		"T::a_ref":       "a",
+		"T::a_mut":       "a",
+		"T::a_return":    "a",
+		"T::set_a":       "a",
+		"T::set_a_tail":  "a",
+		"T::with_a":      "a",
+		"T::set_checked": "a",
+		"P::get":         "0",
+	}
+	for name, fn := range functions {
+		if fn.Accessor != want[name] {
+			t.Errorf("%s: Accessor = %q, want %q", name, fn.Accessor, want[name])
+		}
+	}
+}

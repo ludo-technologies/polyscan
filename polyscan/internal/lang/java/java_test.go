@@ -590,3 +590,55 @@ class Holder {
 		t.Errorf("types = %+v\nwant   %+v", result.Types, want)
 	}
 }
+
+func TestAccessors(t *testing.T) {
+	functions := analyze(t, `
+class C extends Base {
+  private int a, b;
+  static int count;
+  int getA() { return a; }
+  int getThisA() { return this.a; }
+  void setA(int a) { this.a = a; }
+  void setBare(int v) { a = v; }
+  C withA(int a) {
+    // A builder's setter.
+    if (a < 0) throw new IllegalArgumentException();
+    if (a > 9) { throw new IllegalArgumentException(); }
+    assert a != 5;
+    this.a = a;
+    return this;
+  }
+  boolean setChecked(int v) { a = check(v); return true; }
+
+  int constant() { return 1; }
+  C self() { return this; }
+  int getStatic() { return count; }
+  int getInherited() { return inherited; }
+  int getLocal(int a) { return a; }
+  int getBoth() { if (b > 0) throw new IllegalStateException(); return a; }
+  void setBoth(int v) { a = v; b = v; }
+  void setFromField() { a = b; }
+  void setFromThis() { a = id(this); }
+  void increment(int v) { a += v; }
+  void guardOnSelf(int v) { if (a > v) throw new IllegalStateException(); a = v; }
+  void guardWithElse(int v) { if (v < 0) throw new IllegalStateException(); else a = v; }
+  int getDeep() { return other.a; }
+  int compute() { return a + 1; }
+  void log() { a = 1; System.out.println(); }
+  Other other;
+}
+`)
+	want := map[string]string{
+		"C.getA":       "a",
+		"C.getThisA":   "a",
+		"C.setA":       "a",
+		"C.setBare":    "a",
+		"C.withA":      "a",
+		"C.setChecked": "a",
+	}
+	for name, fn := range functions {
+		if fn.Accessor != want[name] {
+			t.Errorf("%s: Accessor = %q, want %q", name, fn.Accessor, want[name])
+		}
+	}
+}
