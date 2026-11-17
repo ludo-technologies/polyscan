@@ -1,6 +1,8 @@
 package analysis
 
 import (
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -28,9 +30,11 @@ type Class struct {
 	// TotalMethods counts every method of the type; ExcludedMethods the
 	// ones that stay out of the graph: methods without a receiver, such as
 	// Rust associated functions and Java static methods and constructors,
-	// and stubs that touch no field, call no sibling and are called by
-	// none, such as interface-mandated constant returns or panicking
-	// placeholders, which would each stand as a component of their own.
+	// stubs that touch no field, call no sibling and are called by none,
+	// such as interface-mandated constant returns or panicking
+	// placeholders, and getters and setters of a field no other method
+	// uses, each of which would stand as a component of their own.
+	// InstanceVariables still lists the field of such a getter or setter.
 	TotalMethods      int              `json:"total_methods"`
 	ExcludedMethods   int              `json:"excluded_methods"`
 	InstanceVariables []string         `json:"instance_variables"`
@@ -181,7 +185,8 @@ func (b *cohesionBuilder) build() *Cohesion {
 // the Members query already names every field, and such a call reaches an
 // inherited or static method or one of an enclosing type. A method that
 // reaches no field and takes part in no sibling call is a stub and is
-// excluded rather than counted as its own component.
+// excluded rather than counted as its own component, and so is a getter or
+// setter whose field no other method uses.
 func (c *classMethods) measure() Class {
 	sort.SliceStable(c.methods, func(i, j int) bool {
 		if c.methods[i].file != c.methods[j].file {
@@ -205,6 +210,7 @@ func (c *classMethods) measure() Class {
 		StartLine: c.methods[0].StartLine,
 	}
 	var accesses []lcom.MethodAccess
+	var accessors []string
 	called := map[string]bool{}
 	for _, method := range c.methods {
 		class.TotalMethods++
@@ -244,19 +250,43 @@ func (c *classMethods) measure() Class {
 			called[call] = true
 		}
 		accesses = append(accesses, access)
+		accessors = append(accessors, method.Accessor)
 	}
-	participating := accesses[:0]
-	for _, access := range accesses {
-		if len(access.InstanceVars) == 0 && len(access.Calls) == 0 && !called[access.MethodName] {
-			class.ExcludedMethods++
-			continue
+	// A getter or setter is a candidate when its field is all it touches
+	// and no call connects it to a sibling. It leaves the graph when every
+	// other method that touches the field is a candidate too, as the get
+	// and set pair of one field are.
+	candidate := make([]bool, len(accesses))
+	shared := map[string]bool{}
+	for i, access := range accesses {
+		candidate[i] = accessors[i] != "" && len(access.InstanceVars) == 1 && access.InstanceVars[accessors[i]] &&
+			len(access.Calls) == 0 && !called[access.MethodName]
+		if !candidate[i] {
+			for field := range access.InstanceVars {
+				shared[field] = true
+			}
 		}
-		participating = append(participating, access)
+	}
+	accessorFields := map[string]bool{}
+	participating := accesses[:0]
+	for i, access := range accesses {
+		switch {
+		case len(access.InstanceVars) == 0 && len(access.Calls) == 0 && !called[access.MethodName]:
+			class.ExcludedMethods++
+		case candidate[i] && !shared[accessors[i]]:
+			class.ExcludedMethods++
+			accessorFields[accessors[i]] = true
+		default:
+			participating = append(participating, access)
+		}
 	}
 
 	result := lcom.ComputeLCOM4(participating, lcom.DefaultConfig())
 	class.LCOM4 = result.LCOM4
-	class.InstanceVariables = result.InstanceVariables
+	for _, field := range result.InstanceVariables {
+		accessorFields[field] = true
+	}
+	class.InstanceVariables = slices.Sorted(maps.Keys(accessorFields))
 	class.MethodGroups = result.MethodGroups
 	class.RiskLevel = result.RiskLevel
 	return class
