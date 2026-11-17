@@ -495,6 +495,23 @@ func TestAnalyzeGoDependenciesWithoutModule(t *testing.T) {
 	}
 }
 
+func TestAnalyzeJavaDependencies(t *testing.T) {
+	out, err := run(t, "analyze", "--format", "json", "--select", "deps", "../../testdata/javadeps")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := decodeAnalyzeJSON(t, out)
+	if doc.Deps == nil {
+		t.Fatal("expected a deps section for Java packages")
+	}
+	if doc.Deps.Analysis.TotalModules != 3 {
+		t.Errorf("deps analysis = %+v, want 3 packages", doc.Deps.Analysis)
+	}
+	if doc.Summary == nil || !doc.Summary.DepsEnabled {
+		t.Errorf("summary = %+v, want the dependency dimension enabled", doc.Summary)
+	}
+}
+
 func TestAnalyzeGoDependenciesOnlyCountsSkippedFiles(t *testing.T) {
 	if os.Getuid() == 0 {
 		t.Skip("root can read an unreadable file")
@@ -755,6 +772,7 @@ func TestCheckExitCodes(t *testing.T) {
 		{"cycles within the limit", []string{"--max-cycles", "1", cycle}, 0},
 		{"allowed cycle", []string{"--allow-circular-deps", cycle}, 0},
 		{"cycle not selected", []string{"--select", "complexity,clone", cycle}, 0},
+		{"Java package cycle", []string{"--select", "deps", "../../testdata/javadeps"}, exitCodeQualityIssues},
 		{"missing path", []string{filepath.Join(t.TempDir(), "missing")}, exitCodeAnalysisError},
 		{"no source files", []string{t.TempDir()}, exitCodeAnalysisError},
 		{"unknown flag", []string{"--bogus", "../../testdata/go"}, exitCodeAnalysisError},

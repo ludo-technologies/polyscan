@@ -1,6 +1,9 @@
 package domain
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+)
 
 // DependencyEdgeType represents the type of dependency relationship
 type DependencyEdgeType string
@@ -109,6 +112,25 @@ func (g *DependencyGraph) AddEdge(edge *DependencyEdge) {
 	}
 	g.Edges[edge.From] = append(g.Edges[edge.From], edge)
 	g.ReverseEdges[edge.To] = append(g.ReverseEdges[edge.To], edge)
+}
+
+// Merge adds the nodes and edges of other to g. A node both graphs hold is
+// an error rather than one side overwriting the other, since each side drew
+// its edges for its own node. The entry point and leaf flags are left to
+// UpdateNodeFlags.
+func (g *DependencyGraph) Merge(other *DependencyGraph) error {
+	for id, node := range other.Nodes {
+		if g.HasNode(id) {
+			return fmt.Errorf("module %s is in both dependency graphs", id)
+		}
+		g.AddNode(node)
+	}
+	for _, edges := range other.Edges {
+		for _, edge := range edges {
+			g.AddEdge(edge)
+		}
+	}
+	return nil
 }
 
 // GetNode returns a node by ID
