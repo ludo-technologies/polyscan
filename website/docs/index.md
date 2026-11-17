@@ -38,7 +38,7 @@ npx polyscan analyze .
 
 ## What polyscan measures
 
-polyscan looks at your code from five angles. Each one contributes a category score, and the analyzed categories combine into a single health score. Complexity and duplicate code cover every supported language; dead code, dependencies and class design run for JavaScript and TypeScript, and a dimension a language does not have is left out of the score rather than counted as clean. The [health score page](output/health-score.md) explains exactly how the arithmetic works.
+polyscan looks at your code from five angles. Each one contributes a category score, and the analyzed categories combine into a single health score. Complexity and duplicate code cover every supported language; dead code runs for JavaScript and TypeScript, dependencies for Go, Java, JavaScript and TypeScript, and class design for Go, Rust, Java, JavaScript and TypeScript, and a dimension a language does not have is left out of the score rather than counted as clean. The [health score page](output/health-score.md) explains exactly how the arithmetic works.
 
 <div class="grid cards" markdown>
 
@@ -66,19 +66,19 @@ polyscan looks at your code from five angles. Each one contributes a category sc
 
     [Read more](cli/analyze.md#dead-code)
 
--   :material-graph-outline: **Dependencies** <small>JS/TS</small>
+-   :material-graph-outline: **Dependencies** <small>Go, Java, JS/TS</small>
 
     ---
 
-    The module import graph, including circular imports and the Martin coupling metrics, derived from resolving every import across the analyzed files.
+    The import graph of modules or packages, including circular imports and the Martin coupling metrics, derived from resolving every import across the analyzed files.
 
     [Read more](guides/dependency-graph.md)
 
--   :material-vector-link: **Class design** <small>JS/TS</small>
+-   :material-vector-link: **Class design** <small>Go, Rust, Java, JS/TS</small>
 
     ---
 
-    Coupling between objects, which counts how many other types each class or module depends on. Classes near the top of this list are the ones that break when anything else changes.
+    Coupling between objects, which counts how many other types each class or module depends on. Classes near the top of this list are the ones that break when anything else changes. For Go, Rust and Java, cohesion (LCOM4) also counts the unrelated groups of methods inside each type.
 
     [Read more](cli/analyze.md#cbo)
 

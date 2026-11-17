@@ -58,6 +58,7 @@ This is the object most scripts want. It carries the health score, the per-categ
   "dead_code_enabled": true,
   "clone_enabled": true,
   "cbo_enabled": true,
+  "lcom_enabled": false,
   "deps_enabled": true,
   "arch_enabled": false,
   "deps_total_modules": 2,
@@ -83,6 +84,10 @@ This is the object most scripts want. It carries the health score, the per-categ
   "high_coupling_classes": 0,
   "medium_coupling_classes": 0,
   "average_coupling": 0.5,
+  "lcom_classes": 0,
+  "high_lcom_classes": 0,
+  "medium_lcom_classes": 0,
+  "average_lcom": 0,
   "total_loc": 49,
   "project_scale": "Micro",
   "health_score": 91,
@@ -91,6 +96,7 @@ This is the object most scripts want. It carries the health score, the per-categ
   "dead_code_score": 65,
   "duplication_score": 100,
   "coupling_score": 100,
+  "cohesion_score": 100,
   "dependency_score": 85,
   "architecture_score": 0
 }
@@ -101,6 +107,8 @@ A few fields need explanation.
 `total_functions` is every function polyscan analyzed, in every language, which is what every complexity figure here and the health score describe. `--min-complexity` and the other report filters change which functions `complexity.functions` lists, never what is counted here. `functions_parsed` is retained for output compatibility and carries the same number.
 
 The `*_enabled` flags say which dimensions actually ran and therefore which the health score was computed over. A dimension can be off because `--select` excluded it or because no analyzed language has it: a pure Go project reports `dead_code_enabled: false` even under the default selection. See [the health score page](health-score.md#the-formula).
+
+`lcom_classes`, `high_lcom_classes` and `medium_lcom_classes` count the Go, Rust and Java types of the cohesion (LCOM4) analysis. This example is a TypeScript run, which has no cohesion analysis, so `lcom_enabled` is `false`, the counts are 0 and `cohesion_score` reads 100 without entering the health score.
 
 `cbo_classes`, `high_coupling_classes`, and `medium_coupling_classes` count Go, Rust and Java types and JavaScript/TypeScript modules together; for the latter the unit is the file despite the names. See [the analyze reference](../cli/analyze.md#cbo).
 
