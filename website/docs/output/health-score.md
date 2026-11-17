@@ -26,7 +26,7 @@ The score charges the run against the dimensions that actually ran:
 score = 100 - round(100 × total penalty ÷ maximum possible penalty)
 ```
 
-where both sums cover only the enabled dimensions. A dimension that did not run — because `--select` excluded it, or because no analyzed language has it — is left out of both sums entirely, rather than scored as clean. A pure Go project is therefore judged on complexity and duplication alone, out of a budget of 40, while a JavaScript project is judged on all five, out of 96. In both cases a clean codebase scores 100 and a fully saturated one scores near 0.
+where both sums cover only the enabled dimensions. A dimension that did not run — because `--select` excluded it, or because no analyzed language has it — is left out of both sums entirely, rather than scored as clean. A pure C++ project is therefore judged on complexity and duplication alone, out of a budget of 40, while a JavaScript project is judged on all five, out of 96. In both cases a clean codebase scores 100 and a fully saturated one scores near 0.
 
 Files that could not be parsed at all are charged separately, after the projection: the parse-error penalty grows with the skipped-file ratio, from a floor of 11 points — enough to cost grade A — up to 56 points when everything was skipped. It exists because every dimension above silently excludes unparsable files, so without it a broken tree would look healthy.
 

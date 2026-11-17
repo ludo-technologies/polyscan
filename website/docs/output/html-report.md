@@ -14,15 +14,15 @@ polyscan analyze --output reports/quality.html --no-open src/
 
 ## Layout
 
-The report opens on an Overview and puts the per-analysis detail behind four more tabs. Tabs appear only for the analyses that ran, so a report produced with `--select complexity` has two tabs rather than five, and a project with no JavaScript/TypeScript files has no Classes or Architecture tab. A tab carries a badge with the number of problems it holds, colored red when any of them is high risk.
+The report opens on an Overview and puts the per-analysis detail behind four more tabs. Tabs appear only for the analyses that ran, so a report produced with `--select complexity` has two tabs rather than five, and a project whose languages have no dependency analysis, such as a pure Rust or C++ project, has no Architecture tab. A tab carries a badge with the number of problems it holds, colored red when any of them is high risk.
 
 | Tab | Contents |
 | --- | --- |
 | Overview | The verdict, the score breakdown, hotspot files, the complexity distribution, and one summary card per remaining analysis |
 | Functions | Complexity and dead code, plus the sortable per-file and per-directory rollups |
 | Duplication | Clone statistics and the clone groups, or the individual pairs when no group formed |
-| Classes | Coupling statistics and the most coupled classes (JavaScript/TypeScript) |
-| Architecture | Module dependencies, main sequence zones, circular imports, and the longest dependency chains (JavaScript/TypeScript) |
+| Classes | Coupling and cohesion statistics, with the most coupled and the least cohesive class (Go, Rust, Java and JavaScript/TypeScript) |
+| Architecture | Module dependencies, main sequence zones, circular imports, and the longest dependency chains (Go, Java and JavaScript/TypeScript) |
 
 Above the tabs, the header names the project and reports how many files were analyzed, how many were skipped, and how long the run took.
 

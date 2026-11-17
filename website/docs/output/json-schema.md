@@ -102,7 +102,7 @@ A few fields need explanation.
 
 The `*_enabled` flags say which dimensions actually ran and therefore which the health score was computed over. A dimension can be off because `--select` excluded it or because no analyzed language has it: a pure Go project reports `dead_code_enabled: false` even under the default selection. See [the health score page](health-score.md#the-formula).
 
-`cbo_classes`, `high_coupling_classes`, and `medium_coupling_classes` count Go and Rust types and JavaScript/TypeScript modules together; for the latter the unit is the file despite the names. See [the analyze reference](../cli/analyze.md#cbo).
+`cbo_classes`, `high_coupling_classes`, and `medium_coupling_classes` count Go, Rust and Java types and JavaScript/TypeScript modules together; for the latter the unit is the file despite the names. See [the analyze reference](../cli/analyze.md#cbo).
 
 `arch_enabled` is always `false` and `architecture_score` is always `0`, because architecture validation is not implemented in polyscan. Ignore both.
 
@@ -311,7 +311,7 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
 
 ## `cbo`
 
-*Go, Rust and JavaScript/TypeScript.*
+*Go, Rust, Java and JavaScript/TypeScript.*
 
 ```json
 {
@@ -346,7 +346,7 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
 }
 ```
 
-`coupling_count` is the CBO value. `dependent_classes` names what this class or module depends on, and the `*_dependencies` counters break the total down by how the dependency was formed. A Go or Rust entry is one type and carries a `language` field (`"Go"` or `"Rust"`), which a JavaScript/TypeScript entry, whose unit is the file, omits; its `dependent_classes` name only types declared in the analyzed tree, and it uses `inheritance_dependencies` for embedded types and implemented traits and `type_hint_dependencies` for every other reference. For a JavaScript/TypeScript file, `type_hint_dependencies` counts the names its type annotations reference, and those names stay out of `coupling_count` and `dependent_classes`: TypeScript erases a type annotation at compile time, so it declares a dependency without exercising one.
+`coupling_count` is the CBO value. `dependent_classes` names what this class or module depends on, and the `*_dependencies` counters break the total down by how the dependency was formed. A Go, Rust or Java entry is one type and carries a `language` field (`"Go"`, `"Rust"` or `"Java"`), which a JavaScript/TypeScript entry, whose unit is the file, omits; its `dependent_classes` name only types declared in the analyzed tree, and it uses `inheritance_dependencies` for embedded types, implemented traits and the class a Java type extends or the interfaces it implements, and `type_hint_dependencies` for every other reference. For a JavaScript/TypeScript file, `type_hint_dependencies` counts the names its type annotations reference, and those names stay out of `coupling_count` and `dependent_classes`: TypeScript erases a type annotation at compile time, so it declares a dependency without exercising one.
 
 ## `lcom`
 
@@ -386,7 +386,7 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
 
 ## `deps`
 
-*Go and JavaScript/TypeScript.*
+*Go, Java and JavaScript/TypeScript.*
 
 ```json
 {
@@ -397,7 +397,7 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
 }
 ```
 
-`graph` holds the nodes and edges of the import graph. A node is a JavaScript/TypeScript file, identified by its path, or a Go package, identified by its import path with `name` holding the package name and `file_path` its directory. Every node carries the `abstractness` the graph builder measured: the export count for a JavaScript module, the share of exported types that are interfaces for a Go package. A Go edge joins two packages once, with `weight` counting the files that import the target, and carries no `location`. `analysis` holds the derived results, including the circular dependencies, the maximum depth, the per-module Martin metrics, and the coupling analysis with its Zone of Pain and main-sequence module lists. A `module_metrics` entry reports only what the import graph itself measures: the coupling numbers, the risk level, the direct dependencies, the dependents and the exported names. Sizes are not among them, because `module_quality` reports lines and function counts per file, and a module's transitive dependencies are not either, because `dependency_matrix` carries the full edge set to walk.
+`graph` holds the nodes and edges of the import graph. A node is a JavaScript/TypeScript file, identified by its path, a Go package, identified by its import path with `name` holding the package name and `file_path` its directory, or a Java package, identified by `java:` followed by the package name, such as `java:com.example.app`, with `name` holding the package name and `file_path` the directory that holds most of its files. Every node carries the `abstractness` the graph builder measured: the export count for a JavaScript module, the share of exported types that are interfaces for a Go package, and the share of public top-level types that are interfaces, annotation types or abstract classes for a Java package. A Go or Java edge joins two packages once, with `weight` counting the files that import the target, and carries no `location`. `analysis` holds the derived results, including the circular dependencies, the maximum depth, the per-module Martin metrics, and the coupling analysis with its Zone of Pain and main-sequence module lists. A `module_metrics` entry reports only what the import graph itself measures: the coupling numbers, the risk level, the direct dependencies, the dependents and the exported names. Sizes are not among them, because `module_quality` reports lines and function counts per file, and a module's transitive dependencies are not either, because `dependency_matrix` carries the full edge set to walk.
 
 ## `module_quality`
 
@@ -418,7 +418,7 @@ One entry per file, joining what each analysis measured about it, across every l
 }
 ```
 
-`module_name` comes from dependency analysis and is omitted when that analysis did not run or the file is not JavaScript/TypeScript; Go dependency nodes are packages, not files, so they name no entry here. The complexity columns come from complexity analysis and the dead-code columns from dead code detection, so a run that skipped one of them leaves those columns at zero rather than dropping the file.
+`module_name` comes from dependency analysis and is omitted when that analysis did not run or the file is not JavaScript/TypeScript; Go and Java dependency nodes are packages, not files, so they name no entry here. The complexity columns come from complexity analysis and the dead-code columns from dead code detection, so a run that skipped one of them leaves those columns at zero rather than dropping the file.
 
 Unlike the rest of the report, these counts are taken before the presentation filters: `--min-complexity` and `min_severity` change what `complexity.functions` and `dead_code.files` show without changing what a module is measured as carrying. The entries are ranked worst first: high-risk functions, then maximum complexity, then average complexity, then dead-code findings.
 

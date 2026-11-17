@@ -54,9 +54,9 @@ The language of each file is detected from its extension. Supported: Go, Rust,
 C++, Java and JavaScript/TypeScript.
 
 Complexity and clone analysis cover every language; dependency analysis covers
-Go and JavaScript/TypeScript; coupling (CBO) covers Go, Rust and
-JavaScript/TypeScript; cohesion (LCOM4) covers Go and Rust; dead code exists
-for JavaScript/TypeScript only. The health score is computed over the
+Go, Java and JavaScript/TypeScript; coupling (CBO) covers Go, Rust, Java and
+JavaScript/TypeScript; cohesion (LCOM4) covers Go, Rust and Java; dead code
+exists for JavaScript/TypeScript only. The health score is computed over the
 dimensions that ran: a dimension a language does not have is left out, not
 scored as clean.
 
@@ -168,8 +168,8 @@ Examples:
 
 	cmd.Flags().StringSliceVarP(&selected, "select", "s", allAnalyses,
 		"Analyses to run (comma-separated): complexity,deadcode,clone,cbo,lcom,deps\n"+
-			"deps applies to Go and JavaScript/TypeScript; cbo to Go, Rust and\n"+
-			"JavaScript/TypeScript; lcom to Go and Rust; deadcode to JavaScript/TypeScript only")
+			"deps applies to Go, Java and JavaScript/TypeScript; cbo to Go, Rust, Java and\n"+
+			"JavaScript/TypeScript; lcom to Go, Rust and Java; deadcode to JavaScript/TypeScript only")
 	cmd.Flags().StringVarP(&format, "format", "f", "html", "Output format: html, json, text")
 	cmd.Flags().StringVarP(&outputPath, "output", "o", "", "Report path (HTML default: "+defaultReportPath+"; JSON/text default: stdout)")
 	cmd.Flags().BoolVar(&noOpen, "no-open", false, "Don't open the HTML report in the browser")

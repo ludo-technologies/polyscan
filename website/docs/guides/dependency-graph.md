@@ -1,6 +1,6 @@
 # Read the Dependency Graph
 
-`polyscan analyze --select deps` builds the import graph of the Go packages and the JavaScript/TypeScript files and reports metrics derived from it. For Go the module in every metric below is a package, resolved through `go.mod`; the Go compiler rejects import cycles, so the cycle section is always empty for Go. The numbers come from Robert Martin's package metrics, which are widely used but easy to misread. This guide explains what each one means and what to do about a bad value.
+`polyscan analyze --select deps` builds the import graph of the Go packages, the Java packages and the JavaScript/TypeScript files and reports metrics derived from it. For Go the module in every metric below is a package, resolved through `go.mod`; the Go compiler rejects import cycles, so the cycle section is always empty for Go. For Java the module is a package, named by the package declarations of its files and listed as `java:` followed by the package name; Java accepts import cycles, so the cycle section covers them. The numbers come from Robert Martin's package metrics, which are widely used but easy to misread. This guide explains what each one means and what to do about a bad value.
 
 ```bash
 polyscan analyze --format text --select deps src/

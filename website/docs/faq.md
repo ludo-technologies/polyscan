@@ -4,7 +4,7 @@
 
 ### Which languages does polyscan analyze?
 
-JavaScript, TypeScript, Go, Rust, C++ and Java, detected by file extension in one run. Complexity and clone detection cover every language; dependency analysis covers Go and JavaScript/TypeScript; dead code and coupling (CBO) exist for JavaScript/TypeScript. Python has its own analyzer, [pyscn](https://github.com/ludo-technologies/pyscn), built on the same core.
+JavaScript, TypeScript, Go, Rust, C++ and Java, detected by file extension in one run. Complexity and clone detection cover every language; dependency analysis covers Go, Java and JavaScript/TypeScript; coupling (CBO) covers Go, Rust, Java and JavaScript/TypeScript; cohesion (LCOM4) covers Go, Rust and Java; dead code exists for JavaScript/TypeScript only. Python has its own analyzer, [pyscn](https://github.com/ludo-technologies/pyscn), built on the same core.
 
 ### What happened to jscan?
 
