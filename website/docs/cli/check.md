@@ -24,7 +24,7 @@ A pipeline can treat 1 and 2 differently. Code 1 means the code needs work. Code
 | --- | --- | --- |
 | `complexity` | A function has cyclomatic complexity above `--max-complexity` (default 10) | All |
 | `deadcode` | Critical dead code is found, such as code after a `return` | JavaScript/TypeScript |
-| `deps` | There are more circular dependency cycles than `--max-cycles` (default 0). Every cycle then counts as one issue | Go, JavaScript/TypeScript |
+| `deps` | There are more circular dependency cycles than `--max-cycles` (default 0). Every cycle then counts as one issue | Go, Java, JavaScript/TypeScript |
 | `clone` | Never. Clones are listed for information only | All |
 
 `check` runs `complexity`, `deadcode` and `deps` by default. Clone detection runs only when `--select` names `clone`.

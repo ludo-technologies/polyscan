@@ -10,8 +10,8 @@ polyscan exposes three commands. `analyze` and `check` accept one or more paths,
 
 ```console
 $ polyscan --help
-polyscan is a static analyzer that measures code quality across languages.
-It currently analyzes cyclomatic complexity and code clones for Go, Rust, C++ and Java.
+polyscan is a static analyzer that measures code quality across Go, Rust, C++, Java and JavaScript/TypeScript.
+It analyzes cyclomatic complexity, code clones, dependencies, dead code, coupling (CBO), and cohesion (LCOM4), with availability depending on the language.
 
 Usage:
   polyscan [command]

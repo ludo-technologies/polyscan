@@ -28,7 +28,7 @@ polyscan analyze src/ test/ scripts/build.ts             # Several paths at once
 
 | Flag | Short | Default | Description |
 | --- | --- | --- | --- |
-| `--select` | `-s` | `complexity,deadcode,clone,cbo,lcom,deps` | Comma-separated list of analyses to run. `deps` applies to Go and JavaScript/TypeScript; `cbo` to Go, Rust and JavaScript/TypeScript; `lcom` to Go, Rust and Java; `deadcode` to JavaScript/TypeScript only |
+| `--select` | `-s` | `complexity,deadcode,clone,cbo,lcom,deps` | Comma-separated list of analyses to run. `deps` applies to Go, Java and JavaScript/TypeScript; `cbo` to Go, Rust, Java and JavaScript/TypeScript; `lcom` to Go, Rust and Java; `deadcode` to JavaScript/TypeScript only |
 | `--format` | `-f` | `html` | Output format. Accepts `html`, `json`, or `text` |
 | `--no-open` | | `false` | Write the HTML report without opening a browser |
 | `--output` | `-o` | `polyscan-report.html` | Path for the HTML report file |
@@ -41,7 +41,7 @@ Without `--config`, polyscan reads the nearest `.polyscan.toml` in the first pat
 
 ## Language coverage
 
-The language of each file is detected from its extension. Complexity and clone detection cover every supported language. Dependency analysis covers Go and JavaScript/TypeScript. Coupling (CBO) covers Go, Rust and JavaScript/TypeScript, and cohesion (LCOM4) covers Go, Rust and Java. Dead code exists for JavaScript/TypeScript only, and the health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.
+The language of each file is detected from its extension. Complexity and clone detection cover every supported language. Dependency analysis covers Go, Java and JavaScript/TypeScript. Coupling (CBO) covers Go, Rust, Java and JavaScript/TypeScript, and cohesion (LCOM4) covers Go, Rust and Java. Dead code exists for JavaScript/TypeScript only, and the health score is computed over the dimensions that ran: a dimension a language does not have is left out, not scored as clean.
 
 For Go, Rust, C++ and Java, version control, dependency and build output directories are not walked: any directory whose name starts with a dot, and `node_modules`, `vendor`, `target`, `build`, `dist` and `third_party`. A path named on the command line is analyzed whatever it is called. JavaScript/TypeScript additionally skips a longer built-in list and the files its root `.gitignore` ignores. Further exclusions for every language come from `analysis.exclude` in the configuration file and from `--exclude`; see the [built-in skips](../configuration/reference.md#built-in-skips). A file that cannot be read is skipped and listed under errors. A file with a syntax error is analyzed without the functions that contain it, counted as partial, and listed under warnings. C++ libraries hit this routinely, because a macro that opens a namespace or declares an attribute is a syntax error without the preprocessor.
 
@@ -138,9 +138,11 @@ In Go, Rust, C++ and Java, test code is analyzed for complexity but excluded fro
 
 ### Coupling between objects {#cbo}
 
-*Go, Rust and JavaScript/TypeScript.* Counts how many other types each unit depends on.
+*Go, Rust, Java and JavaScript/TypeScript.* Counts how many other types each unit depends on.
 
-For Go and Rust the unit is a type: a Go struct, interface or other named type, a Rust struct, enum, union or trait. Its dependencies are the types named by its declaration (fields, embedded types, method signatures of an interface) and by the bodies of its methods, and only types declared somewhere in the analyzed tree count. A Go name `pkg.T` resolves through the nearest `go.mod` to a package of the tree; a tree without one resolves same-package names only and says so in a warning. A Rust name resolves to a declaration in the same file, or else anywhere in the tree. The standard library, third-party crates and other modules therefore never count. An embedded field or interface and an implemented trait count as inheritance. A type coupled to nothing is not listed, and test files and `#[cfg(test)]` code stay out.
+For Go, Rust and Java the unit is a type: a Go struct, interface or other named type, a Rust struct, enum, union or trait, a Java class, enum, record, interface or annotation type. Its dependencies are the types named by its declaration (fields, embedded types, method signatures of an interface) and by the bodies of its methods, and only types declared somewhere in the analyzed tree count. A Go name `pkg.T` resolves through the nearest `go.mod` to a package of the tree; a tree without one resolves same-package names only and says so in a warning. A Rust name resolves to a declaration in the same file, or else anywhere in the tree. The standard library, third-party crates and other modules therefore never count. An embedded field or interface and an implemented trait count as inheritance. A type coupled to nothing is not listed, and test files and `#[cfg(test)]` code stay out.
+
+A Java type also depends on the object of a static call or field access, such as `Util.run()` or `Color.RED`, and on the type of a method reference. The class it extends and the interfaces it implements count as inheritance, and annotations do not count. A simple name is looked up in the order javac follows: a member type of the class or of a class that encloses it, a single import, a type of the same package, and an import on demand. A qualified name such as `Outer.Inner` counts as the member type only, not as `Outer`. The JDK and libraries never count. When the tree declares one type twice, as two copies of a source tree do, a reference resolves to the copy under the source root of its own file, and a reference from any other root is left unresolved with one warning per root.
 
 For JavaScript/TypeScript the dependencies come in four kinds: imports, `new` expressions, TypeScript type annotations, and method calls on other objects.
 
@@ -156,11 +158,13 @@ For JavaScript/TypeScript the dependencies come in four kinds: imports, `new` ex
 
 ### Dependencies {#deps}
 
-*Go and JavaScript/TypeScript.* Builds the import graph and derives from it the circular imports, the maximum dependency depth, and the Martin coupling metrics for each module.
+*Go, Java and JavaScript/TypeScript.* Builds the import graph and derives from it the circular imports, the maximum dependency depth, and the Martin coupling metrics for each module.
 
 For JavaScript/TypeScript a module is a file. The graph resolves both ECMAScript modules and CommonJS `require` calls. Circular imports are found with Tarjan's strongly connected components algorithm. Dynamic imports are excluded from the cycle check, because a dynamic import does not create a load-time cycle.
 
 For Go a module is a package. Each file's import paths resolve through the nearest `go.mod`: the package's import path is the module path plus its directory, so no path aliasing is involved. `_test.go` files are left out, because their imports describe the tests rather than the package, and so are the `vendor` and `testdata` directories the go tool ignores. An import of the standard library or of another module names no package in the tree and becomes no edge. The compiler forbids import cycles, so the cycle report is always empty for Go, and the value lies in the instability, the distance from the main sequence and the dependency depth. Abstractness is the share of a package's exported type declarations that are interfaces. A Go file outside any `go.mod` cannot be placed in a package; it is reported as a warning and, when no package resolves at all, the dependency dimension is left out of the score.
+
+For Java a module is a package, named by the package declarations of its files, and the files of one package in several directories make one module. Its ID is `java:` followed by the package name, such as `java:com.example.app`. A single-type, on-demand or static import adds an edge when its name leads to a top-level type that a package of the tree declares, or when an on-demand import names that package. An import from the JDK or a library adds no edge, even when its package shares a prefix with a package of the tree. Java accepts import cycles, so the cycle report covers them. Abstractness is the share of a package's public top-level types that are interfaces, annotation types or abstract classes. A file without a package declaration is left out with a warning.
 
 The full graph — nodes, edges, per-module metrics, cycles — is in the `deps` section of the [JSON output](../output/json-schema.md#deps).
 
