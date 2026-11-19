@@ -240,6 +240,7 @@ func DetectUnusedExports(allModuleInfos map[string]*domain.ModuleInfo, graph *Im
 	}
 
 	importedNamesFromFile := graph.importedNamesFromFile
+	nextRoots := nextProjectRoots(allModuleInfos)
 
 	var findings []*DeadCodeFinding
 
@@ -279,7 +280,7 @@ func DetectUnusedExports(allModuleInfos map[string]*domain.ModuleInfo, graph *Im
 			exportedNames := getExportedNames(exp)
 
 			for _, name := range exportedNames {
-				if isFrameworkReservedExport(filePath, exp, name) {
+				if isNextReservedExport(filePath, name, nextRoots) {
 					continue
 				}
 				if importedNames == nil || !importedNames[name] {
@@ -493,6 +494,7 @@ func DetectUnusedExportedFunctions(allModuleInfos map[string]*domain.ModuleInfo,
 	}
 
 	importedNamesFromFile := graph.importedNamesFromFile
+	nextRoots := nextProjectRoots(allModuleInfos)
 
 	var findings []*DeadCodeFinding
 
@@ -536,7 +538,7 @@ func DetectUnusedExportedFunctions(allModuleInfos map[string]*domain.ModuleInfo,
 			exportedNames := getExportedNames(exp)
 
 			for _, name := range exportedNames {
-				if isFrameworkReservedExport(filePath, exp, name) {
+				if isNextReservedExport(filePath, name, nextRoots) {
 					continue
 				}
 				if importedNames == nil || !importedNames[name] {
@@ -554,69 +556,6 @@ func DetectUnusedExportedFunctions(allModuleInfos map[string]*domain.ModuleInfo,
 	}
 
 	return findings
-}
-
-func isFrameworkReservedExport(filePath string, exp *domain.Export, exportedName string) bool {
-	if !isNextAppRouterConventionFile(filePath) {
-		return false
-	}
-
-	// Next.js App Router convention files expose exports consumed by the framework.
-	if exportedName == "default" {
-		return true
-	}
-
-	nextReserved := map[string]bool{
-		"generateMetadata":     true,
-		"metadata":             true,
-		"generateViewport":     true,
-		"viewport":             true,
-		"generateStaticParams": true,
-		"dynamic":              true,
-		"dynamicParams":        true,
-		"revalidate":           true,
-		"fetchCache":           true,
-		"runtime":              true,
-		"preferredRegion":      true,
-		"maxDuration":          true,
-	}
-	if nextReserved[exportedName] {
-		return true
-	}
-
-	// Route handlers in app/**/route.ts are framework entry points.
-	if isNextRouteHandlerFile(filePath) {
-		switch exportedName {
-		case "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS":
-			return true
-		}
-	}
-
-	_ = exp
-	return false
-}
-
-func isNextAppRouterConventionFile(filePath string) bool {
-	path := filepath.ToSlash(filePath)
-	if !strings.Contains(path, "/app/") {
-		return false
-	}
-
-	base := filepath.Base(path)
-	nameWithoutExt := strings.TrimSuffix(base, filepath.Ext(base))
-	switch nameWithoutExt {
-	case "page", "layout", "template", "loading", "error", "not-found", "default", "route":
-		return true
-	default:
-		return false
-	}
-}
-
-func isNextRouteHandlerFile(filePath string) bool {
-	path := filepath.ToSlash(filePath)
-	base := filepath.Base(path)
-	nameWithoutExt := strings.TrimSuffix(base, filepath.Ext(base))
-	return strings.Contains(path, "/app/") && nameWithoutExt == "route"
 }
 
 // resolveImportPaths resolves an import source to zero or more known file paths.
