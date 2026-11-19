@@ -119,6 +119,8 @@ The six critical reasons come from the control flow graph. The four remaining on
 
     The unused-export check can only see the files included in the run. Analyzing `src/components/` alone reports every export in it as unused, because the importers in the rest of `src/` were never read. Pass the whole source root when you care about this finding.
 
+    For the same reason, the `unused_exported_function`, `unused_export` and `orphan_file` checks do not run while a JavaScript/TypeScript file of the run cannot be parsed. The imports of that file are unknown, so any export could be one it uses. The score summary says when this happens.
+
 ### Duplicate code {#clone}
 
 Finds fragments that repeat, in every supported language. polyscan compares abstract syntax trees rather than raw text, using the APTED tree edit distance algorithm, so it still matches code whose variables have been renamed or whose statements have moved. To keep the comparison affordable on large codebases, polyscan first narrows the candidate set with MinHash fingerprints and locality-sensitive hashing, then runs the expensive tree comparison only on surviving pairs. Fragments of different languages are never compared with each other.

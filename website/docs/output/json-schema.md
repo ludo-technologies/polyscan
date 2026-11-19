@@ -76,6 +76,7 @@ This is the object most scripts want. It carries the health score, the per-categ
   "critical_dead_code": 1,
   "warning_dead_code": 2,
   "info_dead_code": 0,
+  "dead_code_cross_file_checks_skipped": false,
   "total_clones": 0,
   "clone_pairs": 0,
   "clone_groups": 0,
@@ -295,9 +296,12 @@ The `summary` object carries a `findings_by_reason` map, which is the most conve
   },
   "total_blocks": 42,
   "dead_blocks": 1,
-  "overall_dead_ratio": 0.023809523809523808
+  "overall_dead_ratio": 0.023809523809523808,
+  "cross_file_checks_skipped": false
 }
 ```
+
+`cross_file_checks_skipped` is `true` when a JavaScript/TypeScript file of the run could not be read or parsed. The imports of that file are unknown, so it may use any export of the tree. The `unused_exported_function`, `unused_export` and `orphan_file` checks therefore do not run, and none of those findings are reported. The other dead code findings are unaffected. `summary.dead_code_cross_file_checks_skipped` carries the same value.
 
 ## `clone`
 
