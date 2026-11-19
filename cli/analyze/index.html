@@ -2186,6 +2186,7 @@
 <div class="admonition note">
 <p class="admonition-title">Cross-file findings depend on the paths you pass</p>
 <p>The unused-export check can only see the files included in the run. Analyzing <code>src/components/</code> alone reports every export in it as unused, because the importers in the rest of <code>src/</code> were never read. Pass the whole source root when you care about this finding.</p>
+<p>For the same reason, the <code>unused_exported_function</code>, <code>unused_export</code> and <code>orphan_file</code> checks do not run while a JavaScript/TypeScript file of the run cannot be parsed. The imports of that file are unknown, so any export could be one it uses. The score summary says when this happens.</p>
 </div>
 <h3 id="clone">Duplicate code<a class="headerlink" href="#clone" title="Permanent link">&para;</a></h3>
 <p>Finds fragments that repeat, in every supported language. polyscan compares abstract syntax trees rather than raw text, using the APTED tree edit distance algorithm, so it still matches code whose variables have been renamed or whose statements have moved. To keep the comparison affordable on large codebases, polyscan first narrows the candidate set with MinHash fingerprints and locality-sensitive hashing, then runs the expensive tree comparison only on surviving pairs. Fragments of different languages are never compared with each other.</p>
