@@ -39,7 +39,11 @@ exclude = ["storybook-static", "src/generated/**"]
 
 The thresholds are raised because component code accumulates conditional rendering, which counts toward cyclomatic complexity without being genuinely hard to read. To hide the trivial components so that the report is about the parts worth looking at, pass `--min-complexity 3` to `polyscan analyze`.
 
-Next.js reserves several export names that nothing in your code imports. polyscan recognizes them and does not report them as unused, but only inside App Router convention files, meaning a file under a path containing `/app/` and named `page`, `layout`, `template`, `loading`, `error`, `not-found`, `default`, or `route`. In those files the default export is exempt, along with `metadata`, `generateMetadata`, `viewport`, `generateViewport`, `generateStaticParams`, `dynamic`, `dynamicParams`, `revalidate`, `fetchCache`, `runtime`, `preferredRegion`, and `maxDuration`. In `route` files the HTTP verb exports such as `GET` and `POST` are exempt as well.
+Next.js reads several exports because of the name and location of the file that holds them, so nothing in your code imports them. polyscan recognizes these exports and does not report them as unused.
+
+Under a path containing `/app/`, polyscan recognizes the App Router files named `page`, `layout`, `template`, `loading`, `error`, `global-error`, `not-found`, `global-not-found`, `forbidden`, `unauthorized`, `default`, and `route`, and the metadata files named `robots`, `sitemap`, `manifest`, `icon`, `apple-icon`, `opengraph-image`, and `twitter-image`. In each of these files the default export is exempt, along with `metadata`, `generateMetadata`, `viewport`, `generateViewport`, `generateStaticParams`, `dynamic`, `dynamicParams`, `revalidate`, `fetchCache`, `runtime`, `preferredRegion`, and `maxDuration`. In `route` files the HTTP verb exports such as `GET` and `POST` are exempt as well. In `sitemap` files `generateSitemaps` is exempt. In the four image files `alt`, `size`, `contentType`, and `generateImageMetadata` are exempt.
+
+Next.js looks for its middleware, proxy, and instrumentation files in the directory that holds the `app` or `pages` directory, which is the project root or `src`. polyscan recognizes these files only in that directory. In `middleware` and `proxy` files the default export, the export named after the file, and `config` are exempt. In `instrumentation` files `register` and `onRequestError` are exempt. In `instrumentation-client` files `onRouterTransitionStart` is exempt.
 
 ## Node.js backend service
 

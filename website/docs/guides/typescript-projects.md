@@ -143,7 +143,7 @@ Cross-package imports usually go through a workspace alias such as `@myorg/core`
 
 ### Next.js
 
-polyscan knows the App Router conventions. Inside a file under a path containing `/app/` and named `page`, `layout`, `template`, `loading`, `error`, `not-found`, `default`, or `route`, the default export is exempt from the unused-export warning, as are the framework's reserved names such as `metadata`, `generateStaticParams`, and `revalidate`. In `route` files the HTTP verb exports are exempt too.
+polyscan knows the file conventions of Next.js. Inside a file under a path containing `/app/` and named after an App Router convention, such as `page`, `layout`, `route`, `global-error`, `sitemap`, or `opengraph-image`, the default export is exempt from the unused-export warning, as are the framework's reserved names such as `metadata`, `generateStaticParams`, and `revalidate`. In `route` files the HTTP verb exports are exempt too. The exports that Next.js reads from `middleware`, `proxy`, `instrumentation`, and `instrumentation-client` files are exempt when the file sits in the same directory as the `app` or `pages` directory. The [Next.js example](../configuration/examples.md#react-or-nextjs-application) lists every file and export.
 
 Add `.next`, `.vercel`, and `.turbo` to your exclude list.
 
