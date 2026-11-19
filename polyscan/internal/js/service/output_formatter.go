@@ -314,6 +314,7 @@ func BuildAnalyzeSummary(results domain.AnalysisResults) *domain.AnalyzeSummary 
 		summary.CriticalDeadCode = results.DeadCode.Summary.CriticalFindings
 		summary.WarningDeadCode = results.DeadCode.Summary.WarningFindings
 		summary.InfoDeadCode = results.DeadCode.Summary.InfoFindings
+		summary.DeadCodeCrossFileChecksSkipped = results.DeadCode.Summary.CrossFileChecksSkipped
 	}
 
 	if results.Clone != nil {
@@ -375,6 +376,10 @@ func FormatProjectScale(summary *domain.AnalyzeSummary) string {
 		summary.ProjectScale, summary.AnalyzedFiles, summary.TotalFunctions)
 }
 
+// crossFileChecksSkippedNote explains, in every output format, why a run with
+// a skipped file reports no unused exports and no orphan files.
+const crossFileChecksSkippedNote = "Unused exports and orphan files were not checked, because the imports of a skipped file are unknown"
+
 // FormatCLISummary formats an AnalyzeSummary as a compact CLI string (pyscn-style).
 // skipped names the files no analysis could use; the summary carries their count,
 // but a count alone says the report is incomplete without saying what to fix.
@@ -390,6 +395,9 @@ func FormatCLISummary(summary *domain.AnalyzeSummary, duration time.Duration, di
 		for _, diagnostic := range diagnostics {
 			fmt.Fprintf(w, "    %s\n", diagnostic)
 		}
+	}
+	if summary.DeadCodeCrossFileChecksSkipped {
+		fmt.Fprintf(w, "⚠️  %s\n", crossFileChecksSkippedNote)
 	}
 	fmt.Fprintf(w, "Total time: %dms\n", duration.Milliseconds())
 
@@ -570,6 +578,9 @@ func (f *OutputFormatterImpl) writeDeadCodeText(response *domain.DeadCodeRespons
 	fmt.Fprintf(writer, "  Total files: %d\n", response.Summary.TotalFiles)
 	fmt.Fprintf(writer, "  Total functions: %d\n", response.Summary.TotalFunctions)
 	fmt.Fprintf(writer, "  Total findings: %d\n", response.Summary.TotalFindings)
+	if response.Summary.CrossFileChecksSkipped {
+		fmt.Fprintf(writer, "  %s\n", crossFileChecksSkippedNote)
+	}
 	fmt.Fprintf(writer, "\n")
 
 	// Severity distribution

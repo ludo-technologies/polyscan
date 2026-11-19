@@ -186,6 +186,10 @@ type AnalyzeSummary struct {
 	CriticalDeadCode int `json:"critical_dead_code" yaml:"critical_dead_code"`
 	WarningDeadCode  int `json:"warning_dead_code" yaml:"warning_dead_code"`
 	InfoDeadCode     int `json:"info_dead_code" yaml:"info_dead_code"`
+	// DeadCodeCrossFileChecksSkipped mirrors the dead code summary's
+	// CrossFileChecksSkipped: unused exports and orphan files were not checked
+	// because a file's imports are unknown.
+	DeadCodeCrossFileChecksSkipped bool `json:"dead_code_cross_file_checks_skipped" yaml:"dead_code_cross_file_checks_skipped"`
 
 	TotalClones     int     `json:"total_clones" yaml:"total_clones"`
 	ClonePairs      int     `json:"clone_pairs" yaml:"clone_pairs"`

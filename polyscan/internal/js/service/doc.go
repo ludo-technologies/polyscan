@@ -14,7 +14,10 @@
 // graph on its own, while unused imports, unused exports, and orphan files can
 // only be decided once every file in the run has been read. That cross-file
 // pass is why analyzing a subdirectory reports its exports as unused: the
-// importers were never part of the input.
+// importers were never part of the input. For the same reason the unused
+// export and orphan file checks do not run while a file of the run is missing
+// from the import graph, such as one skipped for a parse error, and the
+// dead code summary sets CrossFileChecksSkipped.
 //
 // Output is handled by OutputFormatterImpl for text, JSON, YAML, CSV, and HTML.
 //

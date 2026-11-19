@@ -311,7 +311,7 @@ func TestBuildReportVerdictNamesTheWeakestDimensions(t *testing.T) {
 }
 
 func TestBuildReportVerdictReportsSkippedFiles(t *testing.T) {
-	summary := &domain.AnalyzeSummary{Grade: "B", TotalFiles: 10, SkippedFiles: 2}
+	summary := &domain.AnalyzeSummary{Grade: "B", TotalFiles: 10, SkippedFiles: 2, DeadCodeCrossFileChecksSkipped: true}
 
 	verdict := buildReportVerdict(summary, []reportDimension{{Name: "Complexity", Score: 92}})
 
@@ -321,6 +321,9 @@ func TestBuildReportVerdictReportsSkippedFiles(t *testing.T) {
 	}
 	if !strings.Contains(body, "the health score is penalized for them") {
 		t.Errorf("expected the penalty to be explained: %q", body)
+	}
+	if !strings.Contains(body, crossFileChecksSkippedNote) {
+		t.Errorf("expected the skipped cross-file checks to be explained: %q", body)
 	}
 }
 

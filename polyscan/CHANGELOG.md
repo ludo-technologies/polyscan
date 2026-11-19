@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The JavaScript/TypeScript `unused_exported_function`, `unused_export` and `orphan_file` checks do not run while a file of the run cannot be read or parsed, because the imports of that file are unknown. The score summary, the text report and the HTML report say so, and the JSON report sets `cross_file_checks_skipped` in the dead code summary and `dead_code_cross_file_checks_skipped` in the run summary. Before, the exports such a file imported or re-exported were reported as unused, and a barrel that failed to parse made most of the public API look unused (#219)
+
 ## [0.7.0] - 2026-11-18
 
 ### Added

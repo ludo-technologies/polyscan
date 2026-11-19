@@ -514,6 +514,9 @@ func buildReportVerdict(summary *domain.AnalyzeSummary, dims []reportDimension) 
 		strong(fmt.Sprintf("%s of %d could not be parsed", pluralize(skipped, "file", "files"), summary.TotalFiles))
 		text(" and were skipped; the health score is penalized for them. ")
 	}
+	if summary.DeadCodeCrossFileChecksSkipped {
+		text(crossFileChecksSkippedNote + ". ")
+	}
 
 	switch {
 	case len(dims) == 0:

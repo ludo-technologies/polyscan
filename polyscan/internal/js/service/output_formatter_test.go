@@ -627,6 +627,32 @@ func TestBuildAnalyzeSummary_ChargesSkippedFilesWithoutComplexity(t *testing.T) 
 	}
 }
 
+// TestCrossFileChecksSkippedIsReported pins the other half of #219: a run
+// whose cross-file dead code checks were skipped says so in the CLI summary
+// and the text report, so a missing unused export is not read as a clean one.
+func TestCrossFileChecksSkippedIsReported(t *testing.T) {
+	deadCode := &domain.DeadCodeResponse{Summary: domain.DeadCodeSummary{TotalFiles: 2, CrossFileChecksSkipped: true}}
+
+	summary := BuildAnalyzeSummary(domain.AnalysisResults{
+		Files:    domain.AnalysisCoverage{TotalFiles: 2, AnalyzedFiles: 1, SkippedFiles: 1},
+		DeadCode: deadCode,
+	})
+	if !summary.DeadCodeCrossFileChecksSkipped {
+		t.Fatal("DeadCodeCrossFileChecksSkipped = false, want the dead code summary mirrored")
+	}
+	if cli := FormatCLISummary(summary, time.Second, nil); !strings.Contains(cli, crossFileChecksSkippedNote) {
+		t.Errorf("CLI summary lacks the note:\n%s", cli)
+	}
+
+	var buf bytes.Buffer
+	if err := NewOutputFormatter().WriteDeadCode(deadCode, domain.OutputFormatText, &buf); err != nil {
+		t.Fatalf("WriteDeadCode failed: %v", err)
+	}
+	if !strings.Contains(buf.String(), crossFileChecksSkippedNote) {
+		t.Errorf("text report lacks the note:\n%s", buf.String())
+	}
+}
+
 // TestBuildAnalyzeSummary_DeadCodeRateUsesDeadCodeFiles pins the divisor of
 // the dead code penalty: the files that analysis covered, not the whole run,
 // so files of other languages do not dilute a JavaScript finding rate.
