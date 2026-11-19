@@ -147,6 +147,12 @@ type DeadCodeSummary struct {
 	TotalBlocks      int     `json:"total_blocks"`
 	DeadBlocks       int     `json:"dead_blocks"`
 	OverallDeadRatio float64 `json:"overall_dead_ratio"`
+
+	// CrossFileChecksSkipped is true when a file of the run is missing from
+	// the import graph, most often because it could not be parsed. Its
+	// imports are unknown, so the unused export, unused exported function and
+	// orphan file checks did not run and none of those findings are reported.
+	CrossFileChecksSkipped bool `json:"cross_file_checks_skipped"`
 }
 
 // DeadCodeResponse represents the complete dead code analysis result

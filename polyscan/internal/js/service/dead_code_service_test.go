@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,6 +111,56 @@ export function hasDeadCode() {
 	}
 	if rollup.DeadCodeFindingCount == 0 || rollup.DeadCodeBlockCount == 0 {
 		t.Errorf("expected the rollup to count the detected dead code, got %+v", rollup)
+	}
+}
+
+// TestDeadCodeServiceAnalyze_SkippedFileSkipsCrossFileChecks pins #219: a
+// file skipped for a parse error leaves its imports out of the import graph,
+// so every export it uses would be reported as unused. The cross-file checks
+// are skipped instead, and the per-file checks still run.
+func TestDeadCodeServiceAnalyze_SkippedFileSkipsCrossFileChecks(t *testing.T) {
+	tempDir := t.TempDir()
+	brokenFile := filepath.Join(tempDir, "broken.ts")
+	libFile := filepath.Join(tempDir, "lib.ts")
+	files := map[string]string{
+		brokenFile: "import { used } from './lib.js';\nused(;\n",
+		libFile:    "import { never } from './other.js';\nexport function used() { return 1; }\n",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatalf("Failed to create %s: %v", path, err)
+		}
+	}
+
+	svc := NewDeadCodeService()
+	analyze := func(paths ...string) *domain.DeadCodeResponse {
+		t.Helper()
+		resp, err := svc.Analyze(context.Background(), domain.DeadCodeRequest{
+			Paths:       paths,
+			MinSeverity: domain.DeadCodeSeverityInfo,
+			SortBy:      domain.DeadCodeSortBySeverity,
+		})
+		if err != nil {
+			t.Fatalf("Analyze failed: %v", err)
+		}
+		return resp
+	}
+
+	skipped := analyze(brokenFile, libFile)
+	if !skipped.Summary.CrossFileChecksSkipped {
+		t.Error("CrossFileChecksSkipped = false with a file skipped for a parse error")
+	}
+	if want := map[string]int{"unused_import": 1}; !maps.Equal(skipped.Summary.FindingsByReason, want) {
+		t.Errorf("FindingsByReason = %v, want %v", skipped.Summary.FindingsByReason, want)
+	}
+
+	// Without the broken file the graph is complete and the checks run.
+	complete := analyze(libFile)
+	if complete.Summary.CrossFileChecksSkipped {
+		t.Error("CrossFileChecksSkipped = true with every file analyzed")
+	}
+	if got := complete.Summary.FindingsByReason["unused_exported_function"]; got != 1 {
+		t.Errorf("unused_exported_function findings = %d, want 1", got)
 	}
 }
 

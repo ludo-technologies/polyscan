@@ -332,8 +332,20 @@ func aggregateDeadCodeScans(ctx context.Context, scanned []fileAnalysis[*scanned
 		deadBlocks += fileDeadBlocks
 	}
 
-	graph := analyzer.BuildImportGraph(allModuleInfos, analyzedFiles)
-	unusedFuncFindings := analyzer.DetectUnusedExportedFunctions(allModuleInfos, graph)
+	// The cross-file checks conclude that no file imports an export or a
+	// file, which holds only when the imports of every file are known. A file
+	// missing from the import graph, such as one skipped for a parse error,
+	// may import or re-export anything, so while one is missing the checks
+	// are skipped rather than report what it uses as unused.
+	crossFileChecksSkipped := len(allModuleInfos) < len(paths)
+	var unusedFuncFindings, unusedExports, orphanFindings []*analyzer.DeadCodeFinding
+	if !crossFileChecksSkipped {
+		graph := analyzer.BuildImportGraph(allModuleInfos, analyzedFiles)
+		unusedFuncFindings = analyzer.DetectUnusedExportedFunctions(allModuleInfos, graph)
+		unusedExports = analyzer.DetectUnusedExports(allModuleInfos, graph)
+		orphanFindings = analyzer.DetectOrphanFiles(allModuleInfos, graph)
+	}
+
 	for _, finding := range unusedFuncFindings {
 		select {
 		case <-ctx.Done():
@@ -367,7 +379,6 @@ func aggregateDeadCodeScans(ctx context.Context, scanned []fileAnalysis[*scanned
 		}
 	}
 
-	unusedExports := analyzer.DetectUnusedExports(allModuleInfos, graph)
 	for _, finding := range unusedExports {
 		select {
 		case <-ctx.Done():
@@ -396,7 +407,6 @@ func aggregateDeadCodeScans(ctx context.Context, scanned []fileAnalysis[*scanned
 		addFileLevelFinding(f)
 	}
 
-	orphanFindings := analyzer.DetectOrphanFiles(allModuleInfos, graph)
 	for _, finding := range orphanFindings {
 		select {
 		case <-ctx.Done():
@@ -454,17 +464,18 @@ func aggregateDeadCodeScans(ctx context.Context, scanned []fileAnalysis[*scanned
 	}
 
 	summary := domain.DeadCodeSummary{
-		TotalFiles:            len(paths),
-		TotalFunctions:        totalFunctions,
-		TotalFindings:         totalFindings,
-		FilesWithDeadCode:     len(files),
-		FunctionsWithDeadCode: functionsWithDeadCode,
-		CriticalFindings:      criticalFindings,
-		WarningFindings:       warningFindings,
-		InfoFindings:          infoFindings,
-		FindingsByReason:      findingsByReason,
-		TotalBlocks:           totalBlocks,
-		DeadBlocks:            deadBlocks,
+		TotalFiles:             len(paths),
+		TotalFunctions:         totalFunctions,
+		TotalFindings:          totalFindings,
+		FilesWithDeadCode:      len(files),
+		FunctionsWithDeadCode:  functionsWithDeadCode,
+		CriticalFindings:       criticalFindings,
+		WarningFindings:        warningFindings,
+		InfoFindings:           infoFindings,
+		FindingsByReason:       findingsByReason,
+		TotalBlocks:            totalBlocks,
+		DeadBlocks:             deadBlocks,
+		CrossFileChecksSkipped: crossFileChecksSkipped,
 	}
 	if totalBlocks > 0 {
 		summary.OverallDeadRatio = float64(deadBlocks) / float64(totalBlocks)
